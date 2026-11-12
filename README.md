@@ -17,6 +17,8 @@ Arcanum affiche sous ton personnage un cercle, avec au centre le prochain sort �
 - **L'icône rougit** quand la cible est hors de portée du sort conseillé.
 - En option : une barre de mana.
 
+**Mode suivi seul.** Si tu préfères décider toi-même, le réglage « Prochain sort conseillé » (ou `/arc conseil`) masque l'icône centrale : le cercle ne montre plus que les charges, leur fenêtre, les procs et les gros temps de recharge.
+
 L'ordre conseillé part du guide Method (patch 1.60.1), adapté à ce qui se mesure en jeu : chaque charge double le coût de la Déflagration suivante, et rien ne les consomme pendant leurs 18 secondes. Arcanum vise donc un nombre de charges (**2 par défaut**, réglable à 3 ou 4 dans `/arc`), puis en profite avec des sorts qui ne coûtent pas plus cher :
 
 1. Pouvoir des Arcanes dès qu'il est prêt.
@@ -50,6 +52,7 @@ Il ne se réveille que sur un mage. Après une mise à jour qui ajoute des textu
 | `/arc` | Réglages (taille, ce qui s'affiche, sons, charges visées, rang du remplissage, gros temps de recharge) |
 | `/arc demo` | Le HUD conseille un cycle complet, sans combattre (marche sur toute classe) |
 | `/arc verrou` | Déplacer le HUD, puis le fixer |
+| `/arc conseil` | Affiche ou masque le prochain sort conseillé (sans lui : charges, procs et recharges seulement) |
 | `/arc aoe` | Mode multi-cibles, jusqu'à la fin du combat |
 | `/arc macro` | Crée la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts que le jeu donne aux sorts |
 | `/arc diag` | Rapport à copier : sorts reconnus, signaux lus, derniers conseils et changements d'état |

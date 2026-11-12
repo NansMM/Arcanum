@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.8.3"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.9.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -123,6 +123,7 @@ ns.DEFAULTS = {
   idleAlpha = 0.35,       -- opacité hors combat quand showIdle est actif
   showMana = false,       -- barre de mana sous le HUD
   showCooldowns = true,   -- gros temps de recharge de part et d'autre (Présence spirituelle, Eureka…)
+  showNext = true,        -- conseiller le prochain sort au centre ; sinon le HUD ne fait que suivre charges, procs et recharges
   showCharges = true,     -- cristaux de charge au-dessus du prochain sort
   showProcs = true,       -- pastilles de proc sous le prochain sort (Barrage de projectiles, Idées claires)
   fillerRank = 1,         -- rang de l'Éclair de givre de remplissage : 1 (économe) ou "max" (plus de dégâts)

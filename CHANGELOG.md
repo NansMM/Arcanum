@@ -1,5 +1,9 @@
 # Historique d'Arcanum
 
+## 0.9.0 — 12 novembre 2026
+
+- Mode « suivi seul » : le réglage « Prochain sort conseillé » (ou `/arc conseil`) masque l'icône centrale. Le cercle ne montre alors que les charges, leur fenêtre, les procs et les gros temps de recharge, sans rien conseiller.
+
 ## 0.8.3 — 12 novembre 2026
 
 - Réglage « Anticiper » : pendant un Éclair de givre ou une Boule de feu, Arcanum annonçait encore une Déflagration gratuite alors que le sort en cours allait dépenser les Idées claires. L'anticipation en tient compte.

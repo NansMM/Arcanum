@@ -63,6 +63,7 @@ local PROC_SOUND = {
 local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve
 local crystals, cds, halos, badges, reminders = {}, {}, {}, {}, {}
 local rootAlpha, hotBlend = 0, 0
+local advising = true                                  -- le centre conseille-t-il le prochain sort ?
 local shownAlpha = -1                                  -- dernière opacité donnée au cadre
 local crystalsFor, crystalsAim, crystalsStill = -1, -1, false   -- état des cristaux au dernier dessin
 local crystalsShown = -1                               -- nombre de cristaux affichés
@@ -319,6 +320,7 @@ local function outOfRange(id)
 end
 
 local function refreshMain()
+  if not advising then return end
   local key, id = State.next, State.nextId
   if key ~= main.key then
     main.key = key
@@ -351,8 +353,13 @@ end
 local function animateSeal(dt, now)
   local target = REASON_COLOR[State.nextReason] or C.arcane
   for i = 1, 3 do reasonColor[i] = UI.Approach(reasonColor[i], target[i], dt, 10) end
-  main.pop = UI.Approach(main.pop, 0, dt, 9)
   local r, g, b = reasonColor[1], reasonColor[2], reasonColor[3]
+  if not advising then   -- mode « suivi seul » : l'anneau seul, à sa couleur neutre
+    local rr, rg, rb = UI.MixTo(C.edge, r, g, b, 0.55)
+    ring:SetVertexColor(rr, rg, rb, 0.85)
+    return
+  end
+  main.pop = UI.Approach(main.pop, 0, dt, 9)
   local urgent = State.nextReason ~= "arcane" and State.nextReason ~= nil
   -- respiration lente : assez pour vivre, pas assez pour clignoter
   local pulse = 0.5 + 0.5 * sin(now * (urgent and 3.2 or 1.8))
@@ -557,6 +564,8 @@ end
 function Hud.Layout()
   if not root then return end
   local db = ns.db
+  advising = db.showNext ~= false or State.demo
+  main:SetShown(advising)
   layoutCrystals(min(4, max(State.Target(), State.stacks)))
   local n = 0
   for _, b in ipairs(cds) do

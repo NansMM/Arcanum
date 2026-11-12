@@ -174,6 +174,7 @@ function Options.Build()
   y = sectionTitle(f, L["Affichage"], y)
   y = toggle(f, L["Activer le HUD"], "enabled", y)
   y = toggle(f, L["Visible aussi hors combat"], "showIdle", y)
+  y = toggle(f, L["Prochain sort conseillé"], "showNext", y)
   y = toggle(f, L["Cristaux de charge"], "showCharges", y)
   y = toggle(f, L["Orbes de proc"], "showProcs", y)
   y = toggle(f, L["Gros temps de recharge"], "showCooldowns", y)
@@ -295,6 +296,7 @@ Options.MakeMacro = makeMacro
 local HELP = {
   "/arc : ouvrir les réglages",
   "/arc demo : voir le HUD conseiller un cycle complet",
+  "/arc conseil : afficher ou masquer le prochain sort (sans lui : charges, procs et recharges seulement)",
   "/arc verrou : déplacer ou fixer le HUD",
   "/arc taille 120 : taille du HUD en pourcentage",
   "/arc aoe : mode multi-cibles (Choc de flammes, Explosion des Arcanes) ; il s'active aussi tout seul",
@@ -334,6 +336,11 @@ SlashCmdList.ARCANUM = function(msg)
     else
       ns.Print(L["taille entre 60 et 180, par exemple /arc taille 120."])
     end
+  elseif cmd == "conseil" or cmd == "suivi" then
+    ns.Set("showNext", ns.db.showNext == false)
+    ns.Print(ns.db.showNext and L["prochain sort conseillé au centre du cercle."]
+      or L["mode suivi seul : charges, procs et temps de recharge, sans conseil."])
+    Options.Refresh()
   elseif cmd == "aoe" or cmd == "zone" then
     State.SetAoe(not State.aoe)
     ns.Print(State.aoe and L["mode multi-cibles activé jusqu'à la fin du combat (/arc aoe pour l'arrêter)."]

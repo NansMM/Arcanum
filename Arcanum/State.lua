@@ -1017,6 +1017,15 @@ end
 
 local function updateNext()
   local db = ns.db or ns.DEFAULTS
+  -- Mode « suivi seul » : aucun conseil. Rien n'est calculé, le HUD ne montre que charges, procs et recharges.
+  if db.showNext == false and not State.demo then
+    if State.next or State.interrupt then
+      local old = State.next
+      State.next, State.nextReason, State.nextId, State.interrupt = nil, nil, nil, false
+      ns:Fire("NEXT", nil, nil, old)
+    end
+    return
+  end
   local key, reason, id
   local cut = worthInterrupting(db, GetTime())
   if cut then
