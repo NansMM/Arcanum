@@ -1018,7 +1018,7 @@ end
 local function updateNext()
   local db = ns.db or ns.DEFAULTS
   -- Mode « suivi seul » : aucun conseil. Rien n'est calculé, le HUD ne montre que charges, procs et recharges.
-  if db.showNext == false and not State.demo then
+  if db.showNext == false then
     if State.next or State.interrupt then
       local old = State.next
       State.next, State.nextReason, State.nextId, State.interrupt = nil, nil, nil, false
@@ -1236,10 +1236,10 @@ function State.DemoTick(now)
     if step == 2 then
       setProc(State.clear, "clear", true, "démo", now + 15, 15, now)       -- Idées claires
     elseif step == 3 then
-      setProc(State.clear, "clear", false)
-      setProc(State.barrage, "barrage", true, "démo", now + 15, 15, now)   -- Barrage de projectiles
+      setProc(State.barrage, "barrage", true, "démo", now + 15, 15, now)   -- Barrage de projectiles, en plus
     elseif step == 4 then
       setProc(State.barrage, "barrage", false)                             -- dépensé par les Projectiles
+      setProc(State.clear, "clear", false)                                 -- dépensées par la Déflagration
     end
   elseif step == 5 then             -- Eureka
     setProc(State.eureka, "eureka", true, "démo", now + 8, 8, now)

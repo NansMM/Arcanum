@@ -630,12 +630,21 @@ def main():
     check(f.S.next is not None and f.ns.Hud.main._shown is True, "/arc conseil de nouveau : le conseil revient")
     check(not any(b.on for b in f.ns.Hud.stage.values()) and orb.on is True,
           "mode conseil : les procs retournent en orbes, en bas de l'anneau")
+    f.M.setCombat(False)
+    f.run('Mock.auras = {}; Mock.fire("UNIT_AURA", "player", {})')
     f.run('Mock.ns.Set("showNext", false); SlashCmdList.ARCANUM("demo")')
-    f.M.advance(2.0)
-    check(f.S.next is not None and f.ns.Hud.main._shown is True, "la démonstration montre toujours le conseil")
+    most, advised, charges = 0, False, set()
+    for _ in range(240):
+        f.M.advance(0.05)
+        most = max(most, len([b for b in f.ns.Hud.stage.values() if b.on]))
+        advised = advised or f.S.next is not None or f.ns.Hud.main._shown is True
+        charges.add(f.S.stacks)
+    check(not advised, "démonstration en mode suivi seul : aucun conseil, pas d'icône de sort")
+    check(most == 2, "elle montre les procs au centre, jusqu'à deux côte à côte")
+    check(charges == {0, 1, 2, 3, 4}, "et les charges qui montent")
     f.run('SlashCmdList.ARCANUM("demo")')
     f.M.advance(0.5)
-    check(f.S.next is None and f.ns.Hud.main._shown is False, "fin de la démonstration : retour au mode suivi seul")
+    check(f.S.next is None and not any(b.on for b in f.ns.Hud.stage.values()), "fin de la démonstration : tout s'éteint")
     no_errors(f, "suivi seul")
 
     print("Fenêtre des charges presque finie")

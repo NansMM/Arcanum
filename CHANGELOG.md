@@ -1,5 +1,9 @@
 # Historique d'Arcanum
 
+## 0.9.2 — 12 novembre 2026
+
+- La démonstration (`/arc demo`) joue maintenant dans le mode choisi. En mode suivi seul, elle montre les charges qui montent, les procs au centre (un, puis deux côte à côte) et les temps de recharge, sans conseil. Elle montrait jusqu'ici toujours le mode conseil.
+
 ## 0.9.1 — 12 novembre 2026
 
 - Mode suivi seul : les procs actifs s'affichent en grandes icônes au centre du cercle, à la place du conseil. L'icône est celle du sort que le proc améliore (Projectiles pour le Barrage, Déflagration pour les Idées claires), cerclée de la couleur du proc, avec le temps restant. Un proc : une icône centrée ; deux : côte à côte. Les orbes du bas ne servent plus qu'en mode conseil.

@@ -636,7 +636,7 @@ end
 function Hud.Layout()
   if not root then return end
   local db = ns.db
-  advising = db.showNext ~= false or State.demo
+  advising = db.showNext ~= false
   main:SetShown(advising)
   layoutCrystals(min(4, max(State.Target(), State.stacks)))
   local n = 0

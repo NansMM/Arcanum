@@ -295,7 +295,7 @@ Options.MakeMacro = makeMacro
 -- ------------------------------------------------------------------ commandes
 local HELP = {
   "/arc : ouvrir les réglages",
-  "/arc demo : voir le HUD conseiller un cycle complet",
+  "/arc demo : voir le HUD jouer un cycle complet, dans le mode choisi",
   "/arc conseil : afficher ou masquer le prochain sort (sans lui : charges, procs et recharges seulement)",
   "/arc verrou : déplacer ou fixer le HUD",
   "/arc taille 120 : taille du HUD en pourcentage",
