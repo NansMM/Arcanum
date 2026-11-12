@@ -50,24 +50,40 @@ local DEFAULT_CD = {
   wrath = 6, power = 180, pom = 180, evoc = 480, fireblast = 8, berserking = 180, bloodfury = 120, eureka = 120,
 }
 
--- Autres sorts de dégâts : leur coût annoncé sert de témoin pour les procs.
-local DAMAGE = {
-  missiles = true, wrath = true, pyro = true, fireball = true, frostbolt = true, frostfire = true,
-  explosion = true, fireblast = true, scorch = true, flamestrike = true, cone = true,
-}
 -- Sorts à incantation : ils consomment la Présence spirituelle.
 local CAST_TIME = {
   blast = true, wrath = true, pyro = true, fireball = true, frostbolt = true, frostfire = true,
   scorch = true, flamestrike = true, poly = true,
 }
 -- Sorts dont le coût sert de témoin pour les Idées claires (tous gratuits = proc).
-local COST_REFS = { "blast", "explosion", "fireball", "frostbolt", "frostfire", "scorch", "fireblast" }
+local COST_REFS = { "blast", "frostbolt", "fireball", "explosion" }
 
 local lastCast = {}      -- [clé] = GetTime() du dernier lancer réussi
 local cost = {}          -- [clé] = coût actuel (nombre) ou nil
 local seenCost = {}      -- [clé] = true si un coût > 0 a déjà été lu
 local overlay = {}       -- [identifiant de sort] = true si le bouton est en surbrillance
 local loadedAt = 0        -- GetTime() de la dernière entrée dans le monde (écran de chargement)
+
+-- Ce que le jeu annonce ne change que lorsqu'il envoie un événement. Chaque famille de lectures est donc
+-- gardée en mémoire tant que rien ne l'a périmée ; une relecture de sécurité a lieu de temps en temps,
+-- au cas où un événement manquerait.
+local auraEpoch = 0       -- avance quand les auras du joueur ont pu changer
+local cdEpoch = 0         -- avance quand un temps de recharge a pu changer
+local costsStale, costsAt = true, -10
+local castStale, castAt = true, -10
+local targetStale, targetAt = true, -10
+
+-- Délai de la relecture de sécurité : court quand le HUD suit quelque chose, long quand il est masqué.
+local function slack()
+  return State.live and 1 or 3
+end
+
+local function staleAll()
+  auraEpoch, cdEpoch = auraEpoch + 1, cdEpoch + 1
+  costsStale, castStale, targetStale = true, true, true
+  State.dirty = true
+end
+ns:On("SPELLS", staleAll)
 local aoeOnCast           -- (défini plus bas, avec le mode multi-cibles)
 local pomCheck            -- { at } : Projectiles lancés sous Présence spirituelle, on regarde si elle est restée
 local stacksEnded = 0     -- GetTime() de la dernière fin de fenêtre constatée au minuteur
@@ -103,9 +119,9 @@ local function usableAura(a)
 end
 
 -- "up" + aura, "down" (absente, c'est sûr) ou "unknown" (le jeu la cache).
-local function readAura(key)
-  local def = Spells.Get(key)
-  if not def or not C_UnitAuras then return "unknown" end
+local auraCache = {}   -- [clé] = { epoch, at, restricted, status, aura, expire }
+
+local function queryAura(def)
   local found
   if C_UnitAuras.GetPlayerAuraBySpellID then
     for _, id in ipairs(def.auras or def.ids or { def.id }) do
@@ -118,10 +134,10 @@ local function readAura(key)
     if usableAura(a) then found = a end
   end
   if found then return "up", found end
-  -- Absente ? Seulement si le jeu ne cache rien en ce moment, ou s'il déclare, maintenant, que cette
-  -- aura-là n'est jamais secrète. (Ne pas s'en souvenir d'une lecture à l'autre : une aura lue une fois
-  -- pendant une transition ne prouve rien pour la suite du combat.)
-  if not State.restricted then return "down" end
+  -- Absente ? Seulement si le jeu ne cache rien en ce moment, ou s'il classe cette aura « jamais
+  -- secrète ». (Ne pas s'en souvenir d'une lecture à l'autre : une aura lue une fois pendant une
+  -- transition ne prouve rien pour la suite du combat.)
+  if not State.restricted or def.auraPlain == true then return "down" end
   local CS = C_Secrets
   if CS and CS.ShouldSpellAuraBeSecret then
     local allPlain = true
@@ -132,6 +148,25 @@ local function readAura(key)
     if allPlain then return "down" end
   end
   return "unknown"
+end
+
+local function readAura(key)
+  local def = Spells.Get(key)
+  if not def or not C_UnitAuras then return "unknown" end
+  -- En combat, une aura que le jeu ne classe pas « jamais secrète » est illisible : inutile de la demander.
+  if State.restricted and def.auraPlain == false then return "unknown" end
+  local now = GetTime()
+  local c = auraCache[key]
+  if c and c.epoch == auraEpoch and c.restricted == State.restricted and now - c.at < slack()
+    and not (c.expire and now >= c.expire) then
+    return c.status, c.aura   -- rien n'a pu changer depuis la dernière lecture
+  end
+  if not c then c = {}; auraCache[key] = c end
+  local status, aura = queryAura(def)
+  c.epoch, c.at, c.restricted, c.status, c.aura = auraEpoch, now, State.restricted, status, aura
+  local expire = aura and S.Num(aura.expirationTime) or nil
+  c.expire = (expire and expire > 0) and expire or nil
+  return status, aura
 end
 State.ReadAura = readAura
 
@@ -146,16 +181,27 @@ local function auraTimes(key, a)
 end
 
 -- ------------------------------------------------------------------ signaux lisibles en combat
-local function readCosts()
-  for key, def in pairs(Spells.DEF) do
-    if def.known and (key == "missiles" or key == "blast" or DAMAGE[key]) then
-      local c, why = Spells.Cost(key)
-      if c and c > 0 then seenCost[key] = true end
-      if c == nil and why == "aucun" and seenCost[key] then c = 0 end   -- le jeu n'annonce plus de coût : gratuit
-      cost[key] = c
-    else
-      cost[key] = nil
-    end
+-- Seuls les coûts qui servent sont lus : les Projectiles (Barrage) et les sorts témoins (Idées claires,
+-- charges). La liste est refaite quand le grimoire change.
+local costKeys = {}
+ns:On("SPELLS", function()
+  for i = #costKeys, 1, -1 do costKeys[i] = nil end
+  for key in pairs(cost) do cost[key] = nil end
+  if Spells.Known("missiles") then costKeys[#costKeys + 1] = "missiles" end
+  for _, key in ipairs(COST_REFS) do
+    if Spells.Known(key) then costKeys[#costKeys + 1] = key end
+  end
+end)
+
+local function readCosts(now)
+  if not costsStale and now - costsAt < (State.live and 0.5 or 3) then return end
+  costsStale, costsAt = false, now
+  for i = 1, #costKeys do
+    local key = costKeys[i]
+    local c, why = Spells.Cost(key)
+    if c and c > 0 then seenCost[key] = true end
+    if c == nil and why == "aucun" and seenCost[key] then c = 0 end   -- le jeu n'annonce plus de coût : gratuit
+    cost[key] = c
   end
 end
 
@@ -174,23 +220,30 @@ local function refsFree()
 end
 
 -- Le bouton d'un des rangs du sort est-il en surbrillance ? true, false ou nil (inconnu).
+local overlayPoll = {}   -- [clé] = { at, value } : dernière interrogation directe
 local function overlayed(key)
   local def = Spells.Get(key)
   if not def or not def.ids then return nil end
+  for _, id in ipairs(def.ids) do
+    if overlay[id] then return true end   -- signalé par SPELL_ACTIVATION_OVERLAY_GLOW_SHOW
+  end
+  local now = GetTime()
+  local p = overlayPoll[key]
+  if p and now - p.at < 1 then return p.value end
+  if not p then p = {}; overlayPoll[key] = p end
+  p.at, p.value = now, nil
   local api = C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed or IsSpellOverlayed
+  if not api then return nil end
   local known = false
   for _, id in ipairs(def.ids) do
-    if overlay[id] then return true end
-    if api then
-      local ok, r = pcall(api, id)
-      if ok and not S.Is(r) and r ~= nil then
-        known = true
-        if r == true then return true end
-      end
+    local ok, r = pcall(api, id)
+    if ok and not S.Is(r) and r ~= nil then
+      known = true
+      if r == true then p.value = true; return true end
     end
   end
-  if known then return false end
-  return nil
+  if known then p.value = false end
+  return p.value
 end
 
 -- ------------------------------------------------------------------ Gestionnaire de temps de recharge
@@ -264,7 +317,7 @@ end
 
 local cdmScanned = -1
 local function scanCDM(now)
-  if now - cdmScanned < 0.25 then return end
+  if now - cdmScanned < 0.2 then return end
   cdmScanned = now
   for _, k in ipairs(CDM_KEYS) do cdm[k] = nil end
   for _, name in ipairs(CDM_VIEWERS) do
@@ -373,6 +426,7 @@ end
 
 local function updatePower(now)
   local p = State.power
+  if not p.active and not Spells.Known("power") then return end
   local st, a = readAura("power")
   if st == "up" then
     local expire, duration = auraTimes("power", a)
@@ -388,6 +442,7 @@ end
 
 local function updateEureka(now)
   local p = State.eureka
+  if not p.active and not Spells.Known("eureka") then return end
   local st, a = readAura("eureka")
   if st == "up" then
     local expire, duration = auraTimes("eureka", a)
@@ -401,6 +456,7 @@ end
 
 local function updatePom(now)
   local p = State.pom
+  if not p.active and not Spells.Known("pom") then return end
   local st = readAura("pom")
   if st == "up" then
     setProc(p, "pom", true, "aura", nil, nil, now)
@@ -552,15 +608,25 @@ end
 State.OnCast = onCast
 
 -- ------------------------------------------------------------------ temps de recharge
--- Retourne une table réutilisable : start/duration lisibles, ou object (durée secrète à donner au widget).
--- onCD : true, false, ou nil si on ne sait pas.
+-- Retourne une table réutilisable : start/duration lisibles, ou secret = true (le widget dessinera la
+-- durée à partir de State.CooldownObject). onCD : true ou false.
+-- Le résultat est gardé pour toute la passe en cours : le conseil et l'affichage demandent les mêmes sorts.
 local cdInfo = {}
 local readyMemo = {}   -- [clé] = fin de recharge lue quand elle était lisible
+local tick = 0         -- numéro de la passe en cours (State.Update)
 function State.Cooldown(key)
   local r = cdInfo[key]
   if not r then r = {}; cdInfo[key] = r end
-  r.start, r.duration, r.modRate, r.object, r.onCD, r.readyAt = nil, nil, nil, nil, nil, nil
+  if r.tick == tick and not State.demo then return r end
+  r.tick = tick
   local now = GetTime()
+  if not State.demo and r.epoch == cdEpoch and now - r.at < slack() then
+    -- le jeu n'a signalé aucun changement : seul le temps a passé
+    if r.readyAt and r.readyAt <= now then r.readyAt, r.onCD = nil, false end
+    return r
+  end
+  r.epoch, r.at = cdEpoch, now
+  r.start, r.duration, r.modRate, r.secret, r.onCD, r.readyAt = nil, nil, nil, nil, nil, nil
   if State.demo then
     local d = State.demoCD and State.demoCD[key]
     if d and d.start + d.duration > now then
@@ -591,10 +657,8 @@ function State.Cooldown(key)
       return r
     end
   end
-  -- Valeurs secrètes : le widget saura dessiner la durée ; pour « prêt ou non », on part du dernier lancer.
-  if C_Spell.GetSpellCooldownDuration then
-    r.object = S.Call(C_Spell.GetSpellCooldownDuration, id, true)
-  end
+  -- Valeurs secrètes : pour « prêt ou non », on part du dernier lancer et de la recharge apprise.
+  r.secret = true
   local cast = lastCast[key]
   local l = learn()
   local cd = (l.cd and l.cd[key]) or Spells.BaseCooldown(key) or DEFAULT_CD[key]
@@ -607,6 +671,16 @@ function State.Cooldown(key)
     r.onCD = false   -- ni lancé ni en recharge à notre connaissance : considéré prêt
   end
   return r
+end
+
+-- Objet « durée » du jeu pour ce sort : le seul moyen de dessiner une recharge secrète. Demandé par
+-- l'affichage, et seulement quand il doit réalimenter son widget.
+function State.CooldownObject(key)
+  local id = Spells.Best(key)
+  if id and C_Spell and C_Spell.GetSpellCooldownDuration then
+    return S.Call(C_Spell.GetSpellCooldownDuration, id, true)
+  end
+  return nil
 end
 
 -- Gemme de mana : objet, quantité, temps de recharge lisible.
@@ -685,9 +759,15 @@ end
 
 -- Le sort en cours d'incantation ou de canalisation : clé, début, fin (secondes). nil si aucun.
 local castInfo = {}
-local function readCast()
+local function readCast(now)
+  if State.demo then State.cast = nil; return end
+  if not castStale and now - castAt < 1 then
+    local c = State.cast
+    if c and now > c.finish + 0.3 then State.cast = nil end   -- finie sans que le jeu l'ait signalé
+    return
+  end
+  castStale, castAt = false, now
   State.cast = nil
-  if State.demo then return end
   local key, startMs, endMs
   if UnitCastingInfo then
     local ok, _, _, _, s, e, _, _, _, spellID = pcall(UnitCastingInfo, "player")
@@ -794,9 +874,14 @@ local function computeNext()
     end
     if CAST_TIME[cast.key] then pomActive = false end
   end
-  local fighting = State.demo or State.combat or hostileTarget()
+  local fighting = State.demo or State.combat or State.hostile
   local db = ns.db or ns.DEFAULTS
   local burst = State.demo or db.adviseBurst ~= false   -- conseiller les gros temps de recharge ?
+  -- Fenêtre des charges presque finie : une charge de plus ne servirait que quelques secondes. On
+  -- arrête de monter et on profite de celles qu'on a, comme si la cible était atteinte.
+  local expire = State.stacksExpire
+  local closing = stacks > 0 and stacks < need and expire ~= nil and expire - GetTime() < 4
+  local topped = stacks >= need or closing
 
   if State.aoe and not State.demo then
     local key, reason = computeAoe(db, burst, fighting)
@@ -823,8 +908,8 @@ local function computeNext()
   if db.openWrath ~= false and wrathNow and stacks == 0 and not State.combat and not State.demo then
     return "wrath", "arcane"
   end
-  if wrathNow and stacks >= need then
-    if burst then
+  if wrathNow and topped then
+    if burst and not closing then
       local eureka = not State.eureka.active and ready("eureka")
       local pom = ready("pom")
       if eureka or pom then
@@ -841,9 +926,9 @@ local function computeNext()
     if gemReady() then return "gem", "mana" end
     if ready("evoc") then return "evoc", "mana" end
   end
-  if stacks >= need then
-    -- charges visées atteintes : une Déflagration de plus coûterait encore plus cher, un sort bon marché
-    -- profite autant des charges
+  if topped then
+    -- charges visées atteintes (ou fenêtre presque finie) : une Déflagration de plus coûterait encore
+    -- plus cher, un sort bon marché profite autant des charges
     local filler, id = cheapest("frostbolt", "fireball")
     if filler then return filler, "arcane", id end
   end
@@ -911,11 +996,18 @@ end
 -- ------------------------------------------------------------------ rappels avant le combat
 -- Hors combat les améliorations sont lisibles : on signale ce qui manque avant d'engager.
 local ARMORS = { "magearmor", "icearmor", "frostarmor" }
-local function updateReminders()
+local remindedAt = -10
+local function updateReminders(now)
   local list = State.reminders
-  for i = #list, 1, -1 do list[i] = nil end
   local db = ns.db or ns.DEFAULTS
-  if State.restricted or State.demo or State.combat or db.showReminders == false then return end
+  if State.restricted or State.demo or State.combat or db.showReminders == false then
+    for i = #list, 1, -1 do list[i] = nil end
+    remindedAt = -10
+    return
+  end
+  if now - remindedAt < 1 then return end   -- hors combat, une lecture par seconde suffit
+  remindedAt = now
+  for i = #list, 1, -1 do list[i] = nil end
   if Spells.Known("intellect") and readAura("intellect") == "down" and readAura("brilliance") ~= "up" then
     list[#list + 1] = "intellect"
   end
@@ -937,7 +1029,7 @@ local function updateChecks(now)
   local l = learn()
   if type(l.checks) ~= "table" then l.checks = {} end
   local c = l.checks
-  if State.restricted then
+  if State.restricted and not (c.mana and c.usable and c.cooldown) then
     if UnitPower then
       local ok, v = pcall(UnitPower, "player", 0)
       if ok then c.mana = S.Is(v) and "secret" or "lisible" end
@@ -968,24 +1060,30 @@ local function updateChecks(now)
   end
 end
 
--- L'affichage a-t-il quelque chose à montrer ?
+-- L'affichage a-t-il quelque chose à montrer ? Calculé une fois par passe (State.live), lu à chaque image.
+local function refreshLive()
+  State.live = State.demo or State.combat or State.hostile or State.stacks > 0 or State.barrage.active
+    or State.clear.active or State.power.active or State.pom.active
+end
+
 function State.Live()
-  if State.demo or State.combat then return true end
-  if State.stacks > 0 or State.barrage.active or State.clear.active or State.power.active or State.pom.active then
-    return true
-  end
-  return hostileTarget()
+  return State.live == true
 end
 
 -- ------------------------------------------------------------------ boucle
 function State.Update()
   local now = GetTime()
   State.dirty = false
+  tick = tick + 1
+  if targetStale or now - targetAt >= 0.5 then
+    targetStale, targetAt = false, now
+    State.hostile = hostileTarget()
+  end
   if State.demo then
     State.DemoTick(now)
   else
     State.restricted = aurasRestricted()
-    readCosts()
+    readCosts(now)
     scanCDM(now)
     updatePower(now)
     updateEureka(now)
@@ -995,11 +1093,12 @@ function State.Update()
     updateHeat(now)
     updateBlast(now)
     updateAoe(now)
-    updateReminders()
+    updateReminders(now)
     updateChecks(now)
   end
-  readCast()
+  readCast(now)
   updateNext()
+  refreshLive()
   ns:Fire("STATE")
 end
 
@@ -1080,47 +1179,62 @@ ns:On("START", function()
   local acc = 0
   ticker:SetScript("OnUpdate", function(_, elapsed)
     acc = acc + elapsed
-    local interval = State.Live() and 0.1 or 0.5
-    if State.dirty or acc >= interval then
+    -- 10 passes par seconde quand il y a quelque chose à suivre, 1 quand le HUD est masqué ; un événement
+    -- du jeu avance la passe suivante, sans jamais dépasser 20 par seconde (les événements pleuvent en combat)
+    local interval = State.live and 0.1 or 1
+    if acc >= interval or (State.dirty and acc >= 0.05) then
       acc = 0
       local ok, err = pcall(State.Update)
       if not ok then ns.Report(err) end
     end
   end)
 
-  ns:RegisterEvent("PLAYER_REGEN_DISABLED", function() State.combat = true; State.dirty = true end)
+  ns:RegisterEvent("PLAYER_REGEN_DISABLED", function() State.combat = true; staleAll() end)
   ns:RegisterEvent("PLAYER_REGEN_ENABLED", function()
     State.combat = false
     if State.aoe then State.SetAoe(false) end   -- fin du combat : retour au cycle mono-cible
-    State.dirty = true
+    staleAll()
   end)
   ns:RegisterEvent("PLAYER_ENTERING_WORLD", function()
     loadedAt = GetTime()
+    staleAll()
     State.combat = InCombatLockdown and InCombatLockdown() and true or false
     if not State.demo then State.Reset() end
   end)
   ns:RegisterEvent("PLAYER_DEAD", function() if not State.demo then State.Reset() end end)
-  ns:RegisterUnitEvent("UNIT_AURA", "player", function(_, unit) if playerOnly(unit) then State.dirty = true end end)
-  ns:RegisterEvent("PLAYER_TARGET_CHANGED", function() State.dirty = true end)
+  ns:RegisterUnitEvent("UNIT_AURA", "player", function(_, unit)
+    if playerOnly(unit) then
+      auraEpoch = auraEpoch + 1
+      costsStale = true      -- un proc change le coût des sorts
+      State.dirty = true
+    end
+  end)
+  ns:RegisterEvent("PLAYER_TARGET_CHANGED", function() targetStale = true; State.dirty = true end)
 
-  ns:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", function(_, unit, _, spellID)
-    if playerOnly(unit) and not State.demo then onCast(spellID) end
-  end)
-  ns:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player", function(_, unit, _, spellID)
-    if playerOnly(unit) and not State.demo then onCast(spellID) end
-  end)
+  -- un sort lancé peut tout changer d'un coup : auras, coûts, recharges, incantation en cours
+  local function cast(_, unit, _, spellID)
+    if not playerOnly(unit) then return end
+    auraEpoch, cdEpoch = auraEpoch + 1, cdEpoch + 1
+    costsStale, castStale = true, true
+    State.dirty = true
+    if not State.demo then onCast(spellID) end
+  end
+  ns:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", cast)
+  ns:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player", cast)
 
   -- début, fin ou interruption d'une incantation : le conseil porte sur le sort d'après
-  local function casting(_, unit) if playerOnly(unit) then State.dirty = true end end
+  local function casting(_, unit)
+    if playerOnly(unit) then castStale = true; State.dirty = true end
+  end
   for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED",
     "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_DELAYED" }) do
     ns:RegisterUnitEvent(event, "player", casting)
   end
 
-  local function cooldowns() State.dirty = true; ns:Fire("COOLDOWNS") end
+  local function cooldowns() cdEpoch = cdEpoch + 1; State.dirty = true; ns:Fire("COOLDOWNS") end
   ns:RegisterEvent("SPELL_UPDATE_COOLDOWN", cooldowns)
   ns:RegisterEvent("SPELL_UPDATE_CHARGES", cooldowns)
-  ns:RegisterEvent("SPELL_UPDATE_USABLE", function() State.dirty = true end)
+  ns:RegisterEvent("SPELL_UPDATE_USABLE", function() costsStale = true; State.dirty = true end)
   ns:RegisterEvent("BAG_UPDATE_COOLDOWN", cooldowns)
   ns:RegisterEvent("BAG_UPDATE_DELAYED", cooldowns)
 

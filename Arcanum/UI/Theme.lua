@@ -108,3 +108,8 @@ end
 function UI.Mix(a, b, t)
   return a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t
 end
+
+-- Le même, vers une couleur donnée par ses trois composantes : aucune table créée (appelé à chaque image).
+function UI.MixTo(a, r, g, b, t)
+  return a[1] + (r - a[1]) * t, a[2] + (g - a[2]) * t, a[3] + (b - a[3]) * t
+end

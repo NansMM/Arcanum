@@ -60,6 +60,8 @@ local PROC_SOUND = {
 local root, mover, hub, main, glow, plate, ring, runes, timer, timerFull, mana, manaCurve
 local crystals, cds, halos, badges, reminders = {}, {}, {}, {}, {}
 local rootAlpha, hotBlend = 0, 0
+local shownAlpha = -1                                  -- dernière opacité donnée au cadre
+local crystalsFor, crystalsAim, crystalsStill = -1, -1, false   -- état des cristaux au dernier dessin
 local spinners = {}   -- groupes d'animation qui font tourner le sceau
 local cooldownsDirty, lastFeed = true, 0
 local reasonColor = { C.arcane[1], C.arcane[2], C.arcane[3] }   -- couleur courante, fondue vers la cible
@@ -131,26 +133,38 @@ local function animateCrystals(dt, now)
   local n = State.stacks
   local target = State.Target()
   local full = n >= target
-  hotBlend = UI.Approach(hotBlend, full and 1 or 0, dt, 6)
+  local blend = UI.Approach(hotBlend, full and 1 or 0, dt, 6)
+  -- au repos (rien ne pulse, rien ne change) : on ne touche à aucune texture
+  if not full and blend == hotBlend and n == crystalsFor and target == crystalsAim and crystalsStill then return end
+  hotBlend, crystalsFor, crystalsAim = blend, n, target
+  local still = not full
   local r, g, b = UI.Mix(C.arcane, C.hot, hotBlend)
   for i, f in ipairs(crystals) do
     local on = i <= n
+    local aim = i <= target and 1 or 0.35
     f.level = UI.Approach(f.level, on and 1 or 0, dt, on and 18 or 9)
     f.pop = UI.Approach(f.pop, 0, dt, 7)
-    local pulse = full and (0.5 + 0.5 * sin(now * 5.4 - i * 0.55)) or 0
-    local scale = 1 + f.pop * 0.6
-    f.fill:SetSize(CR_W * scale, CR_H * scale)
-    f.fill:SetVertexColor(r, g, b, f.level)
-    local gs = 1 + f.pop * 0.45 + pulse * 0.10
-    f.glow:SetSize(CR_W * 3 * gs, CR_H * 2.6 * gs)
-    f.glow:SetVertexColor(r, g, b, min(1, f.level * (0.40 + 0.32 * pulse) + f.pop * 0.55))
     -- au-delà des charges visées, le cristal vide reste en retrait : on ne cherche pas à le remplir
-    f.aim = UI.Approach(f.aim or 1, i <= target and 1 or 0.35, dt, 8)
-    f.socket:SetAlpha(max(f.aim, f.level))
-    local er, eg, eb = UI.Mix(C.edge, C.arcaneHi, f.level)
-    f.edge:SetVertexColor(er, eg, eb, (0.45 + 0.55 * f.level) * max(f.aim, f.level))
-    f.spark:SetVertexColor(1, 1, 1, f.level * (0.50 + 0.45 * pulse))
+    f.aim = UI.Approach(f.aim or 1, aim, dt, 8)
+    local settled = f.pop == 0 and f.level == (on and 1 or 0) and f.aim == aim
+    if not settled then still = false end
+    -- un cristal éteint et au repos est déjà dessiné : seuls les cristaux allumés pulsent
+    if not (settled and not on and f.drawnOff) then
+      local pulse = full and (0.5 + 0.5 * sin(now * 5.4 - i * 0.55)) or 0
+      local scale = 1 + f.pop * 0.6
+      f.fill:SetSize(CR_W * scale, CR_H * scale)
+      f.fill:SetVertexColor(r, g, b, f.level)
+      local gs = 1 + f.pop * 0.45 + pulse * 0.10
+      f.glow:SetSize(CR_W * 3 * gs, CR_H * 2.6 * gs)
+      f.glow:SetVertexColor(r, g, b, min(1, f.level * (0.40 + 0.32 * pulse) + f.pop * 0.55))
+      f.socket:SetAlpha(max(f.aim, f.level))
+      local er, eg, eb = UI.Mix(C.edge, C.arcaneHi, f.level)
+      f.edge:SetVertexColor(er, eg, eb, (0.45 + 0.55 * f.level) * max(f.aim, f.level))
+      f.spark:SetVertexColor(1, 1, 1, f.level * (0.50 + 0.45 * pulse))
+      f.drawnOff = settled and not on
+    end
   end
+  crystalsStill = still
 end
 
 -- ------------------------------------------------------------------ icônes rondes
@@ -211,10 +225,11 @@ local function feedCooldown(b, info, force)
     else
       setCooldown(b, 0, 0)   -- on ne montre pas le temps de recharge global
     end
-  elseif info.object then
+  elseif info.secret then
     b._s, b._d = nil, nil
     if force and b.cd.SetCooldownFromDurationObject then
-      pcall(b.cd.SetCooldownFromDurationObject, b.cd, info.object, true)
+      local object = State.CooldownObject(b.key)
+      if object then pcall(b.cd.SetCooldownFromDurationObject, b.cd, object, true) end
     end
   else
     setCooldown(b, 0, 0)
@@ -260,7 +275,7 @@ local function animateTimer(now)
   local expire, total = State.stacksExpire, State.stacksDur
   if State.stacks > 0 and expire and total and total > 0 then
     local frac = (expire - now) / total
-    if frac < 0.25 then r, g, b = UI.Mix(C.bad, { r, g, b }, max(0, frac) / 0.25) end   -- la fenêtre va se fermer
+    if frac < 0.25 then r, g, b = UI.MixTo(C.bad, r, g, b, max(0, frac) / 0.25) end   -- la fenêtre va se fermer
   end
   -- (on ne touche au widget que si la couleur a changé : le recolorer à chaque image le fait scintiller)
   if not timer.r or math.abs(r - timer.r) + math.abs(g - timer.g) + math.abs(b - timer.b) > 0.02 then
@@ -326,7 +341,7 @@ local function animateSeal(dt, now)
   -- respiration lente : assez pour vivre, pas assez pour clignoter
   local pulse = 0.5 + 0.5 * sin(now * (urgent and 3.2 or 1.8))
 
-  local rr, rg, rb = UI.Mix(C.edge, { r, g, b }, 0.55)
+  local rr, rg, rb = UI.MixTo(C.edge, r, g, b, 0.55)
   runes:SetVertexColor(rr, rg, rb, 0.34)       -- gravure discrète : elle habille l'anneau sans se lire
   ring:SetVertexColor(rr, rg, rb, 0.85)
 
@@ -432,21 +447,25 @@ local function reminderIcon(key)
   return Spells.Icon(key)
 end
 
+local remindersShown = 0
 local function refreshReminders()
   local list = State.reminders
   local n = #list
+  local changed = n ~= remindersShown
+  for i, f in ipairs(reminders) do
+    if f.key ~= list[i] then changed = true end
+  end
+  if not changed then return end   -- la liste n'a pas bougé : rien à replacer
+  remindersShown = n
   for i, f in ipairs(reminders) do
     local key = list[i]
+    f.key = key
     if key then
-      if f.key ~= key then
-        f.key = key
-        f.icon:SetTexture(reminderIcon(key) or 134400)
-      end
+      f.icon:SetTexture(reminderIcon(key) or 134400)
       f:ClearAllPoints()
       f:SetPoint("CENTER", hub, "BOTTOM", (i - (n + 1) / 2) * 28, REMIND_Y)
       f:Show()
-    elseif f.key then
-      f.key = nil
+    else
       f:Hide()
     end
   end
@@ -512,6 +531,11 @@ local function makeManaCurve()
   return ok and curve or nil
 end
 
+local function colorMana()
+  local color = UnitPowerPercent("player", 0, false, manaCurve)
+  if color and color.GetRGB then mana.fill:SetVertexColor(color:GetRGB()) end
+end
+
 local function refreshMana()
   if not mana or not ns.db.showMana then return end
   if State.demo then
@@ -526,12 +550,7 @@ local function refreshMana()
     pcall(mana.SetMinMaxValues, mana, 0, maxPower)
     pcall(mana.SetValue, mana, power)
   end
-  if manaCurve then
-    pcall(function()
-      local color = UnitPowerPercent("player", 0, false, manaCurve)
-      if color and color.GetRGB then mana.fill:SetVertexColor(color:GetRGB()) end
-    end)
-  end
+  if manaCurve then pcall(colorMana) end
 end
 
 local function makeMana(parent)
@@ -617,15 +636,18 @@ end
 local function wantedAlpha()
   local db = ns.db
   if not db.enabled then return 0 end
-  if not db.locked or State.Live() then return 1 end
+  if not db.locked or State.live then return 1 end
   return db.showIdle and db.idleAlpha or 0
 end
 
 local function onUpdate(_, dt)
   local now = GetTime()
   rootAlpha = UI.Approach(rootAlpha, wantedAlpha(), dt, 9)
-  root:SetAlpha(rootAlpha)
-  if rootAlpha <= 0 then return end
+  if rootAlpha ~= shownAlpha then
+    shownAlpha = rootAlpha
+    root:SetAlpha(rootAlpha)
+  end
+  if rootAlpha <= 0 then return end   -- HUD masqué : rien d'autre à faire pour cette image
   animateSeal(dt, now)
   if ns.db.showCharges then
     animateCrystals(dt, now)

@@ -52,6 +52,7 @@ class Game:
         """Le personnage arrive buffé : aucun rappel avant le combat."""
         self.run('Mock.auras["Intelligence des Arcanes"] = { spellId = 1459, applications = 0, duration = 1800, expirationTime = Mock.now + 1800 }')
         self.run('Mock.auras["Armure du mage"] = { spellId = 6117, applications = 0, duration = 1800, expirationTime = Mock.now + 1800 }')
+        self.run('Mock.fire("UNIT_AURA", "player", {})')
 
     def run(self, code):
         return self.lua.execute(code)
@@ -118,7 +119,7 @@ def main():
     check(g.S.stacks == 0, "les charges tombent 18 s après la première Déflagration")
 
     print("En combat : auras cachées, charges suivies par les sorts lancés")
-    g.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')   # Pouvoir des Arcanes déjà utilisé
+    g.run('Mock.setCooldown(12042, 180)')   # Pouvoir des Arcanes déjà utilisé
     g.run('Mock.ns.Set("showMana", true)')                                  # barre de mana : en option
     g.run('Mock.ns.Set("targetStacks", 4)')                                  # ce combat vise 4 charges
     g.run('Mock.ns.Set("burstOne", false)')                                  # on suit la séquence sort par sort
@@ -142,7 +143,8 @@ def main():
     check(g.S.stacks == 4, "le Courroux ne consomme pas les charges")
     check(g.next() == ("frostbolt", "arcane"), "Courroux en recharge, charges visées atteintes : Éclair de givre")
     check(g.S.Cooldown("wrath").onCD is True, "Courroux en recharge (déduit du lancer, valeurs secrètes)")
-    check(g.S.Cooldown("wrath").object is not None, "durée secrète confiée au widget")
+    check(g.S.Cooldown("wrath").secret is True and g.S.CooldownObject("wrath") is not None,
+          "recharge secrète : le widget reçoit l'objet « durée » du jeu")
     g.M.advance(6.2)
     check(g.S.Cooldown("wrath").onCD is False, "Courroux de nouveau prêt après 6 s")
     check(g.next() == ("wrath", "arcane"), "4 charges toujours là, gros CD partis : Courroux seul")
@@ -216,18 +218,6 @@ def main():
     z.M.advance(3.0)
     check(not z.S.clear.active, "coûts revenus : toujours rien")
     no_errors(z, "chargement")
-
-    print("Une aura lue une fois en combat ne fait pas foi pour la suite")
-    y = Game(pre="Mock.costAware = false")                   # sans le coût, pour isoler la lecture d'aura
-    y.fight()
-    y.run('Mock.neverSecret["Déflagration des Arcanes"] = true')
-    y.cast(AB)
-    check(y.S.stacks == 1 and y.S.stacksSource == "aura", "aura lisible un instant en combat")
-    y.run('Mock.neverSecret["Déflagration des Arcanes"] = nil')
-    y.cast(AB)
-    y.M.advance(1.0)
-    check(y.S.stacks == 2, "aura de nouveau cachée : son absence n'efface pas les charges")
-    no_errors(y, "aura lue une fois")
 
     print("En combat : nombre de charges lu sur le coût")
     g.cast(AB)
@@ -310,7 +300,7 @@ def main():
     o = Game()
     o.run('Mock.ns.Set("burstOne", false)')
     o.M.target = True
-    o.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')   # Pouvoir des Arcanes déjà utilisé
+    o.run('Mock.setCooldown(12042, 180)')   # Pouvoir des Arcanes déjà utilisé
     o.run('Mock.fire("PLAYER_TARGET_CHANGED")')
     o.M.advance(0.3)
     check(o.next() == ("wrath", "arcane"), "cible hostile, hors combat, sans charge : engager au Courroux")
@@ -338,7 +328,7 @@ def main():
     t = Game()
     t.run('Mock.ns.Set("burstOne", false)')
     check(t.ns.db.targetStacks == 2, "réglage d'origine : 2 charges visées")
-    t.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')   # Pouvoir des Arcanes déjà utilisé
+    t.run('Mock.setCooldown(12042, 180)')   # Pouvoir des Arcanes déjà utilisé
     t.M.advance(0.3)
     t.fight()
     check(t.next() == ("blast", "arcane"), "0 charge : Déflagration")
@@ -416,7 +406,7 @@ def main():
 
     print("Burst en une icône (macro ArcBurst)")
     u = Game()
-    u.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')
+    u.run('Mock.setCooldown(12042, 180)')
     u.M.advance(0.3)
     u.fight()
     u.cast(AB)
@@ -434,7 +424,7 @@ def main():
 
     print("Mode multi-cibles")
     a = Game()
-    a.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')
+    a.run('Mock.setCooldown(12042, 180)')
     a.M.target = True
     a.M.advance(0.3)
     a.run('SlashCmdList.ARCANUM("aoe")')
@@ -476,20 +466,20 @@ def main():
 
     print("Rappels avant le combat")
     r2 = Game()
-    r2.M.advance(0.6)
+    r2.M.advance(1.2)
     check(list(r2.S.reminders.values()) == ["intellect", "magearmor"], "Intelligence des Arcanes et armure manquantes")
     shown = [f for f in r2.ns.Hud.reminders.values() if f.key]
     check(len(shown) == 2 and all(f._shown for f in shown), "deux rappels affichés sous le cercle")
     r2.buffed()
     r2.run("Mock.items[8008] = nil")
-    r2.M.advance(0.6)
+    r2.M.advance(1.2)
     check(list(r2.S.reminders.values()) == ["gemspell"], "buffé mais sans gemme de mana : rappel de la gemme")
-    r2.run("Mock.items[8008] = 1")
-    r2.M.advance(0.6)
+    r2.run('Mock.items[8008] = 1; Mock.fire("BAG_UPDATE_DELAYED")')
+    r2.M.advance(1.2)
     check(len(list(r2.S.reminders.values())) == 0, "tout est prêt : aucun rappel")
     r2.run('Mock.auras["Armure du mage"] = nil')
     r2.fight()
-    r2.M.advance(0.6)
+    r2.M.advance(1.2)
     check(len(list(r2.S.reminders.values())) == 0, "en combat : aucun rappel (les auras sont cachées)")
     no_errors(r2, "rappels")
 
@@ -509,6 +499,54 @@ def main():
     check("VÉRIFICATIONS EN JEU" in v.M.named["ArcanumDiag"].text and "conservée" in v.M.named["ArcanumDiag"].text,
           "le diagnostic rapporte les vérifications")
     no_errors(v, "vérifications")
+
+    print("Fenêtre des charges presque finie")
+    w = Game()
+    w.run('Mock.ns.Set("burstOne", false); Mock.ns.Set("targetStacks", 4); Mock.setCooldown(12042, 180)')
+    w.M.advance(0.3)
+    w.fight()
+    w.cast(AB)
+    w.cast(AB)
+    check(w.next() == ("blast", "arcane"), "2 charges sur 4 visées, fenêtre ouverte : on monte encore")
+    w.M.advance(13.6)                                        # il reste moins de 4 s de fenêtre
+    check(w.S.stacks == 2 and w.next() == ("wrath", "arcane"),
+          "fenêtre presque finie : plus de montée, on profite des charges (Courroux, sans gros temps de recharge)")
+    w.cast(WRATH)
+    check(w.next() == ("frostbolt", "arcane"), "puis Éclair de givre jusqu'à la fin de la fenêtre")
+    w.M.advance(4.0)
+    w.M.expire()
+    w.M.advance(0.3)
+    check(w.S.stacks == 0 and w.next() == ("blast", "arcane"), "fenêtre finie : on remonte les charges")
+    no_errors(w, "fenêtre presque finie")
+
+    print("Sobriété : appels au jeu et opérations d'affichage")
+    def cost(setup, seconds=10.0):
+        q = Game()
+        q.buffed()
+        setup(q)
+        q.M.advance(1.0)
+        q.M.resetCalls()
+        q.M.ops = 0
+        q.M.advance(seconds)
+        return q.M.totalCalls() / seconds, q.M.ops / (seconds / 0.05), q
+
+    def in_combat(q):
+        q.fight()
+        q.cast(AB)
+        q.cast(AB)
+
+    calls, ops, q = cost(in_combat)
+    print("        en combat : %.0f appels au jeu par seconde, %.1f opérations d'affichage par image" % (calls, ops))
+    check(calls < 80, "en combat : moins de 80 appels au jeu par seconde")
+    check((q.M.calls["C_UnitAuras.GetPlayerAuraBySpellID"] or 0) == 0 and (q.M.calls["C_UnitAuras.GetAuraDataBySpellName"] or 0) == 0,
+          "en combat : aucune aura demandée au jeu (il les cache)")
+    check(ops < 45, "en combat : moins de 45 opérations d'affichage par image")
+    calls, ops, q = cost(lambda q: None)
+    print("        HUD masqué : %.0f appels au jeu par seconde, %.1f opérations d'affichage par image" % (calls, ops))
+    check(calls < 25, "HUD masqué : moins de 25 appels au jeu par seconde")
+    check(ops < 2, "HUD masqué : presque aucune opération d'affichage")
+    leaks = sorted(set(q.M.leaks.values()))
+    check(len(leaks) == 0, "aucune variable globale inattendue %s" % (leaks or ""))
 
     print("Sortie de combat : retour à la vérité")
     g.M.advance(3.0)
@@ -553,7 +591,7 @@ def main():
     c.M.advance(0.2)
     check(c.S.barrage.active and c.S.barrage.source == "gestionnaire", "Barrage lu sur l'icône du Gestionnaire")
     c.M.proc("Idées claires", 12536)
-    c.M.advance(0.2)
+    c.M.advance(0.4)
     check(c.S.clear.active and c.S.clear.source == "gestionnaire", "Idées claires lues sur l'icône (talent 11213)")
     c.cast(AM)
     c.M.advance(0.7)
@@ -570,7 +608,7 @@ def main():
     check(k.S.stacks == 2 and k.S.stacksSource == "aura", "charges lues sur l'aura même en combat")
     k.cast(FIREBALL)
     check(k.S.stacks == 2, "Boule de feu : l'aura garde ses 2 charges")
-    k.run('Mock.auras["Déflagration des Arcanes"] = nil')
+    k.run('Mock.auras["Déflagration des Arcanes"] = nil; Mock.fire("UNIT_AURA", "player", {})')
     k.M.advance(0.3)
     check(k.S.stacks == 0, "aura absente et réputée lisible : 0 charge")
     no_errors(k, "aura lisible")

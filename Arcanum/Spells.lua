@@ -124,6 +124,19 @@ local function scanSpellBook()
   return byName
 end
 
+-- L'aura de ce sort reste-t-elle lisible en combat ? Le jeu classe chaque sort une fois pour toutes
+-- (jamais secret, toujours, selon le contexte). true / false, ou nil si le client ne le dit pas.
+local function auraNeverSecret(def)
+  local CS = C_Secrets
+  if not (CS and CS.GetSpellAuraSecrecy) then return nil end
+  local never = Enum and Enum.SecrecyLevel and Enum.SecrecyLevel.NeverSecret or 0
+  for _, id in ipairs(def.auras or def.ids) do
+    local ok, level = pcall(CS.GetSpellAuraSecrecy, id)
+    if ok and not S.Is(level) and level == never then return true end
+  end
+  return false
+end
+
 -- Relit le grimoire : noms, rangs, sorts connus. À rappeler quand les sorts ou les talents changent.
 function Spells.Refresh()
   idToKey, nameToKey = {}, {}
@@ -155,6 +168,8 @@ function Spells.Refresh()
     elseif isKnown(def.id) or (def.talent and isKnown(def.talent)) then
       def.known = true
     end
+    def.auraPlain = auraNeverSecret(def)
+    def.baseCD = nil
     for _, id in ipairs(def.ids) do idToKey[id] = key end
     for _, list in ipairs({ def.auras or {}, def.extra or {} }) do
       for _, id in ipairs(list) do
@@ -250,11 +265,13 @@ end
 
 -- Temps de recharge de base (secondes), ou nil.
 function Spells.BaseCooldown(key)
-  local id = Spells.Best(key)
-  if not (id and GetSpellBaseCooldown) then return nil end
-  local ms = S.Num(S.Call(GetSpellBaseCooldown, id))
-  if ms and ms > 0 then return ms / 1000 end
-  return nil
+  local def = Spells.DEF[key]
+  if not def then return nil end
+  if def.baseCD == nil then   -- ne change pas d'une passe à l'autre : lu une fois
+    local ms = GetSpellBaseCooldown and S.Num(S.Call(GetSpellBaseCooldown, def.best))
+    def.baseCD = (ms and ms > 0) and ms / 1000 or false
+  end
+  return def.baseCD or nil
 end
 
 -- La meilleure gemme de mana en sac : identifiant d'objet, quantité. nil si aucune.

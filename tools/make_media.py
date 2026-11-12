@@ -54,7 +54,7 @@ def make_diamond():
 
 
 def make_glow():
-    S = 128
+    S = 64   # dégradé doux : agrandi par le jeu sans perte visible
     px = []
     for y in range(S):
         for x in range(S):
@@ -66,7 +66,7 @@ def make_glow():
 
 def make_halo():
     """Anneau diffus : onde qui s'élargit quand un proc arrive."""
-    S = 128
+    S = 64
     px = []
     for y in range(S):
         for x in range(S):
@@ -80,22 +80,7 @@ def make_roundsq():
     S = 64
     full = mm.rrect(0, 0, 1, 1, 0.24)
     mm.write_tga("roundsq", S, S, mm.white(mm.coverage(S, S, full)))
-    edge = mm.sub(full, mm.rrect(0.055, 0.055, 0.945, 0.945, 0.19))
-    mm.write_tga("roundsq-edge", S, S, mm.white(mm.coverage(S, S, edge)))
-    # halo de la forme, pour l'icône « à lancer »
-    px = []
-    G = 128
-    for y in range(G):
-        for x in range(G):
-            u, v = (x + 0.5) / G, (y + 0.5) / G
-            # distance au carré arrondi inscrit (marge 0.2)
-            m, r = 0.20, 0.14
-            cx = min(max(u, m + r), 1 - m - r)
-            cy = min(max(v, m + r), 1 - m - r)
-            d = math.hypot(u - cx, v - cy) - r
-            a = 1.0 if d <= 0 else math.exp(-(d / 0.075) ** 2)
-            px.append((255, 255, 255, int(round(mm.clamp(a) * 255))))
-    mm.write_tga("roundsq-glow", G, G, px)
+
 
 
 def make_circle():
@@ -103,28 +88,10 @@ def make_circle():
 
 
 def make_fade():
+    """Dégradé horizontal transparent → plein (filets des réglages)."""
     w, h = 128, 8
-    px = []
-    for y in range(h):
-        for x in range(w):
-            a = math.sin(math.pi * (x + 0.5) / w) ** 1.6
-            px.append((255, 255, 255, int(round(a * 255))))
-    mm.write_tga("fade-h", w, h, px)
-    # dégradé horizontal plein → transparent (traînée des barres)
     px = [(255, 255, 255, int(round(255 * ((x + 0.5) / w) ** 1.4))) for y in range(h) for x in range(w)]
     mm.write_tga("grad-h", w, h, px)
-
-
-def make_shine():
-    S = 64
-    px = []
-    for y in range(S):
-        for x in range(S):
-            u, v = (x + 0.5) / S, (y + 0.5) / S
-            d = abs((u - 0.5) + (v - 0.5) * 0.45)
-            a = math.exp(-(d / 0.13) ** 2)
-            px.append((255, 255, 255, int(round(mm.clamp(a) * 255))))
-    mm.write_tga("shine", S, S, px)
 
 
 def make_spark():
@@ -213,7 +180,7 @@ def make_runic():
     S = 128
     polar_tex("ring", S, lambda r, a, u, v: 0.456 <= r <= 0.474, ss=4)
     polar_tex("arc", S, lambda r, a, u, v: 0.451 <= r <= 0.479, ss=4)
-    polar_tex("circle-edge", 128, lambda r, a, u, v: 0.43 <= r <= 0.5)
+    polar_tex("circle-edge", 64, lambda r, a, u, v: 0.43 <= r <= 0.5, ss=4)
 
     def runes(r, a, u, v):
         if 0.400 <= r <= 0.424 and near(a, 36, 0.020):      # graduations fines (2 px)
@@ -237,7 +204,6 @@ def main():
     make_roundsq()
     make_circle()
     make_fade()
-    make_shine()
     make_spark()
     make_logo()
     print("Textures écrites dans " + mm.OUT)

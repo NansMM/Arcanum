@@ -1,5 +1,15 @@
 # Historique d'Arcanum
 
+## 0.7.1 — 12 novembre 2026
+
+Passe de performance, de nettoyage et de relecture du cycle. Rien ne change à l'écran.
+
+- Beaucoup moins d'appels au jeu : sur le jeu simulé, 42 par seconde en combat au lieu de 530, et 13 au lieu de 114 quand le HUD est masqué. Les auras, les coûts, les temps de recharge, la cible et l'incantation en cours ne sont relus que lorsque le jeu signale un changement ; en combat, les auras que le jeu classe secrètes ne sont plus demandées du tout.
+- Affichage : plus aucune table créée à chaque image, les cristaux au repos ne sont plus redessinés, et un HUD masqué ne fait presque plus rien.
+- Addon plus léger : quatre textures inutilisées retirées, trois autres réduites (350 Ko de textures au lieu de 600).
+- Cycle : quand la fenêtre des charges est presque finie (moins de 4 secondes), Arcanum ne conseille plus de monter une charge de plus ; il fait profiter des charges en place.
+- Code mort retiré ; le banc de test vérifie maintenant le nombre d'appels au jeu et l'absence de variable globale parasite.
+
 ## 0.7.0 — 12 novembre 2026
 
 - Mode multi-cibles : il s'active quand tu lances un sort de zone (ou avec `/arc aoe` avant le pull) et conseille Choc de flammes, Eureka, Présence spirituelle, puis Explosion des Arcanes. Le cercle passe à l'orange.

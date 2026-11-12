@@ -26,7 +26,7 @@ L'ordre conseillé part du guide Method (patch 1.60.1), adapté à ce qui se mes
 4. Hors combat, sans charge : Courroux en ouverture. Le premier sort ne coûte pas de temps de combat, autant y mettre la plus longue incantation (réglable).
 5. Charges visées atteintes, Courroux prêt : Eureka, puis Présence spirituelle, puis Courroux des Arcanes. Avec la macro de burst (`/arc macro`), une seule touche fait les trois : Arcanum montre alors directement le Courroux, en or (réglable).
 6. Gemme de mana, puis Évocation, sous 15 % de mana.
-7. Sous les charges visées : Déflagration.
+7. Sous les charges visées : Déflagration, sauf si la fenêtre des charges se ferme dans moins de 4 secondes (une charge de plus ne servirait à rien).
 8. Charges visées atteintes : Éclair de givre ou Boule de feu (le moins cher), qui profitent des charges et peuvent déclencher un Barrage. Au rang 1 par défaut, signalé par un « 1 » sur l'icône : deux fois plus de lancers, donc de chances de Barrage, pour moins de la moitié du mana et environ 17 % de dégâts en moins. Le réglage « max » conseille le dernier rang.
 9. Si le mana ne suit plus : Courroux, gemme de mana, Évocation, le sort le moins cher, la baguette.
 
@@ -59,6 +59,6 @@ Il ne se réveille que sur un mage. Après une mise à jour qui ajoute des textu
 
 ## Développement
 
-- `python tools/test/run_tests.py` lance un mage simulé avec les règles de Forever : auras cachées et valeurs secrètes en combat, coût des sorts et sorts lancés lisibles. Il faut le module `lupa` (`pip install lupa`).
+- `python tools/test/run_tests.py` lance un mage simulé avec les règles de Forever : auras cachées et valeurs secrètes en combat, coût des sorts et sorts lancés lisibles. Il compte aussi les appels au jeu et les opérations d'affichage, pour que l'addon reste sobre. Il faut le module `lupa` (`pip install lupa`).
 - `python tools/make_media.py` régénère les textures, `python tools/preview.py` l'aperçu `docs/apercu.png`.
 - Publier une version : ajoute une section `## X.Y.Z` dans `CHANGELOG.md`, puis `python tools/release.py X.Y.Z`. Le script met le numéro à jour, lance les tests, crée l'étiquette `vX.Y.Z` et pousse ; GitHub Actions publie la release (`Arcanum-X.Y.Z-forever.zip` et `release.json` pour WowUp).

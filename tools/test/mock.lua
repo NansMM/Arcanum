@@ -180,7 +180,11 @@ function C_Secrets.ShouldSpellAuraBeSecret(id)   -- par sort : une aura « jamai
   if sp and M.neverSecret[sp.name] then return false end
   return restricted()
 end
-function C_Secrets.GetSpellAuraSecrecy(id) return 2 end
+function C_Secrets.GetSpellAuraSecrecy(id)   -- 0 : jamais secrète ; 2 : selon le contexte (le cas courant)
+  local sp = M.spells[id]
+  if sp and M.neverSecret[sp.name] then return 0 end
+  return 2
+end
 
 -- ------------------------------------------------------------------ unités
 function UnitClass(unit) return "Mage", M.class end
@@ -351,6 +355,7 @@ local function region(kind, parent, methods)
       if v == nil and type(k) == "string" and k:find("^[A-Z]") then
         error("méthode inconnue : " .. kind .. ":" .. k, 2)
       end
+      if v ~= nil then M.ops = (M.ops or 0) + 1 end   -- chaque appel de méthode de widget est compté
       return v
     end,
   })
@@ -559,10 +564,18 @@ function M.proc(name, id, duration)
   M.fire("UNIT_AURA", "player", {})
 end
 
-function M.expire()   -- le jeu retire les auras arrivées à terme
+function M.expire()   -- le jeu retire les auras arrivées à terme, et le signale
+  local gone = false
   for name, a in pairs(M.auras) do
-    if a.expirationTime and a.expirationTime > 0 and a.expirationTime <= M.now then M.auras[name] = nil end
+    if a.expirationTime and a.expirationTime > 0 and a.expirationTime <= M.now then M.auras[name] = nil; gone = true end
   end
+  if gone then M.fire("UNIT_AURA", "player", {}) end
+end
+
+-- Un temps de recharge démarre : le jeu le signale.
+function M.setCooldown(id, duration)
+  M.cooldowns[id] = { start = M.now, duration = duration }
+  M.fire("SPELL_UPDATE_COOLDOWN")
 end
 
 function M.setCombat(on)
@@ -570,10 +583,61 @@ function M.setCombat(on)
   M.fire(on and "PLAYER_REGEN_DISABLED" or "PLAYER_REGEN_ENABLED")
 end
 
+-- ------------------------------------------------------------------ compteur d'appels au jeu
+-- Chaque fonction du jeu appelée par l'addon est comptée : le banc de test mesure ainsi ce que coûte
+-- une seconde de combat, et vérifie que l'addon reste économe.
+M.calls = {}
+function M.resetCalls() M.calls = {} end
+function M.totalCalls()
+  local n = 0
+  for _, v in pairs(M.calls) do n = n + v end
+  return n
+end
+local function counted(space, tbl)
+  for name, fn in pairs(tbl) do
+    if type(fn) == "function" then
+      local label = space .. name
+      tbl[name] = function(...)
+        M.calls[label] = (M.calls[label] or 0) + 1
+        return fn(...)
+      end
+    end
+  end
+end
+counted("C_Spell.", C_Spell)
+counted("C_UnitAuras.", C_UnitAuras)
+counted("C_Secrets.", C_Secrets)
+counted("C_SpellBook.", C_SpellBook)
+counted("C_Item.", C_Item)
+counted("C_Container.", C_Container)
+counted("C_SpellActivationOverlay.", C_SpellActivationOverlay)
+for _, name in ipairs({ "UnitPower", "UnitPowerMax", "UnitExists", "UnitCanAttack", "UnitIsDead",
+  "UnitCastingInfo", "UnitChannelInfo", "GetSpellBaseCooldown" }) do
+  local fn = _G[name]
+  _G[name] = function(...)
+    M.calls[name] = (M.calls[name] or 0) + 1
+    return fn(...)
+  end
+end
+
+-- ------------------------------------------------------------------ variables globales
+-- Un addon ne doit rien laisser traîner dans l'espace global, à part ce qu'il déclare (réglages
+-- enregistrés, commandes, cadres nommés). Toute autre écriture globale est relevée.
+M.leaks = {}
+local ALLOWED = { ArcanumDB = true, SLASH_ARCANUM1 = true, SLASH_ARCANUM2 = true,
+  ArcanumHUD = true, ArcanumOptions = true, ArcanumDiag = true, BuffIconCooldownViewer = true }
+function M.watchGlobals()
+  setmetatable(_G, { __newindex = function(t, k, v)
+    if not ALLOWED[k] then M.leaks[#M.leaks + 1] = tostring(k) end
+    rawset(t, k, v)
+  end })
+end
+
 -- ------------------------------------------------------------------ chargement de l'addon
 M.meta = {}
 function M.load(dir, toc, addon)
   M.ns = {}
+  M.watchGlobals()
   local files = {}
   for line in io.lines(dir .. "/" .. toc) do
     line = line:gsub("\r", "")

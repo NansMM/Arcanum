@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.7.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.7.1"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -21,12 +21,6 @@ local function report(err)
   if handler then handler(err) else print(err) end
 end
 ns.Report = report
-
-function ns.SafeCall(fn, ...)
-  local ok, a, b, c = pcall(fn, ...)
-  if not ok then report(a) end
-  return ok, a, b, c
-end
 
 -- ------------------------------------------------------------------ valeurs secrètes
 local S = {}
@@ -205,10 +199,6 @@ end
 -- ------------------------------------------------------------------ divers
 function ns.Print(msg)
   print("|cffb07cffArcanum|r " .. tostring(msg))
-end
-
-function ns.Now()
-  return GetTime()
 end
 
 function ns.IsMage()
