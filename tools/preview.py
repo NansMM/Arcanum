@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Aperçu du HUD d'Arcanum : compose les vraies textures de l'addon selon la mise en page de UI/Hud.lua.
+
+Ce n'est pas une capture du jeu : les icônes de sorts et les textes sont remplacés par des aplats.
+Sert à juger les formes, les couleurs et les halos sans lancer WoW. Aucune dépendance.
+Usage : python tools/preview.py   ->   docs/apercu.png
+"""
+import math
+import os
+import struct
+import zlib
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MEDIA = os.path.join(ROOT, "Arcanum", "Media")
+OUT = os.path.join(ROOT, "docs", "apercu.png")
+
+K = 2.4                      # échelle du rendu
+W, H = int(440 * K), int(208 * K)
+
+C = dict(
+    ink=(0.030, 0.024, 0.066), socket=(0.130, 0.108, 0.240), edge=(0.470, 0.380, 0.860),
+    arcane=(0.690, 0.486, 1.000), arcaneHi=(0.900, 0.820, 1.000), hot=(1.000, 0.560, 0.930),
+    barrage=(1.000, 0.450, 0.800), clear=(0.400, 0.860, 1.000), power=(1.000, 0.800, 0.400),
+    pom=(0.560, 1.000, 0.840), heat=(1.000, 0.560, 0.240), mana=(0.340, 0.560, 1.000),
+    text=(0.950, 0.930, 1.000), white=(1, 1, 1),
+)
+
+_cache = {}
+
+
+def tga(name):
+    if name in _cache:
+        return _cache[name]
+    data = open(os.path.join(MEDIA, name + ".tga"), "rb").read()
+    w, h = struct.unpack("<HH", data[12:16])
+    px = data[18:18 + w * h * 4]
+    _cache[name] = (w, h, px)
+    return _cache[name]
+
+
+buf = [0.0] * (W * H * 3)
+
+
+def background():
+    for y in range(H):
+        for x in range(W):
+            u, v = x / W, y / H
+            d = math.hypot(u - 0.5, v - 0.45)
+            base = 0.085 - 0.05 * d
+            i = (y * W + x) * 3
+            buf[i], buf[i + 1], buf[i + 2] = base * 0.95, base * 1.0, base * 1.25
+
+
+def blit(name, cx, cy, w, h, color, alpha=1.0, add=False, uv=(0, 1, 0, 1), rot=0.0, sweep=None):
+    """Dessine une texture centrée en (cx, cy), taille (w, h) en unités du HUD (y vers le bas)."""
+    if name is None:
+        tw = th = 1
+        px = None
+    else:
+        tw, th, px = tga(name)
+    x0, y0 = (cx - w / 2) * K, (cy - h / 2) * K
+    pw, ph = w * K, h * K
+    u0, u1, v0, v1 = uv
+    r, g, b = color
+    for y in range(max(0, int(y0)), min(H, int(y0 + ph) + 1)):
+        fy0 = (y + 0.5 - y0) / ph
+        if fy0 < 0 or fy0 > 1:
+            continue
+        for x in range(max(0, int(x0)), min(W, int(x0 + pw) + 1)):
+            fx = (x + 0.5 - x0) / pw
+            fy = fy0
+            if fx < 0 or fx > 1:
+                continue
+            if sweep is not None:
+                # arc restant, comme le voile d'un widget Cooldown : part du haut, dans le sens horaire
+                ang = math.atan2(fx - 0.5, 0.5 - fy) % (2 * math.pi)
+                if ang < (1 - sweep) * 2 * math.pi:
+                    continue
+            if rot:
+                dx, dy = fx - 0.5, fy - 0.5
+                fx = 0.5 + dx * math.cos(rot) + dy * math.sin(rot)
+                fy = 0.5 - dx * math.sin(rot) + dy * math.cos(rot)
+                if fx < 0 or fx > 1 or fy < 0 or fy > 1:
+                    continue
+            if px is None:
+                tr = tg = tb = ta = 1.0
+            else:
+                gx = min(tw - 1.0, max(0.0, (u0 + (u1 - u0) * fx) * tw - 0.5))
+                gy = min(th - 1.0, max(0.0, (v0 + (v1 - v0) * fy) * th - 0.5))
+                ix, iy = int(gx), int(gy)
+                jx, jy = min(tw - 1, ix + 1), min(th - 1, iy + 1)
+                wx, wy = gx - ix, gy - iy
+                tb = tg = tr = ta = 0.0
+                for (qx, qy, wgt) in ((ix, iy, (1 - wx) * (1 - wy)), (jx, iy, wx * (1 - wy)),
+                                      (ix, jy, (1 - wx) * wy), (jx, jy, wx * wy)):
+                    o = (qy * tw + qx) * 4
+                    al = px[o + 3] / 255 * wgt
+                    tb += px[o] / 255 * al
+                    tg += px[o + 1] / 255 * al
+                    tr += px[o + 2] / 255 * al
+                    ta += al
+                if ta > 0:
+                    tb, tg, tr = tb / ta, tg / ta, tr / ta
+            a = ta * alpha
+            if a <= 0:
+                continue
+            i = (y * W + x) * 3
+            if add:
+                buf[i] += tr * r * a
+                buf[i + 1] += tg * g * a
+                buf[i + 2] += tb * b * a
+            else:
+                buf[i] = buf[i] * (1 - a) + tr * r * a
+                buf[i + 1] = buf[i + 1] * (1 - a) + tg * g * a
+                buf[i + 2] = buf[i + 2] * (1 - a) + tb * b * a
+
+
+def mix(a, b, t):
+    return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
+
+
+def pill(cx, cy, w, h, color, alpha):
+    blit("circle", cx - w / 2 + h / 4, cy, h / 2, h, color, alpha, uv=(0, 0.5, 0, 1))
+    blit("circle", cx + w / 2 - h / 4, cy, h / 2, h, color, alpha, uv=(0.5, 1, 0, 1))
+    blit(None, cx, cy, w - h, h, color, alpha)
+
+
+def card(cx, cy, w, color, frac):
+    blit("glow", cx, cy, w * 1.45, 26 * 3.2, color, 0.30, add=True)
+    pill(cx, cy, w + 3, 29, color, 0.55)
+    pill(cx, cy, w, 26, C["ink"], 0.92)
+    blit("circle", cx - w / 2 + 13, cy, 20, 20, mix(color, C["ink"], 0.35), 1)
+    blit(None, cx - w / 2 + 34 + 34, cy, 68, 3, C["text"], 0.80)                 # libellé (aplat)
+    blit(None, cx + w / 2 - 19, cy, 14, 8, color, 0.95)                          # secondes (aplat)
+    lw = (w - 26) * frac
+    blit(None, cx - w / 2 + 13 + lw / 2, cy + 10, lw, 2, color, 0.9)
+
+
+def icon(cx, cy, size, tint, hint=None, active=None, cooldown=0.0):
+    if hint:
+        blit("roundsq-glow", cx, cy, size * 1.78, size * 1.78, hint, 0.85, add=True)
+    if active:
+        blit("roundsq-glow", cx, cy, size * 1.7, size * 1.7, active, 0.45, add=True)
+    blit("roundsq", cx, cy, size + 4, size + 4, C["ink"], 0.94)
+    blit("roundsq", cx, cy, size, size, mix(tint, C["ink"], 0.45 + 0.35 * cooldown), 1)
+    blit("glow", cx - size * 0.12, cy - size * 0.14, size * 0.9, size * 0.9, mix(tint, C["white"], 0.5), 0.5 * (1 - cooldown), add=True)
+    if cooldown > 0:
+        blit("roundsq", cx, cy + size * (1 - cooldown) / 2, size, size * cooldown, (0.02, 0.01, 0.06), 0.72,
+             uv=(0, 1, 1 - cooldown, 1))
+    ring = hint or active or C["edge"]
+    blit("roundsq-edge", cx, cy, size + 2, size + 2, ring, 1.0 if (hint or active) else 0.55)
+
+
+def round_icon(cx, cy, size, tint, ring, glow=0.0, cooldown=0.0):
+    if glow:
+        blit("glow", cx, cy, size * 2.0, size * 2.0, ring, glow, add=True)
+    blit("circle", cx, cy, size + 4, size + 4, C["ink"], 0.96)
+    blit("circle", cx, cy, size, size, mix(tint, C["ink"], 0.42 + 0.3 * cooldown), 1)
+    blit("glow", cx - size * 0.12, cy - size * 0.14, size * 0.9, size * 0.9, mix(tint, C["white"], 0.5), 0.5 * (1 - cooldown), add=True)
+    if cooldown > 0:
+        blit("circle", cx, cy, size, size, (0.02, 0.01, 0.06), 0.76, sweep=cooldown)
+    blit("circle-edge", cx, cy, size + 4, size + 4, ring, 0.95)
+
+
+def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), spin=0.0):
+    """Le cercle runique tel que le dispose UI/Hud.lua."""
+    R = 62
+    S = R / 0.465
+    urgent = reason is not C["arcane"]
+    full = stacks >= target
+    col = C["hot"] if full else C["arcane"]
+    line = mix(C["edge"], reason, 0.55)
+
+    def on_ring(angle):
+        a = math.radians(angle)
+        return cx + R * math.cos(a), cy - R * math.sin(a)
+
+    blit("circle", cx, cy, 2 * R + 6, 2 * R + 6, C["ink"], 0.34)
+    blit("glow", cx, cy, R * 2.1, R * 2.1, reason, 0.34 if urgent else 0.14, add=True)
+    blit("runes", cx, cy, S, S, line, 0.34, rot=-spin)
+    blit("ring", cx, cy, S, S, line, 0.85)
+    if stacks > 0:
+        blit("arc", cx, cy, S, S, col, 1, sweep=window)
+    round_icon(cx, cy, 56, tint, reason, glow=0.42 if urgent else 0.16)
+    # charges, en haut de l'anneau
+    for i, angle in enumerate((132, 104, 76, 48)):
+        x, y = on_ring(angle)
+        on = i < stacks
+        aim = 1.0 if i < target else 0.35
+        pulse = (0.5 + 0.5 * math.sin(i * 0.9)) if full else 0
+        if on:
+            blit("glow", x, y, 18 * 3 * (1 + 0.1 * pulse), 24 * 2.6 * (1 + 0.1 * pulse), col, 0.40 + 0.32 * pulse, add=True)
+        blit("diamond", x, y, 18, 24, C["socket"], 0.95 * (1 if on else aim))
+        if on:
+            blit("diamond", x, y, 18, 24, col, 1)
+            blit("spark", x - 3, y - 5, 16, 16, C["white"], 0.5 + 0.45 * pulse, add=True)
+        blit("diamond-edge", x, y, 18, 24, C["arcaneHi"] if on else C["edge"], 1 if on else 0.45 * aim)
+    # gros temps de recharge, sertis à gauche et à droite
+    for angle, (ctint, active, cooldown) in zip((200, 340), cooldowns):
+        x, y = on_ring(angle)
+        round_icon(x, y, 28, ctint, active or C["edge"], glow=0.7 if active else 0.0, cooldown=cooldown)
+    # gemmes de proc, en bas
+    for angle, (pcol, left) in zip((248, 292), procs):
+        if pcol:
+            x, y = on_ring(angle)
+            round_icon(x, y, 22, pcol, pcol, glow=0.5, cooldown=1 - left)
+
+
+def main():
+    background()
+    # à gauche : cycle normal (Déflagration, 1 charge sur 2 visées) ; à droite : Barrage de projectiles
+    hud(118, 104, 1, 2, C["arcane"], C["arcane"], 0.86,
+        [(C["pom"], None, 0.0), (C["power"], None, 0.0)])
+    blit("halo", 322, 104, 250, 250, C["barrage"], 0.22, add=True)
+    hud(322, 104, 2, 2, C["barrage"], C["barrage"], 0.55,
+        [(C["pom"], None, 0.7), (C["power"], C["power"], 0.0)],
+        procs=((C["barrage"], 0.8), (C["clear"], 0.45)))
+
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    raw = bytearray()
+    for y in range(H):
+        raw.append(0)
+        for x in range(W):
+            i = (y * W + x) * 3
+            for c in range(3):
+                v = buf[i + c]
+                raw.append(255 if v >= 1 else int(max(0.0, v) ** (1 / 1.0) * 255))
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0))
+    png += chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b"")
+    with open(OUT, "wb") as f:
+        f.write(png)
+    print("Aperçu écrit : " + OUT)
+
+
+if __name__ == "__main__":
+    main()

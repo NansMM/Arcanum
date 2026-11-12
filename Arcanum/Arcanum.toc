@@ -1,0 +1,15 @@
+## Interface: 16001
+## Title: |cffb07cffArcanum|r
+## Notes: HUD du mage Arcanes : le prochain sort à lancer, les charges de Déflagration des Arcanes, les procs et les gros temps de recharge.
+## Author: Nans
+## Version: 0.6.2
+## IconTexture: Interface\AddOns\Arcanum\Media\logo
+## SavedVariables: ArcanumDB
+
+Core.lua
+Spells.lua
+State.lua
+UI\Theme.lua
+UI\Hud.lua
+UI\Options.lua
+UI\Diag.lua

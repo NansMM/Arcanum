@@ -1,0 +1,711 @@
+-- Arcanum — le HUD : un cercle runique.
+--
+-- Au centre, le prochain sort à lancer ; sa couleur dit pourquoi (violet : cycle normal, rose : Barrage
+-- de projectiles, bleu clair : Idées claires, or : gros dégâts, bleu : mana). Autour, un anneau gravé de
+-- runes discrètes, et chaque information à sa place fixe sur l'anneau :
+--   * en haut, quatre cristaux : les charges de Déflagration ;
+--   * l'arc lumineux qui se vide autour de l'anneau : les 18 secondes de leur fenêtre ;
+--   * à gauche et à droite, serties dans l'anneau : les gros temps de recharge ;
+--   * en bas : une gemme par proc actif, avec un voile qui grandit à mesure qu'il s'épuise.
+-- Pendant une incantation, le prochain sort ne change pas : il se découvre à mesure que le sort part.
+--
+-- Tout est animé à la main dans un seul OnUpdate (approche douce vers une cible) : pas de groupes
+-- d'animation à synchroniser, et le rendu reste fluide quel que soit le nombre d'images par seconde.
+local ADDON, ns = ...
+local UI, State, Spells, S = ns.UI, ns.State, ns.Spells, ns.Secret
+local C = UI.C
+local L = ns.L
+
+local Hud = {}
+ns.Hud = Hud
+
+local sin, cos, rad, min, max = math.sin, math.cos, math.rad, math.min, math.max
+
+local R = 62                          -- rayon de l'anneau
+local RING_SIZE = R / 0.465           -- taille d'affichage des textures d'anneau (leur trait est à 46,5 % du bord)
+local ROOT_W, ROOT_H = 210, 214
+local HUB_Y = -40                     -- haut du cercle, depuis le haut du HUD
+local MAIN = 56                       -- prochain sort
+local CR_W, CR_H = 18, 24             -- cristaux de charge
+local CR_ANGLE = { 132, 104, 76, 48 } -- leur place sur l'anneau (degrés, 90 = en haut)
+local CD_SIZE = 28                    -- gros temps de recharge
+local CD_ANGLE = { 200, 340, 170, 10, 225 }
+local BADGE = 22                      -- gemmes de proc
+local MANA_W, MANA_H = 110, 4
+
+-- Gros temps de recharge sertis dans l'anneau, s'ils sont connus.
+local CDS = { "pom", "eureka", "power", "berserking", "bloodfury" }
+local DEMO_CDS = { pom = true, eureka = true }
+local REASON_COLOR = {
+  arcane = C.arcane, burst = C.power, barrage = C.barrage, clear = C.clear, heat = C.heat, mana = C.mana,
+}
+local ACTIVE_COLOR = { pom = C.pom, eureka = C.power, power = C.power }
+-- Procs montrés en gemme ; angle : leur place en bas de l'anneau ; icons : sorts dont on essaie l'icône.
+local PROCS = {
+  { key = "barrage", color = C.barrage, angle = 248, icons = { "barrage", "missiles" } },
+  { key = "clear", color = C.clear, angle = 292, icons = { "clear", "blast" } },
+  { key = "heat", color = C.heat, angle = 270, icons = { "pyro", "heat" } },
+}
+local PROC_SOUND = {
+  barrage = { kit = 3175, file = "barrage", color = C.barrage },
+  clear = { kit = 18019, file = "clear", color = C.clear },
+  heat = { kit = 3175, file = "heat", color = C.heat },
+}
+
+local root, mover, hub, main, glow, plate, ring, runes, timer, timerFull, mana, manaCurve
+local crystals, cds, halos, badges = {}, {}, {}, {}
+local rootAlpha, hotBlend = 0, 0
+local spinners = {}   -- groupes d'animation qui font tourner le sceau
+local cooldownsDirty, lastFeed = true, 0
+local reasonColor = { C.arcane[1], C.arcane[2], C.arcane[3] }   -- couleur courante, fondue vers la cible
+
+-- Position sur l'anneau, depuis le centre du cercle.
+local function onRing(angle, radius)
+  local a = rad(angle)
+  return (radius or R) * cos(a), (radius or R) * sin(a)
+end
+
+-- ------------------------------------------------------------------ halos (onde à l'arrivée d'un proc)
+local function spawnHalo(color, from, to, life)
+  if not root then return end
+  local h
+  for _, x in ipairs(halos) do
+    if not x.t0 then h = x; break end
+  end
+  if not h then
+    if #halos >= 4 then return end
+    h = { tex = UI.Tex(root, "BACKGROUND", "halo", color, 0, "ADD", -3) }
+    h.tex:SetPoint("CENTER", hub, "CENTER", 0, 0)
+    halos[#halos + 1] = h
+  end
+  h.t0, h.life, h.from, h.to, h.color = GetTime(), life or 0.55, from or 60, to or 250, color
+end
+
+local function animateHalos(now)
+  for _, h in ipairs(halos) do
+    if h.t0 then
+      local t = (now - h.t0) / h.life
+      if t >= 1 then
+        h.t0 = nil
+        h.tex:SetAlpha(0)
+      else
+        local e = 1 - (1 - t) * (1 - t)   -- ralentit en fin de course
+        local size = h.from + (h.to - h.from) * e
+        h.tex:SetSize(size, size)
+        h.tex:SetVertexColor(h.color[1], h.color[2], h.color[3], (1 - t) * 0.75)
+        h.tex:SetAlpha(1)
+      end
+    end
+  end
+end
+
+-- ------------------------------------------------------------------ cristaux de charge
+local function makeCrystal(parent, i)
+  local f = CreateFrame("Frame", nil, parent)
+  f:SetSize(CR_W, CR_H)
+  local x, y = onRing(CR_ANGLE[i])
+  f:SetPoint("CENTER", parent, "CENTER", x, y)
+  f.glow = UI.Tex(f, "BACKGROUND", "glow", C.arcane, 0, "ADD", -1)
+  f.glow:SetPoint("CENTER")
+  f.glow:SetSize(CR_W * 3, CR_H * 2.6)
+  f.socket = UI.Tex(f, "BORDER", "diamond", C.socket, 0.95)
+  f.socket:SetAllPoints()
+  f.fill = UI.Tex(f, "ARTWORK", "diamond", C.arcane, 0)
+  f.fill:SetPoint("CENTER")
+  f.fill:SetSize(CR_W, CR_H)
+  f.edge = UI.Tex(f, "OVERLAY", "diamond-edge", C.edge, 0.45)
+  f.edge:SetAllPoints()
+  f.spark = UI.Tex(f, "OVERLAY", "spark", C.arcaneHi, 0, "ADD", 2)
+  f.spark:SetSize(16, 16)
+  f.spark:SetPoint("CENTER", -3, 5)
+  f.level, f.pop = 0, 0
+  return f
+end
+
+local function animateCrystals(dt, now)
+  local n = State.stacks
+  local target = State.Target()
+  local full = n >= target
+  hotBlend = UI.Approach(hotBlend, full and 1 or 0, dt, 6)
+  local r, g, b = UI.Mix(C.arcane, C.hot, hotBlend)
+  for i, f in ipairs(crystals) do
+    local on = i <= n
+    f.level = UI.Approach(f.level, on and 1 or 0, dt, on and 18 or 9)
+    f.pop = UI.Approach(f.pop, 0, dt, 7)
+    local pulse = full and (0.5 + 0.5 * sin(now * 5.4 - i * 0.55)) or 0
+    local scale = 1 + f.pop * 0.6
+    f.fill:SetSize(CR_W * scale, CR_H * scale)
+    f.fill:SetVertexColor(r, g, b, f.level)
+    local gs = 1 + f.pop * 0.45 + pulse * 0.10
+    f.glow:SetSize(CR_W * 3 * gs, CR_H * 2.6 * gs)
+    f.glow:SetVertexColor(r, g, b, min(1, f.level * (0.40 + 0.32 * pulse) + f.pop * 0.55))
+    -- au-delà des charges visées, le cristal vide reste en retrait : on ne cherche pas à le remplir
+    f.aim = UI.Approach(f.aim or 1, i <= target and 1 or 0.35, dt, 8)
+    f.socket:SetAlpha(max(f.aim, f.level))
+    local er, eg, eb = UI.Mix(C.edge, C.arcaneHi, f.level)
+    f.edge:SetVertexColor(er, eg, eb, (0.45 + 0.55 * f.level) * max(f.aim, f.level))
+    f.spark:SetVertexColor(1, 1, 1, f.level * (0.50 + 0.45 * pulse))
+  end
+end
+
+-- ------------------------------------------------------------------ icônes rondes
+-- Une icône ronde sertie : fond, icône masquée en cercle, voile de recharge, bord coloré, halo.
+local function makeRound(parent, size, numbers, reverse)
+  local b = CreateFrame("Frame", nil, parent)
+  b:SetSize(size, size)
+  b.size, b.activeLevel, b.pop = size, 0, 0
+  b.glow = UI.Tex(b, "BACKGROUND", "glow", C.arcane, 0, "ADD", -2)
+  b.glow:SetPoint("CENTER")
+  b.glow:SetSize(size * 2.0, size * 2.0)
+  b.back = UI.Tex(b, "BACKGROUND", "circle", C.ink, 0.96, nil, 0)
+  b.back:SetPoint("TOPLEFT", -2, 2)
+  b.back:SetPoint("BOTTOMRIGHT", 2, -2)
+  b.icon = b:CreateTexture(nil, "ARTWORK")
+  b.icon:SetAllPoints()
+  b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  if b.CreateMaskTexture then
+    local mask = b:CreateMaskTexture()
+    mask:SetTexture(UI.Media("circle"), "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:SetAllPoints(b.icon)
+    b.icon:AddMaskTexture(mask)
+  end
+  local ok, cd = pcall(CreateFrame, "Cooldown", nil, b, "CooldownFrameTemplate")
+  if not ok or not cd then cd = CreateFrame("Cooldown", nil, b) end
+  cd:SetAllPoints()
+  if cd.SetSwipeTexture then pcall(cd.SetSwipeTexture, cd, UI.Media("circle"), 0.02, 0.01, 0.06, 0.76) end
+  if cd.SetSwipeColor then pcall(cd.SetSwipeColor, cd, 0.02, 0.01, 0.06, 0.76) end
+  if cd.SetDrawEdge then pcall(cd.SetDrawEdge, cd, false) end
+  if cd.SetDrawBling then pcall(cd.SetDrawBling, cd, false) end
+  if cd.SetHideCountdownNumbers then pcall(cd.SetHideCountdownNumbers, cd, not numbers) end
+  if reverse and cd.SetReverse then pcall(cd.SetReverse, cd, true) end
+  if numbers and cd.GetCountdownFontString then
+    local okF, fs = pcall(cd.GetCountdownFontString, cd)
+    if okF and fs and fs.SetFont then pcall(fs.SetFont, fs, UI.FONT.body, 12, "OUTLINE") end
+  end
+  b.cd = cd
+  b.over = CreateFrame("Frame", nil, b)
+  b.over:SetAllPoints()
+  b.over:SetFrameLevel(cd:GetFrameLevel() + 2)
+  b.ring = UI.Tex(b.over, "OVERLAY", "circle-edge", C.edge, 0.9)
+  b.ring:SetPoint("TOPLEFT", -2, 2)
+  b.ring:SetPoint("BOTTOMRIGHT", 2, -2)
+  return b
+end
+
+local function setCooldown(b, start, duration, modRate)
+  if b._s == start and b._d == duration then return end
+  b._s, b._d = start, duration
+  pcall(b.cd.SetCooldown, b.cd, start, duration, modRate or 1)
+end
+
+-- Donne au widget le temps de recharge : nombres lisibles, ou objet « durée » quand ils sont secrets.
+local function feedCooldown(b, info, force)
+  if info.start and info.duration then
+    if info.duration > 1.6 then
+      setCooldown(b, info.start, info.duration, info.modRate)
+    else
+      setCooldown(b, 0, 0)   -- on ne montre pas le temps de recharge global
+    end
+  elseif info.object then
+    b._s, b._d = nil, nil
+    if force and b.cd.SetCooldownFromDurationObject then
+      pcall(b.cd.SetCooldownFromDurationObject, b.cd, info.object, true)
+    end
+  else
+    setCooldown(b, 0, 0)
+  end
+end
+
+-- ------------------------------------------------------------------ minuteur de la fenêtre des charges
+-- Un widget Cooldown dont le voile est une bande en anneau : le jeu la découpe lui-même en arc, qui
+-- rétrécit autour du cercle à mesure que les 18 secondes passent.
+local function makeTimer(parent)
+  local t = { frac = 0 }
+  local ok, cd = pcall(CreateFrame, "Cooldown", nil, parent, "CooldownFrameTemplate")
+  if not ok or not cd then cd = CreateFrame("Cooldown", nil, parent) end
+  cd:SetSize(RING_SIZE, RING_SIZE)
+  cd:SetPoint("CENTER", parent, "CENTER", 0, 0)
+  if cd.SetSwipeTexture then pcall(cd.SetSwipeTexture, cd, UI.Media("arc"), C.arcane[1], C.arcane[2], C.arcane[3], 1) end
+  if cd.SetDrawSwipe then pcall(cd.SetDrawSwipe, cd, true) end
+  if cd.SetDrawEdge then pcall(cd.SetDrawEdge, cd, false) end
+  if cd.SetDrawBling then pcall(cd.SetDrawBling, cd, false) end
+  if cd.SetHideCountdownNumbers then pcall(cd.SetHideCountdownNumbers, cd, true) end
+  t.cd = cd
+  return t
+end
+
+local function refreshTimer()
+  if not ns.db.showCharges or State.stacks <= 0 then
+    setCooldown(timer, 0, 0)
+    timerFull:SetAlpha(0)
+    return
+  end
+  local expire, total = State.stacksExpire, State.stacksDur or State.Duration("blast")
+  if expire and total and total > 0 then
+    setCooldown(timer, expire - total, total)
+    timerFull:SetAlpha(0)
+  else
+    setCooldown(timer, 0, 0)      -- fin inconnue : anneau plein
+    timerFull:SetAlpha(1)
+  end
+end
+
+local function animateTimer(now)
+  local r, g, b = UI.Mix(C.arcane, C.hot, hotBlend)
+  local expire, total = State.stacksExpire, State.stacksDur
+  if State.stacks > 0 and expire and total and total > 0 then
+    local frac = (expire - now) / total
+    if frac < 0.25 then r, g, b = UI.Mix(C.bad, { r, g, b }, max(0, frac) / 0.25) end   -- la fenêtre va se fermer
+  end
+  -- (on ne touche au widget que si la couleur a changé : le recolorer à chaque image le fait scintiller)
+  if not timer.r or math.abs(r - timer.r) + math.abs(g - timer.g) + math.abs(b - timer.b) > 0.02 then
+    timer.r, timer.g, timer.b = r, g, b
+    if timer.cd.SetSwipeColor then pcall(timer.cd.SetSwipeColor, timer.cd, r, g, b, 1) end
+    timerFull:SetVertexColor(r, g, b, 1)
+  end
+end
+
+-- ------------------------------------------------------------------ prochain sort
+local function nextIcon(key)
+  if key == "gem" then
+    local gem = State.Gem()
+    local get = C_Item and C_Item.GetItemIconByID or GetItemIcon
+    return gem.itemID and get and S.Plain(S.Call(get, gem.itemID)) or nil
+  end
+  return key and Spells.Icon(key) or nil
+end
+
+local function refreshMain()
+  local key = State.next
+  if key ~= main.key then
+    main.key = key
+    main.icon:SetTexture(nextIcon(key) or 134400)
+  end
+  main.icon:SetAlpha(key and 1 or 0.35)
+  -- pendant une incantation, l'icône se découvre à mesure que le sort en cours part
+  local cast = State.cast
+  if cast then
+    setCooldown(main, cast.start, cast.finish - cast.start)
+  else
+    setCooldown(main, 0, 0)
+  end
+end
+
+-- Le sceau prend la couleur du conseil et respire doucement ; sa rotation est gérée à part (makeSpinner).
+local function animateSeal(dt, now)
+  local target = REASON_COLOR[State.nextReason] or C.arcane
+  for i = 1, 3 do reasonColor[i] = UI.Approach(reasonColor[i], target[i], dt, 10) end
+  main.pop = UI.Approach(main.pop, 0, dt, 9)
+  local r, g, b = reasonColor[1], reasonColor[2], reasonColor[3]
+  local urgent = State.nextReason ~= "arcane" and State.nextReason ~= nil
+  -- respiration lente : assez pour vivre, pas assez pour clignoter
+  local pulse = 0.5 + 0.5 * sin(now * (urgent and 3.2 or 1.8))
+
+  local rr, rg, rb = UI.Mix(C.edge, { r, g, b }, 0.55)
+  runes:SetVertexColor(rr, rg, rb, 0.34)       -- gravure discrète : elle habille l'anneau sans se lire
+  ring:SetVertexColor(rr, rg, rb, 0.85)
+
+  -- halos retenus : l'icône du sort doit rester l'élément le plus lisible du cercle
+  local strength = urgent and (0.30 + 0.08 * pulse) or (0.12 + 0.04 * pulse)
+  glow:SetVertexColor(r, g, b, min(1, strength + main.pop * 0.3))
+  local gs = R * (2.1 + main.pop * 0.5)
+  glow:SetSize(gs, gs)
+  main.glow:SetVertexColor(r, g, b, min(1, (urgent and 0.42 or 0.16) + main.pop * 0.4))
+  main.ring:SetVertexColor(r, g, b, 1)
+  local scale = 1 + main.pop * 0.16
+  if scale ~= main.scale then
+    main.scale = scale
+    main:SetScale(scale)
+  end
+end
+
+-- Rotation des runes (réglage, coupé d'origine : à cette taille un dessin fin qui tourne lentement
+-- avance par à-coups). Elle est confiée au moteur d'animation du jeu ; chaque boucle tourne d'un pas de
+-- symétrie du dessin (30°), donc le retour au départ ne se voit pas.
+local function makeSpinner(tex, degrees, seconds)
+  if not tex.CreateAnimationGroup then return nil end
+  local ok, group = pcall(function()
+    local g = tex:CreateAnimationGroup()
+    local a = g:CreateAnimation("Rotation")
+    a:SetDegrees(degrees)
+    a:SetDuration(seconds)
+    a:SetOrigin("CENTER", 0, 0)
+    g:SetLooping("REPEAT")
+    return g
+  end)
+  return ok and group or nil
+end
+
+local function applySpin()
+  for _, g in ipairs(spinners) do
+    if ns.db.spin then
+      if not g:IsPlaying() then g:Play() end
+    elseif g:IsPlaying() then
+      g:Stop()
+    end
+  end
+end
+
+-- ------------------------------------------------------------------ gemmes de proc
+local function procState(key)
+  if key == "heat" then return State.heat.ready, State.heat.expire, State.Duration("heat") end
+  local p = State[key]
+  return p.active, p.expire, p.duration
+end
+
+local function refreshBadges()
+  local show = ns.db.showProcs
+  for _, f in ipairs(badges) do
+    local active, expire, total = procState(f.def.key)
+    active = show and active and true or false
+    if active ~= f.on then
+      f.on = active
+      if active then
+        local icon
+        for _, key in ipairs(f.def.icons) do
+          icon = Spells.Icon(key)
+          if icon then break end
+        end
+        f.icon:SetTexture(icon or 134400)
+        f.pop = 1
+        f:Show()
+      end
+    end
+    if active then
+      if expire and total and total > 0 then
+        setCooldown(f, expire - total, total)
+      else
+        setCooldown(f, 0, 0)   -- durée inconnue : gemme pleine
+      end
+    end
+  end
+end
+
+local function animateBadges(dt, now)
+  for _, f in ipairs(badges) do
+    if f.on or f.vis > 0 then
+      f.vis = UI.Approach(f.vis, f.on and 1 or 0, dt, f.on and 14 or 10)
+      f.pop = UI.Approach(f.pop, 0, dt, 7)
+      f:SetAlpha(f.vis)
+      if f.vis <= 0 and not f.on then
+        f:Hide()
+      else
+        local c = f.def.color
+        local pulse = 0.5 + 0.5 * sin(now * 4.4)
+        f.glow:SetVertexColor(c[1], c[2], c[3], min(1, 0.34 + 0.20 * pulse + f.pop * 0.5))
+        local s = BADGE * (2.6 + f.pop * 1.6)   -- (pas de SetScale : il déplacerait la gemme sur l'anneau)
+        f.glow:SetSize(s, s)
+      end
+    end
+  end
+end
+
+-- ------------------------------------------------------------------ gros temps de recharge
+local function isVisible(key)
+  if not ns.db.showCooldowns then return false end
+  if State.demo then return DEMO_CDS[key] == true end
+  return Spells.Known(key)
+end
+
+local function refreshCooldowns(now)
+  -- en combat le widget est réalimenté quand le jeu signale un changement, et au pire toutes les 5 s :
+  -- le réalimenter chaque seconde relançait son voile
+  local force = cooldownsDirty or now - lastFeed > 5
+  if force then cooldownsDirty, lastFeed = false, now end
+  for _, b in ipairs(cds) do
+    if b.visible then
+      local info = State.Cooldown(b.key)
+      feedCooldown(b, info, force)
+      local p = State[b.key]
+      b.active = type(p) == "table" and p.active or false
+      b.icon:SetDesaturated(info.onCD == true and not b.active)
+      b.icon:SetAlpha((info.onCD == true and not b.active) and 0.75 or 1)
+    end
+  end
+end
+
+local function animateCooldowns(dt)
+  for _, b in ipairs(cds) do
+    if b.visible then
+      b.activeLevel = UI.Approach(b.activeLevel, b.active and 1 or 0, dt, 10)
+      local a = b.activeLevel
+      local color = ACTIVE_COLOR[b.key] or C.power
+      b.glow:SetVertexColor(color[1], color[2], color[3], a * 0.7)
+      local r, g, bl = UI.Mix(C.edge, color, a)
+      b.ring:SetVertexColor(r, g, bl, 0.9)
+    end
+  end
+end
+
+-- ------------------------------------------------------------------ mana
+-- En combat le mana est une valeur secrète : on la confie telle quelle à la barre, sans jamais la lire.
+local function makeManaCurve()
+  if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor and UnitPowerPercent) then return nil end
+  local ok, curve = pcall(function()
+    local c = C_CurveUtil.CreateColorCurve()
+    c:AddPoint(0.00, CreateColor(C.bad[1], C.bad[2], C.bad[3], 1))
+    c:AddPoint(0.15, CreateColor(C.bad[1], C.bad[2], C.bad[3], 1))        -- sous 15 % : Évocation
+    c:AddPoint(0.28, CreateColor(C.manaLow[1], C.manaLow[2], C.manaLow[3], 1))
+    c:AddPoint(0.45, CreateColor(C.mana[1], C.mana[2], C.mana[3], 1))
+    c:AddPoint(1.00, CreateColor(C.mana[1], C.mana[2], C.mana[3], 1))
+    return c
+  end)
+  return ok and curve or nil
+end
+
+local function refreshMana()
+  if not mana or not ns.db.showMana then return end
+  if State.demo then
+    local t = (GetTime() - (State.demoStart or 0)) % 11 / 11
+    mana:SetMinMaxValues(0, 1)
+    mana:SetValue(1 - 0.8 * t)
+    return
+  end
+  local okMax, maxPower = pcall(UnitPowerMax, "player", 0)
+  local okCur, power = pcall(UnitPower, "player", 0)
+  if okMax and okCur then   -- ne rien tester ici : en combat ces valeurs sont secrètes
+    pcall(mana.SetMinMaxValues, mana, 0, maxPower)
+    pcall(mana.SetValue, mana, power)
+  end
+  if manaCurve then
+    pcall(function()
+      local color = UnitPowerPercent("player", 0, false, manaCurve)
+      if color and color.GetRGB then mana.fill:SetVertexColor(color:GetRGB()) end
+    end)
+  end
+end
+
+local function makeMana(parent)
+  local bar = CreateFrame("StatusBar", nil, parent)
+  bar:SetSize(MANA_W, MANA_H)
+  bar:SetStatusBarTexture(UI.WHITE)
+  bar.fill = bar:GetStatusBarTexture()
+  if bar.fill then bar.fill:SetVertexColor(C.mana[1], C.mana[2], C.mana[3], 1) end
+  bar:SetMinMaxValues(0, 1)
+  bar:SetValue(1)
+  local bg = UI.Tex(bar, "BACKGROUND", nil, C.ink, 0.90)
+  bg:SetPoint("TOPLEFT", -1, 1)
+  bg:SetPoint("BOTTOMRIGHT", 1, -1)
+  return bar
+end
+
+-- ------------------------------------------------------------------ mise en page
+function Hud.Layout()
+  if not root then return end
+  local db = ns.db
+  for _, f in ipairs(crystals) do f:SetShown(db.showCharges) end
+  local n = 0
+  for _, b in ipairs(cds) do
+    b.visible = isVisible(b.key)
+    b:SetShown(b.visible)
+    if b.visible then
+      n = n + 1
+      b.icon:SetTexture(Spells.Icon(b.key) or 134400)
+      local x, y = onRing(CD_ANGLE[n] or CD_ANGLE[#CD_ANGLE])
+      b:ClearAllPoints()
+      b:SetPoint("CENTER", hub, "CENTER", x, y)
+    end
+  end
+  mana:SetShown(db.showMana)
+  applySpin()
+  cooldownsDirty = true
+end
+
+-- ------------------------------------------------------------------ position, verrouillage
+local function applyPosition()
+  local p = ns.db.point
+  root:ClearAllPoints()
+  root:SetPoint(p[1], UIParent, p[2], p[3], p[4])
+  root:SetScale(ns.db.scale or 1)
+end
+
+local function applyLock()
+  local unlocked = not ns.db.locked
+  root:EnableMouse(unlocked)
+  mover:SetShown(unlocked)
+end
+
+local function makeMover()
+  mover = CreateFrame("Frame", nil, root)
+  mover:SetAllPoints()
+  mover:SetFrameLevel(root:GetFrameLevel() + 20)
+  UI.Panel(mover, C.arcane, 0.14, "BACKGROUND", 0)
+  local text = UI.Text(mover, 10, C.arcaneHi, UI.FONT.title)
+  text:SetPoint("TOP", 0, -6)
+  text:SetText(L["Glisse-moi · /arc verrou"])
+  mover:Hide()
+  root:SetMovable(true)
+  root:SetClampedToScreen(true)
+  root:RegisterForDrag("LeftButton")
+  root:SetScript("OnDragStart", function(self)
+    if not ns.db.locked and not (InCombatLockdown and InCombatLockdown()) then self:StartMoving() end
+  end)
+  root:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local point, _, rel, x, y = self:GetPoint(1)
+    if point and x and y then ns.db.point = { point, rel or point, x, y } end
+  end)
+end
+
+-- ------------------------------------------------------------------ sons
+local function playSound(def)
+  if not ns.db.sound then return end
+  local ok, played = pcall(PlaySoundFile, "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\" .. def.file .. ".ogg", "Master")
+  if not (ok and played) then pcall(PlaySound, def.kit, "Master") end
+end
+
+-- ------------------------------------------------------------------ boucle d'affichage
+local function wantedAlpha()
+  local db = ns.db
+  if not db.enabled then return 0 end
+  if not db.locked or State.Live() then return 1 end
+  return db.showIdle and db.idleAlpha or 0
+end
+
+local function onUpdate(_, dt)
+  local now = GetTime()
+  rootAlpha = UI.Approach(rootAlpha, wantedAlpha(), dt, 9)
+  root:SetAlpha(rootAlpha)
+  if rootAlpha <= 0 then return end
+  animateSeal(dt, now)
+  if ns.db.showCharges then
+    animateCrystals(dt, now)
+    animateTimer(now)
+  end
+  animateCooldowns(dt)
+  animateBadges(dt, now)
+  animateHalos(now)
+end
+
+function Hud.Refresh()
+  if not root then return end
+  local now = GetTime()
+  refreshMain()
+  refreshTimer()
+  refreshBadges()
+  refreshCooldowns(now)
+  refreshMana()
+end
+
+function Hud.Build()
+  if root then return root end
+  root = CreateFrame("Frame", "ArcanumHUD", UIParent)
+  root:SetSize(ROOT_W, ROOT_H)
+  root:SetFrameStrata("MEDIUM")
+  root:SetAlpha(0)
+
+  -- Le cercle : un cadre fixe auquel tout s'ancre (l'icône centrale bondit sans rien déplacer d'autre).
+  hub = CreateFrame("Frame", nil, root)
+  hub:SetSize(2 * R, 2 * R)
+  hub:SetPoint("TOP", root, "TOP", 0, HUB_Y)
+  plate = UI.Tex(hub, "BACKGROUND", "circle", C.ink, 0.34, nil, -6)
+  plate:SetPoint("CENTER")
+  plate:SetSize(2 * R + 6, 2 * R + 6)
+  glow = UI.Tex(hub, "BACKGROUND", "glow", C.arcane, 0.12, "ADD", -5)
+  glow:SetPoint("CENTER")
+  glow:SetSize(R * 2.1, R * 2.1)
+  runes = UI.Tex(hub, "BORDER", "runes", C.edge, 0.34, nil, 1)
+  runes:SetPoint("CENTER")
+  runes:SetSize(RING_SIZE, RING_SIZE)
+  ring = UI.Tex(hub, "ARTWORK", "ring", C.edge, 0.85)
+  ring:SetPoint("CENTER")
+  ring:SetSize(RING_SIZE, RING_SIZE)
+  timerFull = UI.Tex(hub, "ARTWORK", "arc", C.arcane, 1, nil, 1)
+  timerFull:SetPoint("CENTER")
+  timerFull:SetSize(RING_SIZE, RING_SIZE)
+  timerFull:SetAlpha(0)
+
+  spinners[#spinners + 1] = makeSpinner(runes, -30, 10)
+
+  local level = hub:GetFrameLevel()
+  timer = makeTimer(hub)
+  timer.cd:SetFrameLevel(level + 1)
+
+  main = makeRound(hub, MAIN, false)
+  main:SetPoint("CENTER", hub, "CENTER", 0, 0)
+  main:SetFrameLevel(level + 3)
+  main.icon:SetTexture(134400)
+
+  for i = 1, 4 do
+    crystals[i] = makeCrystal(hub, i)
+    crystals[i]:SetFrameLevel(level + 5)
+  end
+  for i, key in ipairs(CDS) do
+    local b = makeRound(hub, CD_SIZE, true)
+    b.key = key
+    b:SetFrameLevel(level + 5)
+    b:Hide()
+    cds[i] = b
+  end
+  for i, def in ipairs(PROCS) do
+    local f = makeRound(hub, BADGE, false, true)   -- voile inversé : il grandit à mesure que le proc s'épuise
+    f.def, f.vis, f.on = def, 0, false
+    local x, y = onRing(def.angle)
+    f:SetPoint("CENTER", hub, "CENTER", x, y)
+    f:SetFrameLevel(level + 6)
+    f.ring:SetVertexColor(def.color[1], def.color[2], def.color[3], 1)
+    f:SetAlpha(0)
+    f:Hide()
+    badges[i] = f
+  end
+
+  mana = makeMana(root)
+  mana:SetPoint("TOP", hub, "BOTTOM", 0, -18)
+  manaCurve = makeManaCurve()
+  makeMover()
+
+  applyPosition()
+  applyLock()
+  Hud.Layout()
+
+  local driver = CreateFrame("Frame")
+  driver:SetScript("OnUpdate", function(self, dt)
+    local ok, err = pcall(onUpdate, self, dt)
+    if not ok then ns.Report(err) end
+  end)
+  Hud.root, Hud.badges = root, badges
+  return root
+end
+
+-- ------------------------------------------------------------------ branchements
+ns:On("START", function()
+  Hud.Build()
+  ns:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player", refreshMana)
+  ns:RegisterUnitEvent("UNIT_MAXPOWER", "player", refreshMana)
+end)
+
+ns:On("STATE", Hud.Refresh)
+ns:On("SPELLS", function() Hud.Layout() end)
+ns:On("DEMO", function() Hud.Layout() end)
+ns:On("COOLDOWNS", function() cooldownsDirty = true end)
+
+ns:On("SETTINGS", function()
+  if not root then return end
+  applyPosition()
+  applyLock()
+  Hud.Layout()
+  Hud.Refresh()
+end)
+
+-- Le conseil change : l'icône bondit légèrement, pour que l'œil le remarque sans lire.
+ns:On("NEXT", function(key, reason, old)
+  if not root then return end
+  if key ~= old then main.pop = 1 end
+end)
+
+ns:On("STACKS", function(n, old)
+  if not root then return end
+  for i = (old or 0) + 1, n do
+    if crystals[i] then crystals[i].pop = 1 end
+  end
+  local target = State.Target()
+  if n >= target and (old or 0) < target and ns.db.flash then spawnHalo(C.hot, 2 * R, 2 * R + 130, 0.6) end
+end)
+
+ns:On("PROC", function(key)
+  if not root then return end
+  local def = PROC_SOUND[key]
+  if not def then return end
+  if ns.db.flash then spawnHalo(def.color, 2 * R, 2 * R + 150, 0.6) end
+  if not State.demo then playSound(def) end
+end)
