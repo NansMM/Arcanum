@@ -502,6 +502,17 @@ def main():
     v.run('SlashCmdList.ARCANUM("diag")')
     check("VÉRIFICATIONS EN JEU" in v.M.named["ArcanumDiag"].text and "conservée" in v.M.named["ArcanumDiag"].text,
           "le diagnostic rapporte les vérifications")
+    check("sort missiles x3" in v.M.named["ArcanumDiag"].text, "journal : les salves d'une canalisation tiennent sur une ligne")
+    v.M.advance(2.0)
+    v.cast(WRATH)
+    v.run('SlashCmdList.ARCANUM("diag")')
+    check("il a fallu réappuyer" in v.M.named["ArcanumDiag"].text, "délai de la macro de burst noté (Colère tardive)")
+    v.M.advance(7.0)
+    v.M.cast(POM)
+    v.M.cast(WRATH)
+    v.M.advance(0.3)
+    v.run('SlashCmdList.ARCANUM("diag")')
+    check("même appui" in v.M.named["ArcanumDiag"].text, "délai de la macro de burst noté (même appui)")
     no_errors(v, "vérifications")
 
     print("Idées claires pendant une incantation")

@@ -11,7 +11,7 @@ local L = ns.L
 local Diag = {}
 ns.Diag = Diag
 
-local LOG_MAX = 60
+local LOG_MAX = 120
 local log = {}
 local frame
 
@@ -29,7 +29,22 @@ ns:On("PROC", function(key)
   record("proc " .. key .. " (" .. tostring(type(p) == "table" and p.source or "?") .. ")")
 end)
 ns:On("PROC_END", function(key) if not State.demo then record("fin " .. key) end end)
-ns:On("CAST", function(key) record("sort " .. key) end)
+-- Une canalisation envoie un événement par salve (six pour des Projectiles) : on les regroupe sur une
+-- ligne, sinon elles chassent du journal ce qu'on cherche à y lire.
+local lastCast = {}   -- key, at, line (rang dans le journal), prefix, count
+ns:On("CAST", function(key)
+  local now = GetTime()
+  local line = log[#log]
+  if lastCast.key == key and now - lastCast.at < 1.5 and line == lastCast.line then
+    lastCast.at, lastCast.count = now, lastCast.count + 1
+    lastCast.line = lastCast.prefix .. " x" .. lastCast.count
+    log[#log] = lastCast.line
+    return
+  end
+  record("sort " .. key)
+  lastCast.key, lastCast.at, lastCast.count = key, now, 1
+  lastCast.prefix, lastCast.line = log[#log], log[#log]
+end)
 ns:On("AOE", function(on) record(on and "mode multi-cibles" or "fin du mode multi-cibles") end)
 ns:On("NEXT", function(key, reason)
   if not State.demo then
@@ -157,6 +172,9 @@ function Diag.Report()
   add("  « sort utilisable / mana insuffisant » : %s", checks.usable or "pas encore observé")
   add("  temps de recharge des sorts : %s", checks.cooldown or "pas encore observé")
   add("  Présence spirituelle après des Projectiles : %s", checks.pomChannel or "pas encore observé")
+  add("  macro de burst, Colère après Présence spirituelle : %s", checks.burstGap
+    and string.format("%.1f s (%s)", checks.burstGap, checks.burstGap < 0.6 and "même appui" or "il a fallu réappuyer")
+    or "pas encore observé")
   add("  Éclair de givre : rang 1 = %s, dernier rang = %s", tostring(Spells.Lowest("frostbolt")), tostring(Spells.Best("frostbolt")))
 
   add("")

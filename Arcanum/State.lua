@@ -598,6 +598,13 @@ local function onCast(spellID)
   if key == "eureka" then
     setProc(State.eureka, "eureka", true, "sorts", now + dur("eureka"), dur("eureka"), now)
   end
+  -- pour le diagnostic : délai entre Présence spirituelle et le Courroux qui suit (la macro de burst
+  -- les lance-t-elle au même appui ?)
+  if key == "wrath" and lastCast.pom and now - lastCast.pom < 15 then
+    local l = learn()
+    if type(l.checks) ~= "table" then l.checks = {} end
+    l.checks.burstGap = now - lastCast.pom
+  end
   if key == "power" then
     setProc(State.power, "power", true, "sorts", now + dur("power"), dur("power"), now)
   elseif key == "pom" then

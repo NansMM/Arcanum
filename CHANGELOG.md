@@ -1,5 +1,9 @@
 # Historique d'Arcanum
 
+## 0.8.3 — 12 novembre 2026
+
+- Diagnostic : le journal garde 120 changements au lieu de 60, et les salves d'une canalisation tiennent sur une ligne (« sort missiles x6 ») au lieu de le remplir. Il note aussi le délai entre Présence spirituelle et la Colère qui suit, pour savoir si la macro de burst les lance au même appui.
+
 ## 0.8.2 — 12 novembre 2026
 
 - Macro de burst : le Courroux ne partait pas au même appui qu'Eureka et Présence spirituelle. `/arc macro` sépare maintenant les sorts par `/stopcasting`, la forme classique de cette macro. Relance `/arc macro` pour mettre la tienne à jour. Attention : appuyée pendant une incantation, la macro l'interrompt.
