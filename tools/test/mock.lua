@@ -58,10 +58,16 @@ M.spells = {
   [20572] = { name = "Fureur sanguinaire", known = false },
   [133] = { name = "Boule de feu", cost = 30, cast = 1500, rank = 1, known = true },
   [116] = { name = "Éclair de givre", cost = 25, cast = 1500, rank = 1, known = true },
+  [8400] = { name = "Boule de feu", cost = 140, cast = 3000, rank = 5, known = true },
+  [8406] = { name = "Éclair de givre", cost = 100, cast = 3000, rank = 5, known = true },
+  [1459] = { name = "Intelligence des Arcanes", cost = 60, known = true },
+  [6117] = { name = "Armure du mage", cost = 80, known = true },
+  [7302] = { name = "Armure de glace", cost = 80, known = true },
+  [10] = { name = "Blizzard", cost = 320, known = true },
   [401502] = { name = "Éclair de givrefeu", known = false },
   [1449] = { name = "Explosion des Arcanes", cost = 75, known = true },
   [2948] = { name = "Brûlure", known = false },
-  [2120] = { name = "Choc de flammes", known = false },
+  [2120] = { name = "Choc de flammes", cost = 330, cast = 3000, known = true },
   [120] = { name = "Cône de froid", known = false },
   [118] = { name = "Métamorphose", cost = 60, cast = 1500, known = true },
   [10054] = { name = "Invocation d'un rubis de mana", known = true },
@@ -102,6 +108,10 @@ function C_Spell.IsSpellUsable(id)   -- lisible en combat : utilisable, mana ins
   local cost = currentCost(id) or 0
   local enough = M.mana >= cost
   return enough, not enough
+end
+function C_Spell.IsSpellInRange(id, unit)   -- lisible en combat ; nil sans cible
+  if M.target ~= true then return nil end
+  return M.inRange ~= false
 end
 function C_Spell.GetSpellInfo(id)
   local sp = M.spells[id]

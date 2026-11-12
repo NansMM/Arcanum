@@ -39,11 +39,19 @@ Spells.DEF = {
   scorch    = { id = 2948 },
   flamestrike = { id = 2120 },
   cone      = { id = 120 },
+  blizzard  = { id = 10 },
   poly      = { id = 118 },
+  -- améliorations à avoir avant le combat
+  intellect = { id = 1459 },                                 -- Intelligence des Arcanes
+  brilliance = { id = 23028 },                               -- Illumination des Arcanes (version de groupe)
+  magearmor = { id = 6117 },
+  icearmor  = { id = 7302 },
+  frostarmor = { id = 168 },
 }
 
--- Gemmes de mana (objets), de la meilleure à la moins bonne.
+-- Gemmes de mana (objets), de la meilleure à la moins bonne, et les sorts qui les invoquent.
 Spells.GEMS = { 8008, 8007, 5513, 5514 }
+Spells.GEM_SPELLS = { 10054, 10053, 3552, 759 }
 
 local idToKey = {}     -- [identifiant de sort] = clé
 local nameToKey = {}   -- [nom localisé] = clé
@@ -131,15 +139,19 @@ function Spells.Refresh()
     end
     def.ids = { def.id }
     def.best = def.id
+    def.lowest = nil
     def.known = false
     local entries = def.name and book[def.name]
     if entries then
-      local top = -1
+      local top, low = -1, nil
       for _, e in ipairs(entries) do
         if e.id ~= def.id then def.ids[#def.ids + 1] = e.id end
         if e.rank > top then top = e.rank; def.best = e.id end
+        if e.rank > 0 and (not low or e.rank < low) then low = e.rank; def.lowest = e.id end
       end
       def.known = true
+      -- le grimoire peut ne montrer que le dernier rang : l'identifiant de référence est le rang 1
+      if def.lowest ~= def.id and isKnown(def.id) then def.lowest = def.id end
     elseif isKnown(def.id) or (def.talent and isKnown(def.talent)) then
       def.known = true
     end
@@ -169,6 +181,12 @@ function Spells.Best(key)
   return def and def.best or nil
 end
 
+-- Identifiant du plus bas rang connu (le rang 1 en général) ; à défaut, le plus haut.
+function Spells.Lowest(key)
+  local def = Spells.DEF[key]
+  return def and (def.lowest or def.best) or nil
+end
+
 -- Clé du catalogue pour un sort lancé (par identifiant, puis par nom : un rang absent du grimoire).
 function Spells.KeyOf(spellID)
   local key = idToKey[spellID]
@@ -193,7 +211,11 @@ end
 -- Coût en mana du sort, tel que le jeu l'annonce maintenant (charges et procs compris).
 -- Retourne : coût, ou nil + "aucun" (le jeu n'annonce aucun coût) ou nil + "illisible".
 function Spells.Cost(key)
-  local id = Spells.Best(key)
+  return Spells.CostOf(Spells.Best(key))
+end
+
+-- Le même, pour un identifiant de sort précis (un rang donné).
+function Spells.CostOf(id)
   if not (id and C_Spell and C_Spell.GetSpellPowerCost) then return nil, "illisible" end
   local ok, costs = pcall(C_Spell.GetSpellPowerCost, id)
   if not ok then return nil, "illisible" end
@@ -242,6 +264,22 @@ function Spells.Gem()
   for _, itemID in ipairs(Spells.GEMS) do
     local n = S.Num(S.Call(count, itemID, false, true))
     if n and n > 0 then return itemID, n end
+  end
+  return nil
+end
+
+-- Le sort d'invocation de gemme de mana que le personnage connaît (le meilleur), ou nil.
+function Spells.GemSpell()
+  for _, id in ipairs(Spells.GEM_SPELLS) do
+    if isKnown(id) then return id end
+  end
+  return nil
+end
+
+-- Icône d'un sort par identifiant.
+function Spells.IconOf(id)
+  if id and C_Spell and C_Spell.GetSpellTexture then
+    return S.Plain(S.Call(C_Spell.GetSpellTexture, id))
   end
   return nil
 end

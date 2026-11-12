@@ -26,7 +26,11 @@ local State = {
   eureka = { active = false },   -- racial gnome : +10 % de dégâts, -10 % de coût sur les sorts suivants
   next = nil,                    -- clé du prochain sort conseillé
   nextReason = nil,
+  nextId = nil,                  -- identifiant du sort conseillé (le rang à lancer)
   cast = nil,                    -- sort en cours : { key, start, finish }
+  aoe = false,                   -- mode multi-cibles
+  aoeForced = false,             -- mode multi-cibles demandé par /arc aoe
+  reminders = {},                -- améliorations à refaire avant le combat : { clé, … }
   pom = { active = false },
   heat = { stacks = nil, ready = false },
   demo = false,
@@ -64,6 +68,8 @@ local cost = {}          -- [clé] = coût actuel (nombre) ou nil
 local seenCost = {}      -- [clé] = true si un coût > 0 a déjà été lu
 local overlay = {}       -- [identifiant de sort] = true si le bouton est en surbrillance
 local loadedAt = 0        -- GetTime() de la dernière entrée dans le monde (écran de chargement)
+local aoeOnCast           -- (défini plus bas, avec le mode multi-cibles)
+local pomCheck            -- { at } : Projectiles lancés sous Présence spirituelle, on regarde si elle est restée
 local stacksEnded = 0     -- GetTime() de la dernière fin de fenêtre constatée au minuteur
 
 State.lastCast = lastCast
@@ -522,6 +528,8 @@ local function onCast(spellID)
     end
   end
 
+  aoeOnCast(key, now)
+  if key == "missiles" and State.pom.active and not pomCheck then pomCheck = { at = now } end
   if key == "missiles" and State.barrage.active and State.barrage.source ~= "aura"
     and State.barrage.source ~= "gestionnaire" then
     setProc(State.barrage, "barrage", false)
@@ -640,6 +648,7 @@ end
 -- Le réglage « conseiller les gros temps de recharge » retire Pouvoir des Arcanes, Eureka et Présence
 -- spirituelle du conseil, pour les garder sous la main.
 -- La variante Feu ajoute l'Explosion pyrotechnique sur 3 charges d'Échauffement et le Trait de feu.
+-- En mode multi-cibles, c'est computeAoe qui conseille (Choc de flammes, Explosion des Arcanes).
 -- Pendant une incantation ou une canalisation, le conseil ne bouge pas : il change quand le sort est
 -- parti. Avec l'option « anticiper », il montre au contraire le sort d'après dès le début de
 -- l'incantation, en tenant compte de ce que le sort en cours va changer (une charge de plus…).
@@ -656,9 +665,9 @@ local function ready(key)
 end
 
 -- false seulement si le jeu dit que le mana manque pour ce sort (cette réponse reste lisible en combat).
-local function affordable(key)
+local function affordable(key, id)
   if State.demo then return true end
-  local id = Spells.Best(key)
+  id = id or Spells.Best(key)
   if not (id and C_Spell and C_Spell.IsSpellUsable) then return true end
   local ok, usable, noMana = pcall(C_Spell.IsSpellUsable, id)
   if not ok or S.Is(usable) or S.Is(noMana) then return true end
@@ -705,13 +714,27 @@ local function gemReady()
 end
 
 -- Le moins cher des deux sorts, parmi ceux qui sont connus et que le mana permet. nil si aucun.
+-- Rang à lancer pour un sort de remplissage : le rang 1 (deux fois plus de lancers, donc de chances de
+-- Barrage, pour beaucoup moins de mana) ou le dernier rang (plus de dégâts), selon le réglage.
+local function fillerId(key)
+  local db = ns.db or ns.DEFAULTS
+  if db.fillerRank == 1 then return Spells.Lowest(key) end
+  return Spells.Best(key)
+end
+
+-- Retourne la clé et l'identifiant du rang à lancer.
 local function cheapest(a, b)
-  local okA = known(a) and affordable(a)
-  local okB = known(b) and affordable(b)
+  local idA, idB = fillerId(a), fillerId(b)
+  local okA = known(a) and affordable(a, idA)
+  local okB = known(b) and affordable(b, idB)
   if okA and okB then
-    return (cost[b] or math.huge) < (cost[a] or math.huge) and b or a
+    local cA, cB = Spells.CostOf(idA) or math.huge, Spells.CostOf(idB) or math.huge
+    if cB < cA then return b, idB end
+    return a, idA
   end
-  return okA and a or (okB and b) or nil
+  if okA then return a, idA end
+  if okB then return b, idB end
+  return nil
 end
 
 -- Nombre de charges visées (la démonstration joue le cycle complet, à 4 charges).
@@ -730,7 +753,30 @@ local function hostileTarget()
   return (hostile and not dead) and true or false
 end
 
--- Retourne la clé du sort conseillé et la raison ("burst", "arcane", "barrage", "clear", "heat", "mana").
+-- Conseil en mode multi-cibles (Explosion des Arcanes) :
+--   Pouvoir des Arcanes ; Choc de flammes en ouverture (hors combat) ou instantané sous Présence
+--   spirituelle ; Eureka ; Présence spirituelle pour un Choc de flammes ; puis Explosion des Arcanes.
+-- Pas de montée de charges : l'Explosion ne reçoit que 14 % des dégâts des sorts, les charges ne se
+-- remboursent pas.
+local function computeAoe(db, burst, fighting)
+  if burst and fighting and not State.power.active and ready("power") then return "power", "burst" end
+  local strike = known("flamestrike") and affordable("flamestrike")
+  if strike and State.pom.active then return "flamestrike", "burst" end
+  if strike and not State.combat then return "flamestrike", "aoe" end
+  if burst and State.combat and not State.eureka.active and ready("eureka") then return "eureka", "burst" end
+  if burst and State.combat and strike and ready("pom") then return "pom", "burst" end
+  if known("explosion") and affordable("explosion") then
+    return "explosion", State.clear.active and "clear" or "aoe"
+  end
+  if State.combat and gemReady() then return "gem", "mana" end
+  if State.combat and ready("evoc") then return "evoc", "mana" end
+  if known("shoot") then return "shoot", "mana" end
+  if known("explosion") then return "explosion", "aoe" end
+  return nil
+end
+
+-- Retourne la clé du sort conseillé, la raison ("burst", "arcane", "barrage", "clear", "heat", "mana",
+-- "aoe") et, pour un sort de remplissage, l'identifiant du rang à lancer.
 local function computeNext()
   local need = State.Target()
   local stacks = State.stacks
@@ -751,6 +797,11 @@ local function computeNext()
   local fighting = State.demo or State.combat or hostileTarget()
   local db = ns.db or ns.DEFAULTS
   local burst = State.demo or db.adviseBurst ~= false   -- conseiller les gros temps de recharge ?
+
+  if State.aoe and not State.demo then
+    local key, reason = computeAoe(db, burst, fighting)
+    if key then return key, reason end
+  end
 
   if burst and fighting and not State.power.active and ready("power") then return "power", "burst" end
   -- Le Barrage d'abord : les Projectiles sont gratuits, et une Déflagration lancée pendant qu'il est
@@ -773,8 +824,17 @@ local function computeNext()
     return "wrath", "arcane"
   end
   if wrathNow and stacks >= need then
-    if burst and not State.eureka.active and ready("eureka") then return "eureka", "burst" end
-    if burst and ready("pom") then return "pom", "burst" end
+    if burst then
+      local eureka = not State.eureka.active and ready("eureka")
+      local pom = ready("pom")
+      if eureka or pom then
+        -- « burst en une icône » : avec la macro (Eureka + Présence spirituelle + Courroux), une seule
+        -- touche fait tout ; on montre donc directement le Courroux, en or
+        if db.burstOne ~= false and not State.demo then return "wrath", "burst" end
+        if eureka then return "eureka", "burst" end
+        return "pom", "burst"
+      end
+    end
     return "wrath", "arcane"
   end
   if State.combat and manaLow() == true then
@@ -784,16 +844,16 @@ local function computeNext()
   if stacks >= need then
     -- charges visées atteintes : une Déflagration de plus coûterait encore plus cher, un sort bon marché
     -- profite autant des charges
-    local filler = cheapest("frostbolt", "fireball")
-    if filler then return filler, "arcane" end
+    local filler, id = cheapest("frostbolt", "fireball")
+    if filler then return filler, "arcane", id end
   end
   if known("blast") and affordable("blast") then return "blast", "arcane" end
   -- le mana ne suit plus
   if wrathNow then return "wrath", "arcane" end
   if State.combat and gemReady() then return "gem", "mana" end
   if State.combat and ready("evoc") then return "evoc", "mana" end
-  local cheap = cheapest("frostbolt", "fireball")   -- du moins cher au plus cher
-  if cheap then return cheap, "mana" end
+  local cheap, id = cheapest("frostbolt", "fireball")   -- du moins cher au plus cher
+  if cheap then return cheap, "mana", id end
   if known("missiles") and affordable("missiles") then return "missiles", "mana" end
   if known("shoot") then return "shoot", "mana" end
   for _, key in ipairs({ "blast", "frostbolt", "fireball" }) do
@@ -805,11 +865,106 @@ end
 local function updateNext()
   local db = ns.db or ns.DEFAULTS
   if State.cast and State.next and not db.anticipate then return end   -- on attend la fin du sort en cours
-  local key, reason = computeNext()
-  if key ~= State.next or reason ~= State.nextReason then
+  local key, reason, id = computeNext()
+  if key and key ~= "gem" then id = id or Spells.Best(key) end
+  if key ~= State.next or reason ~= State.nextReason or id ~= State.nextId then
     local old = State.next
-    State.next, State.nextReason = key, reason
+    State.next, State.nextReason, State.nextId = key, reason, id
     ns:Fire("NEXT", key, reason, old)
+  end
+end
+
+-- ------------------------------------------------------------------ mode multi-cibles
+-- Arcanum ne peut pas compter les ennemis autour de toi. Il suit donc ton intention : le mode s'active
+-- quand tu lances un sort de zone, et retombe quand tu relances un sort mono-cible, après 8 secondes
+-- sans sort de zone, ou à la fin du combat. /arc aoe le force avant le pull.
+local AOE_SPELL = { explosion = true, flamestrike = true, blizzard = true, cone = true }
+local SINGLE_SPELL = { blast = true, wrath = true, missiles = true, frostbolt = true, fireball = true,
+  pyro = true, scorch = true, frostfire = true }
+local aoeAt = 0
+
+function State.SetAoe(on)
+  State.aoeForced = on and true or false
+  State.aoe = State.aoeForced
+  aoeAt = GetTime()
+  State.dirty = true
+  ns:Fire("AOE", State.aoe)
+end
+
+aoeOnCast = function(key, now)
+  if AOE_SPELL[key] then
+    aoeAt = now
+    if not State.aoe then State.aoe = true; ns:Fire("AOE", true) end
+  elseif SINGLE_SPELL[key] and State.aoe and not State.aoeForced then
+    State.aoe = false
+    ns:Fire("AOE", false)
+  end
+end
+
+local function updateAoe(now)
+  if State.aoe and not State.aoeForced and now - aoeAt > 8 then
+    State.aoe = false
+    ns:Fire("AOE", false)
+  end
+end
+
+-- ------------------------------------------------------------------ rappels avant le combat
+-- Hors combat les améliorations sont lisibles : on signale ce qui manque avant d'engager.
+local ARMORS = { "magearmor", "icearmor", "frostarmor" }
+local function updateReminders()
+  local list = State.reminders
+  for i = #list, 1, -1 do list[i] = nil end
+  local db = ns.db or ns.DEFAULTS
+  if State.restricted or State.demo or State.combat or db.showReminders == false then return end
+  if Spells.Known("intellect") and readAura("intellect") == "down" and readAura("brilliance") ~= "up" then
+    list[#list + 1] = "intellect"
+  end
+  local armor, worn = nil, false
+  for _, key in ipairs(ARMORS) do
+    if Spells.Known(key) then
+      armor = armor or key
+      if readAura(key) == "up" then worn = true end
+    end
+  end
+  if armor and not worn then list[#list + 1] = armor end
+  if Spells.GemSpell() and not Spells.Gem() then list[#list + 1] = "gemspell" end
+end
+
+-- ------------------------------------------------------------------ vérifications en jeu
+-- Ce que le jeu laisse lire en combat n'est écrit nulle part : Arcanum le constate et le note, pour
+-- le rapport /arc diag.
+local function updateChecks(now)
+  local l = learn()
+  if type(l.checks) ~= "table" then l.checks = {} end
+  local c = l.checks
+  if State.restricted then
+    if UnitPower then
+      local ok, v = pcall(UnitPower, "player", 0)
+      if ok then c.mana = S.Is(v) and "secret" or "lisible" end
+    end
+    local id = Spells.Best("blast")
+    if id and C_Spell and C_Spell.IsSpellUsable then
+      local ok, usable, noMana = pcall(C_Spell.IsSpellUsable, id)
+      if ok then c.usable = (S.Is(usable) or S.Is(noMana)) and "secret" or "lisible" end
+    end
+    if id and C_Spell and C_Spell.GetSpellCooldown then
+      local info = S.Call(C_Spell.GetSpellCooldown, id)
+      if type(info) == "table" and not S.IsTable(info) then
+        c.cooldown = S.Is(info.startTime) and "secret" or "lisible"
+      end
+    end
+  end
+  if pomCheck and now - pomCheck.at > 0.4 then
+    local st = readAura("pom")
+    local verdict
+    if st == "up" or State.cdm.pom == true then verdict = "conservée"
+    elseif st == "down" then verdict = "consommée" end
+    if verdict then
+      c.pomChannel = verdict
+      pomCheck = nil
+    elseif now - pomCheck.at > 3 then
+      pomCheck = nil
+    end
   end
 end
 
@@ -839,6 +994,9 @@ function State.Update()
     updatePom(now)
     updateHeat(now)
     updateBlast(now)
+    updateAoe(now)
+    updateReminders()
+    updateChecks(now)
   end
   readCast()
   updateNext()
@@ -931,7 +1089,11 @@ ns:On("START", function()
   end)
 
   ns:RegisterEvent("PLAYER_REGEN_DISABLED", function() State.combat = true; State.dirty = true end)
-  ns:RegisterEvent("PLAYER_REGEN_ENABLED", function() State.combat = false; State.dirty = true end)
+  ns:RegisterEvent("PLAYER_REGEN_ENABLED", function()
+    State.combat = false
+    if State.aoe then State.SetAoe(false) end   -- fin du combat : retour au cycle mono-cible
+    State.dirty = true
+  end)
   ns:RegisterEvent("PLAYER_ENTERING_WORLD", function()
     loadedAt = GetTime()
     State.combat = InCombatLockdown and InCombatLockdown() and true or false

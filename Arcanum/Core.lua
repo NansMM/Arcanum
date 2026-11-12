@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.6.2"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.7.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -132,6 +132,9 @@ ns.DEFAULTS = {
   spin = false,           -- les runes de l'anneau tournent lentement
   showCharges = true,     -- cristaux de charge au-dessus du prochain sort
   showProcs = true,       -- pastilles de proc sous le prochain sort (Barrage de projectiles, Idées claires)
+  fillerRank = 1,         -- rang de l'Éclair de givre de remplissage : 1 (économe) ou "max" (plus de dégâts)
+  burstOne = true,        -- montrer directement le Courroux pendant Eureka + Présence spirituelle (macro de burst)
+  showReminders = true,   -- hors combat, signaler une amélioration manquante ou l'absence de gemme de mana
   openWrath = true,       -- hors combat, conseiller le Courroux pour engager
   adviseBurst = true,     -- conseiller les gros temps de recharge (Pouvoir des Arcanes, Eureka, Présence spirituelle)
   anticipate = false,     -- pendant une incantation, montrer déjà le sort d'après (sinon le conseil attend la fin)
@@ -176,6 +179,7 @@ function ns.InitDB()
     db.wrathStacks, db.thrifty = nil, nil
   end
   if db.targetStacks ~= 2 and db.targetStacks ~= 3 and db.targetStacks ~= 4 then db.targetStacks = 2 end
+  if db.fillerRank ~= 1 and db.fillerRank ~= "max" then db.fillerRank = 1 end
   if type(db.learn.dur) == "table" then db.learn.dur.blast = nil end   -- remplacé par abWindow (fenêtre de 18 s)
   if saved < 4 then db.spin = false end   -- 0.6 : cercle épuré, runes immobiles d'origine
   if saved < 2 then   -- 0.2 : HUD épuré, la barre de mana n'est plus affichée d'office

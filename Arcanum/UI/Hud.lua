@@ -6,7 +6,9 @@
 --   * en haut, quatre cristaux : les charges de Déflagration ;
 --   * l'arc lumineux qui se vide autour de l'anneau : les 18 secondes de leur fenêtre ;
 --   * à gauche et à droite, serties dans l'anneau : les gros temps de recharge ;
---   * en bas : une gemme par proc actif, avec un voile qui grandit à mesure qu'il s'épuise.
+--   * en bas : une gemme par proc actif, avec un voile qui grandit à mesure qu'il s'épuise ;
+--   * sous le cercle, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme).
+-- En mode multi-cibles le cercle passe à l'orange ; l'icône rougit quand la cible est hors de portée.
 -- Pendant une incantation, le prochain sort ne change pas : il se découvre à mesure que le sort part.
 --
 -- Tout est animé à la main dans un seul OnUpdate (approche douce vers une cible) : pas de groupes
@@ -23,7 +25,7 @@ local sin, cos, rad, min, max = math.sin, math.cos, math.rad, math.min, math.max
 
 local R = 62                          -- rayon de l'anneau
 local RING_SIZE = R / 0.465           -- taille d'affichage des textures d'anneau (leur trait est à 46,5 % du bord)
-local ROOT_W, ROOT_H = 210, 214
+local ROOT_W, ROOT_H = 210, 236
 local HUB_Y = -40                     -- haut du cercle, depuis le haut du HUD
 local MAIN = 56                       -- prochain sort
 local CR_W, CR_H = 18, 24             -- cristaux de charge
@@ -32,12 +34,15 @@ local CD_SIZE = 28                    -- gros temps de recharge
 local CD_ANGLE = { 200, 340, 170, 10, 225 }
 local BADGE = 22                      -- gemmes de proc
 local MANA_W, MANA_H = 110, 4
+local REMIND = 20                     -- rappels avant le combat
+local REMIND_Y = -40                  -- leur centre, sous le cercle
 
 -- Gros temps de recharge sertis dans l'anneau, s'ils sont connus.
 local CDS = { "pom", "eureka", "power", "berserking", "bloodfury" }
 local DEMO_CDS = { pom = true, eureka = true }
 local REASON_COLOR = {
   arcane = C.arcane, burst = C.power, barrage = C.barrage, clear = C.clear, heat = C.heat, mana = C.mana,
+  aoe = C.heat,   -- mode multi-cibles : tout le cercle passe à l'orange
 }
 local ACTIVE_COLOR = { pom = C.pom, eureka = C.power, power = C.power }
 -- Procs montrés en gemme ; angle : leur place en bas de l'anneau ; icons : sorts dont on essaie l'icône.
@@ -53,7 +58,7 @@ local PROC_SOUND = {
 }
 
 local root, mover, hub, main, glow, plate, ring, runes, timer, timerFull, mana, manaCurve
-local crystals, cds, halos, badges = {}, {}, {}, {}
+local crystals, cds, halos, badges, reminders = {}, {}, {}, {}, {}
 local rootAlpha, hotBlend = 0, 0
 local spinners = {}   -- groupes d'animation qui font tourner le sceau
 local cooldownsDirty, lastFeed = true, 0
@@ -275,13 +280,33 @@ local function nextIcon(key)
   return key and Spells.Icon(key) or nil
 end
 
+-- La cible est-elle hors de portée du sort conseillé ? (ce test reste lisible en combat)
+local function outOfRange(id)
+  if not (id and C_Spell and C_Spell.IsSpellInRange) then return false end
+  local ok, inRange = pcall(C_Spell.IsSpellInRange, id, "target")
+  return ok and not S.Is(inRange) and inRange == false
+end
+
 local function refreshMain()
-  local key = State.next
+  local key, id = State.next, State.nextId
   if key ~= main.key then
     main.key = key
     main.icon:SetTexture(nextIcon(key) or 134400)
   end
   main.icon:SetAlpha(key and 1 or 0.35)
+  -- hors de portée : l'icône rougit, comme sur les barres d'action
+  local far = key ~= "gem" and outOfRange(id)
+  if far ~= main.far then
+    main.far = far
+    if far then main.icon:SetVertexColor(1, 0.32, 0.32) else main.icon:SetVertexColor(1, 1, 1) end
+  end
+  -- rang à lancer, quand ce n'est pas le dernier (Éclair de givre de remplissage au rang 1)
+  local label = ""
+  if key and id and key ~= "gem" and id ~= Spells.Best(key) and id == Spells.Lowest(key) then label = "1" end
+  if label ~= main.label then
+    main.label = label
+    main.rank:SetText(label)
+  end
   -- pendant une incantation, l'icône se découvre à mesure que le sort en cours part
   local cast = State.cast
   if cast then
@@ -397,6 +422,40 @@ local function animateBadges(dt, now)
         f.glow:SetSize(s, s)
       end
     end
+  end
+end
+
+-- ------------------------------------------------------------------ rappels avant le combat
+-- Sous le cercle, hors combat : l'icône de ce qu'il manque (Intelligence des Arcanes, armure, gemme de mana).
+local function reminderIcon(key)
+  if key == "gemspell" then return Spells.IconOf(Spells.GemSpell()) end
+  return Spells.Icon(key)
+end
+
+local function refreshReminders()
+  local list = State.reminders
+  local n = #list
+  for i, f in ipairs(reminders) do
+    local key = list[i]
+    if key then
+      if f.key ~= key then
+        f.key = key
+        f.icon:SetTexture(reminderIcon(key) or 134400)
+      end
+      f:ClearAllPoints()
+      f:SetPoint("CENTER", hub, "BOTTOM", (i - (n + 1) / 2) * 28, REMIND_Y)
+      f:Show()
+    elseif f.key then
+      f.key = nil
+      f:Hide()
+    end
+  end
+end
+
+local function animateReminders(now)
+  local pulse = 0.5 + 0.5 * sin(now * 3.0)
+  for _, f in ipairs(reminders) do
+    if f.key then f.glow:SetVertexColor(C.manaLow[1], C.manaLow[2], C.manaLow[3], 0.30 + 0.30 * pulse) end
   end
 end
 
@@ -574,6 +633,7 @@ local function onUpdate(_, dt)
   end
   animateCooldowns(dt)
   animateBadges(dt, now)
+  animateReminders(now)
   animateHalos(now)
 end
 
@@ -583,6 +643,7 @@ function Hud.Refresh()
   refreshMain()
   refreshTimer()
   refreshBadges()
+  refreshReminders()
   refreshCooldowns(now)
   refreshMana()
 end
@@ -625,6 +686,15 @@ function Hud.Build()
   main:SetPoint("CENTER", hub, "CENTER", 0, 0)
   main:SetFrameLevel(level + 3)
   main.icon:SetTexture(134400)
+  main.rank = UI.Text(main.over, 12, C.text, UI.FONT.body, "OUTLINE")
+  main.rank:SetPoint("BOTTOMRIGHT", -6, 5)
+
+  for i = 1, 3 do
+    local f = makeRound(root, REMIND, false)
+    f.ring:SetVertexColor(C.manaLow[1], C.manaLow[2], C.manaLow[3], 1)
+    f:Hide()
+    reminders[i] = f
+  end
 
   for i = 1, 4 do
     crystals[i] = makeCrystal(hub, i)
@@ -663,7 +733,7 @@ function Hud.Build()
     local ok, err = pcall(onUpdate, self, dt)
     if not ok then ns.Report(err) end
   end)
-  Hud.root, Hud.badges = root, badges
+  Hud.root, Hud.badges, Hud.main, Hud.reminders = root, badges, main, reminders
   return root
 end
 

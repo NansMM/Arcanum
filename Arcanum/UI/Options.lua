@@ -118,7 +118,7 @@ local function choice(parent, label, key, values, y)
   local anchor
   for i = #values, 1, -1 do
     local v = values[i]
-    local b = pillButton(parent, tostring(v), 36, function() ns.Set(key, v); refresh() end)
+    local b = pillButton(parent, tostring(v), type(v) == "string" and 46 or 36, function() ns.Set(key, v); refresh() end)
     b.value = v
     if anchor then b:SetPoint("RIGHT", anchor, "LEFT", -6, 0) else b:SetPoint("TOPRIGHT", -22, y) end
     anchor = b
@@ -179,6 +179,7 @@ function Options.Build()
   y = toggle(f, L["Pastilles de proc"], "showProcs", y)
   y = toggle(f, L["Gros temps de recharge"], "showCooldowns", y)
   y = toggle(f, L["Barre de mana"], "showMana", y)
+  y = toggle(f, L["Rappels avant le combat"], "showReminders", y)
   y = stepper(f, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y - 4)
 
   y = sectionTitle(f, L["Alertes"], y - 8)
@@ -187,6 +188,8 @@ function Options.Build()
 
   y = sectionTitle(f, L["Cycle"], y - 8)
   y = choice(f, L["Charges visées"], "targetStacks", { 2, 3, 4 }, y)
+  y = choice(f, L["Rang du remplissage (Éclair de givre)"], "fillerRank", { 1, "max" }, y)
+  y = toggle(f, L["Burst en une icône (macro ArcBurst)"], "burstOne", y)
   y = toggle(f, L["Engager à la Colère"], "openWrath", y)
   y = toggle(f, L["Conseiller les gros temps de recharge"], "adviseBurst", y)
   y = toggle(f, L["Anticiper pendant l'incantation"], "anticipate", y)
@@ -290,6 +293,7 @@ local HELP = {
   "/arc demo : voir le HUD conseiller un cycle complet",
   "/arc verrou : déplacer ou fixer le HUD",
   "/arc taille 120 : taille du HUD en pourcentage",
+  "/arc aoe : mode multi-cibles (Choc de flammes, Explosion des Arcanes) ; il s'active aussi tout seul",
   "/arc macro : créer la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts",
   "/arc diag : rapport à copier (sorts reconnus, signaux lus en combat)",
   "/arc reset : remettre les réglages d'origine",
@@ -326,6 +330,10 @@ SlashCmdList.ARCANUM = function(msg)
     else
       ns.Print(L["taille entre 60 et 180, par exemple /arc taille 120."])
     end
+  elseif cmd == "aoe" or cmd == "zone" then
+    State.SetAoe(not State.aoe)
+    ns.Print(State.aoe and L["mode multi-cibles activé jusqu'à la fin du combat (/arc aoe pour l'arrêter)."]
+      or L["mode multi-cibles arrêté."])
   elseif cmd == "macro" then
     makeMacro()
   elseif cmd == "diag" or cmd == "rapport" then

@@ -30,6 +30,7 @@ ns:On("PROC", function(key)
 end)
 ns:On("PROC_END", function(key) if not State.demo then record("fin " .. key) end end)
 ns:On("CAST", function(key) record("sort " .. key) end)
+ns:On("AOE", function(on) record(on and "mode multi-cibles" or "fin du mode multi-cibles") end)
 ns:On("NEXT", function(key, reason)
   if not State.demo then record("conseil " .. tostring(key) .. " (" .. tostring(reason) .. ")") end
 end)
@@ -108,8 +109,10 @@ function Diag.Report()
 
   add("")
   add("ÉTAT")
-  add("  prochain sort : %s (%s)%s", tostring(State.next), tostring(State.nextReason),
-    State.cast and (" · en cours : " .. tostring(State.cast.key)) or "")
+  add("  prochain sort : %s (%s), identifiant %s%s", tostring(State.next), tostring(State.nextReason),
+    tostring(State.nextId), State.cast and (" · en cours : " .. tostring(State.cast.key)) or "")
+  add("  mode multi-cibles : %s%s", State.aoe and "oui" or "non", State.aoeForced and " (forcé)" or "")
+  add("  rappels : %s", #State.reminders > 0 and table.concat(State.reminders, ", ") or "aucun")
   add("  charges %d (source %s), fin dans %s s", State.stacks, tostring(State.stacksSource),
     State.stacksExpire and show(State.stacksExpire - GetTime()) or "?")
   for _, key in ipairs({ "barrage", "clear", "power", "pom", "eureka" }) do
@@ -140,6 +143,16 @@ function Diag.Report()
     show(l.abWindow or State.Duration("blast")), show(l.abBase), show(l.abStep), tostring(l.costTracks))
   add("  Barrage vu par surbrillance : %s · par coût : %s · Idées claires vues par coût : %s",
     tostring(l.mbGlow or false), tostring(l.mbCost or false), tostring(l.ccCost or false))
+
+  add("")
+  add("VÉRIFICATIONS EN JEU (ce que le jeu laisse lire en combat)")
+  local checks = l.checks or {}
+  add("  mana du joueur : %s (s'il est secret, l'Évocation n'est conseillée que quand la Déflagration devient impayable)",
+    checks.mana or "pas encore observé")
+  add("  « sort utilisable / mana insuffisant » : %s", checks.usable or "pas encore observé")
+  add("  temps de recharge des sorts : %s", checks.cooldown or "pas encore observé")
+  add("  Présence spirituelle après des Projectiles : %s", checks.pomChannel or "pas encore observé")
+  add("  Éclair de givre : rang 1 = %s, dernier rang = %s", tostring(Spells.Lowest("frostbolt")), tostring(Spells.Best("frostbolt")))
 
   add("")
   add("JOURNAL (%d derniers changements)", #log)

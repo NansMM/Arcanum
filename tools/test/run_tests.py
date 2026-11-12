@@ -15,6 +15,7 @@ from lupa import lua51  # noqa: E402
 FAILS = []
 
 AB, AM, WRATH, AP, POM, FIREBALL, EVOC, EUREKA = 400574, 25345, 1326079, 12042, 12043, 133, 12051, 1259817
+EXPLOSION, FLAMESTRIKE, FROSTBOLT_1, FROSTBOLT_5 = 1449, 2120, 116, 8406
 BLAST_AURA = ('Mock.auras["Déflagration des Arcanes"] = '
               '{ spellId = 400574, applications = %d, duration = 8, expirationTime = Mock.now + 8 }')
 
@@ -46,6 +47,11 @@ class Game:
     def next(self):
         """Le prochain sort conseillé : (clé, raison)."""
         return (self.S.next, self.S.nextReason)
+
+    def buffed(self):
+        """Le personnage arrive buffé : aucun rappel avant le combat."""
+        self.run('Mock.auras["Intelligence des Arcanes"] = { spellId = 1459, applications = 0, duration = 1800, expirationTime = Mock.now + 1800 }')
+        self.run('Mock.auras["Armure du mage"] = { spellId = 6117, applications = 0, duration = 1800, expirationTime = Mock.now + 1800 }')
 
     def run(self, code):
         return self.lua.execute(code)
@@ -115,6 +121,7 @@ def main():
     g.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')   # Pouvoir des Arcanes déjà utilisé
     g.run('Mock.ns.Set("showMana", true)')                                  # barre de mana : en option
     g.run('Mock.ns.Set("targetStacks", 4)')                                  # ce combat vise 4 charges
+    g.run('Mock.ns.Set("burstOne", false)')                                  # on suit la séquence sort par sort
     g.M.advance(0.3)
     g.fight()
     check(g.S.restricted is True, "les auras sont secrètes en combat")
@@ -301,6 +308,7 @@ def main():
 
     print("Ouverture : Courroux hors combat")
     o = Game()
+    o.run('Mock.ns.Set("burstOne", false)')
     o.M.target = True
     o.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')   # Pouvoir des Arcanes déjà utilisé
     o.run('Mock.fire("PLAYER_TARGET_CHANGED")')
@@ -328,6 +336,7 @@ def main():
 
     print("Charges visées : 2 par défaut, pour garder le mana")
     t = Game()
+    t.run('Mock.ns.Set("burstOne", false)')
     check(t.ns.db.targetStacks == 2, "réglage d'origine : 2 charges visées")
     t.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')   # Pouvoir des Arcanes déjà utilisé
     t.M.advance(0.3)
@@ -362,6 +371,18 @@ def main():
     check(t.next() == ("wrath", "burst"), "puis Courroux instantané")
     t.cast(WRATH)
     check(t.next() == ("frostbolt", "arcane"), "Courroux en recharge : Éclair de givre, pas de 3e Déflagration")
+    check(t.S.nextId == FROSTBOLT_1 and t.ns.Hud.main.label == "1", "remplissage au rang 1, signalé sur l'icône")
+    t.run('Mock.ns.Set("fillerRank", "max")')
+    t.M.advance(0.2)
+    check(t.S.nextId == FROSTBOLT_5 and t.ns.Hud.main.label == "", "réglage « max » : dernier rang, sans mention")
+    t.run('Mock.ns.Set("fillerRank", 1)')
+    t.M.advance(0.2)
+    t.run("Mock.inRange = false")
+    t.M.advance(0.2)
+    check(t.ns.Hud.main.far is True, "cible hors de portée : l'icône rougit")
+    t.run("Mock.inRange = true")
+    t.M.advance(0.2)
+    check(t.ns.Hud.main.far is False, "cible à portée : l'icône retrouve sa couleur")
     t.M.startCast(116, 1.5)
     t.M.proc("Barrage de projectiles", 400588)
     t.M.advance(0.5)
@@ -392,6 +413,102 @@ def main():
     old = Game(pre='ArcanumDB = { version = 2, wrathStacks = 3, thrifty = true }')
     check(old.ns.db.targetStacks == 3 and old.ns.db.wrathStacks is None, "ancien réglage repris (seuil 3 -> 3 charges visées)")
     no_errors(t, "charges visées")
+
+    print("Burst en une icône (macro ArcBurst)")
+    u = Game()
+    u.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')
+    u.M.advance(0.3)
+    u.fight()
+    u.cast(AB)
+    u.cast(AB)
+    check(u.next() == ("wrath", "burst"), "2 charges, Eureka et Présence spirituelle prêts : le Courroux, en or")
+    u.cast(EUREKA)
+    check(u.next() == ("wrath", "burst"), "Eureka parti : toujours le Courroux")
+    u.cast(POM)
+    check(u.next() == ("wrath", "burst"), "Présence spirituelle active : toujours le Courroux")
+    u.cast(WRATH)
+    check(u.next() == ("frostbolt", "arcane"), "séquence finie : Éclair de givre")
+    u.M.advance(6.2)
+    check(u.next() == ("wrath", "arcane"), "Courroux prêt sans gros temps de recharge : Courroux en violet")
+    no_errors(u, "burst en une icône")
+
+    print("Mode multi-cibles")
+    a = Game()
+    a.run('Mock.cooldowns[12042] = { start = Mock.now, duration = 180 }')
+    a.M.target = True
+    a.M.advance(0.3)
+    a.run('SlashCmdList.ARCANUM("aoe")')
+    a.M.advance(0.2)
+    check(a.S.aoe and a.next() == ("flamestrike", "aoe"), "/arc aoe avant le pull : Choc de flammes en ouverture")
+    a.cast(FLAMESTRIKE)
+    a.M.setCombat(True)
+    a.M.advance(0.3)
+    check(a.next() == ("eureka", "burst"), "combat lancé : Eureka")
+    a.cast(EUREKA)
+    check(a.next() == ("pom", "burst"), "puis Présence spirituelle")
+    a.cast(POM)
+    check(a.next() == ("flamestrike", "burst"), "pour un Choc de flammes instantané")
+    a.cast(FLAMESTRIKE)
+    check(a.next() == ("explosion", "aoe"), "puis Explosion des Arcanes en boucle")
+    a.cast(EXPLOSION)
+    check(a.S.stacks == 0 and a.next() == ("explosion", "aoe"), "pas de montée de charges en multi-cibles")
+    a.M.proc("Idées claires", 12536)
+    a.M.advance(0.3)
+    check(a.next() == ("explosion", "clear"), "Idées claires : Explosion gratuite")
+    a.run("Mock.mana = 20")
+    a.M.advance(0.2)
+    a.run('Mock.auras["Idées claires"] = nil')
+    a.M.advance(0.2)
+    check(a.next() == ("gem", "mana"), "plus de mana : gemme")
+    a.run("Mock.mana = 5000")
+    a.M.setCombat(False)
+    a.M.advance(0.3)
+    check(not a.S.aoe and a.next()[0] != "explosion", "fin du combat : retour au cycle mono-cible")
+    a.fight()
+    a.cast(EXPLOSION)
+    check(a.S.aoe and not a.S.aoeForced, "un sort de zone lancé : le mode s'active tout seul")
+    a.cast(AB)
+    check(not a.S.aoe, "une Déflagration : retour au mono-cible")
+    a.cast(EXPLOSION)
+    a.M.advance(8.5)
+    check(not a.S.aoe, "8 secondes sans sort de zone : retour au mono-cible")
+    no_errors(a, "multi-cibles")
+
+    print("Rappels avant le combat")
+    r2 = Game()
+    r2.M.advance(0.6)
+    check(list(r2.S.reminders.values()) == ["intellect", "magearmor"], "Intelligence des Arcanes et armure manquantes")
+    shown = [f for f in r2.ns.Hud.reminders.values() if f.key]
+    check(len(shown) == 2 and all(f._shown for f in shown), "deux rappels affichés sous le cercle")
+    r2.buffed()
+    r2.run("Mock.items[8008] = nil")
+    r2.M.advance(0.6)
+    check(list(r2.S.reminders.values()) == ["gemspell"], "buffé mais sans gemme de mana : rappel de la gemme")
+    r2.run("Mock.items[8008] = 1")
+    r2.M.advance(0.6)
+    check(len(list(r2.S.reminders.values())) == 0, "tout est prêt : aucun rappel")
+    r2.run('Mock.auras["Armure du mage"] = nil')
+    r2.fight()
+    r2.M.advance(0.6)
+    check(len(list(r2.S.reminders.values())) == 0, "en combat : aucun rappel (les auras sont cachées)")
+    no_errors(r2, "rappels")
+
+    print("Vérifications en jeu notées pour le diagnostic")
+    v = Game(pre='Mock.neverSecret["Présence spirituelle"] = true')
+    v.fight()
+    v.cast(AB)
+    checks = v.ns.db.learn.checks
+    check(checks.mana == "secret" and checks.usable == "lisible" and checks.cooldown == "secret",
+          "mana secret, « utilisable » lisible, recharges secrètes : constaté en combat")
+    v.M.proc("Barrage de projectiles", 400588)
+    v.cast(POM)
+    v.M.channel(AM, 3, 0.5)
+    v.M.advance(0.5)
+    check(checks.pomChannel == "conservée", "Présence spirituelle conservée après des Projectiles : noté")
+    v.run('SlashCmdList.ARCANUM("diag")')
+    check("VÉRIFICATIONS EN JEU" in v.M.named["ArcanumDiag"].text and "conservée" in v.M.named["ArcanumDiag"].text,
+          "le diagnostic rapporte les vérifications")
+    no_errors(v, "vérifications")
 
     print("Sortie de combat : retour à la vérité")
     g.M.advance(3.0)
