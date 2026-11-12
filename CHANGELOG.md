@@ -2,6 +2,8 @@
 
 ## 0.8.3 — 12 novembre 2026
 
+- Réglage « Anticiper » : pendant un Éclair de givre ou une Boule de feu, Arcanum annonçait encore une Déflagration gratuite alors que le sort en cours allait dépenser les Idées claires. L'anticipation en tient compte.
+
 - Diagnostic : le journal garde 120 changements au lieu de 60, et les salves d'une canalisation tiennent sur une ligne (« sort missiles x6 ») au lieu de le remplir. Il note aussi le délai entre Présence spirituelle et la Colère qui suit, pour savoir si la macro de burst les lance au même appui.
 
 ## 0.8.2 — 12 novembre 2026
