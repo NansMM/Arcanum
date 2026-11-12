@@ -1,19 +1,18 @@
 # Arcanum
 
-Le HUD du mage Arcanes pour World of Warcraft: Forever : un cercle runique qui dit quel sort lancer ensuite.
+Le HUD du mage Arcanes pour World of Warcraft: Forever : un cercle qui dit quel sort lancer ensuite.
 
-Arcanum affiche sous ton personnage un cercle runique, avec au centre le prochain sort à lancer :
+Arcanum affiche sous ton personnage un cercle, avec au centre le prochain sort à lancer :
 
 ![Aperçu du HUD d'Arcanum](docs/apercu.png)
 
 *Aperçu composé avec les textures de l'addon (les icônes de sorts sont remplacées par des aplats). À gauche le cycle normal, à droite un Barrage de projectiles. En jeu : `/arc demo`.*
 
-- **Au centre** : le sort à lancer ensuite. Sa couleur, qui gagne tout l'anneau, dit pourquoi : violet pour le cycle normal, rose pour un Barrage de projectiles, bleu clair pour des Idées claires, or pour les gros dégâts (Eureka, Présence spirituelle, Courroux instantané), bleu pour le mana (gemme, Évocation, sort moins cher, baguette). Pendant une incantation il ne change pas : il se découvre à mesure que le sort part, puis passe au suivant (une option permet au contraire d'anticiper).
-- **L'anneau** : gravé de runes discrètes, il prend la couleur du conseil. Un réglage les fait tourner lentement.
-- **En haut de l'anneau, quatre cristaux** : tes charges de Déflagration des Arcanes. Ceux des charges visées sont nets, les autres en retrait ; ils pulsent quand la cible est atteinte.
+- **Au centre** : le sort à lancer ensuite. Sa couleur, reprise par l'anneau, dit pourquoi : violet pour le cycle normal, rose pour un Barrage de projectiles, bleu clair pour des Idées claires, or pour les gros dégâts (Eureka, Présence spirituelle, Courroux instantané), bleu pour le mana (gemme, Évocation, sort moins cher, baguette), orange en multi-cibles. Pendant une incantation il ne change pas : un voile se retire à mesure que le sort part, puis il passe au suivant (une option permet au contraire d'anticiper).
+- **Au-dessus du cercle, les cristaux** : un par charge de Déflagration des Arcanes visée (deux par défaut). Ils pulsent quand la cible est atteinte ; un cristal de plus apparaît quand le jeu t'offre une charge.
 - **L'arc lumineux autour de l'anneau** : les 18 secondes de la fenêtre des charges, qui se vide.
-- **À gauche et à droite, sertis dans l'anneau** : tes gros temps de recharge (Présence spirituelle, Eureka du gnome, Pouvoir des Arcanes, Berserker ou Fureur sanguinaire, selon ce que ton personnage connaît).
-- **En bas de l'anneau** : une gemme par proc actif, rose pour le Barrage de projectiles, bleu clair pour les Idées claires, avec un voile qui grandit à mesure que le proc s'épuise.
+- **À gauche et à droite, sertis dans l'anneau** : tes gros temps de recharge, avec leur icône (Présence spirituelle, Eureka du gnome, Pouvoir des Arcanes, Berserker ou Fureur sanguinaire, selon ce que ton personnage connaît).
+- **En bas de l'anneau** : un orbe de couleur par proc actif, rose pour le Barrage de projectiles, bleu clair pour les Idées claires, avec un voile qui grandit à mesure que le proc s'épuise.
 - **Sous le cercle, hors combat** : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme de mana).
 - **L'icône rougit** quand la cible est hors de portée du sort conseillé.
 - En option : une barre de mana.

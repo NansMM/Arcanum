@@ -1,5 +1,17 @@
 # Historique d'Arcanum
 
+## 0.8.0 — 12 novembre 2026
+
+Review design : chaque élément a dû justifier sa place.
+
+- Cristaux : un par charge visée seulement (deux par défaut), au-dessus du cercle et un peu plus grands. Un cristal de plus apparaît quand le jeu offre une charge. Fini les cristaux éteints en permanence, et l'arc de la fenêtre n'est plus brouillé par eux.
+- Procs : des orbes de couleur sans icône, pour ne plus les confondre avec les temps de recharge.
+- Icône centrale agrandie (64 au lieu de 56).
+- Ondes plus petites, et plus aucune quand les charges visées sont atteintes (les cristaux bondissent déjà).
+- Retirés : le halo derrière le cercle, les runes gravées et leur réglage.
+
+Des textures ont changé : quitte et relance le jeu après la mise à jour.
+
 ## 0.7.2 — 12 novembre 2026
 
 - Idées claires pendant une incantation : si le proc arrive pendant un Éclair de givre ou une Boule de feu, c'est ce sort bon marché qui le dépenserait. Arcanum conseille alors d'interrompre : l'icône passe à la Déflagration, en bleu clair, avec un bord blanc qui bat vite. Rien ne change pour un Barrage de projectiles (il attend la fin du sort), ni quand il reste moins d'une demi-seconde d'incantation. Réglable.

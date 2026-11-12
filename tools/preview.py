@@ -15,7 +15,7 @@ MEDIA = os.path.join(ROOT, "Arcanum", "Media")
 OUT = os.path.join(ROOT, "docs", "apercu.png")
 
 K = 2.4                      # échelle du rendu
-W, H = int(440 * K), int(208 * K)
+W, H = int(440 * K), int(216 * K)
 
 C = dict(
     ink=(0.030, 0.024, 0.066), socket=(0.130, 0.108, 0.240), edge=(0.470, 0.380, 0.860),
@@ -162,8 +162,8 @@ def round_icon(cx, cy, size, tint, ring, glow=0.0, cooldown=0.0):
     blit("circle-edge", cx, cy, size + 4, size + 4, ring, 0.95)
 
 
-def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), spin=0.0):
-    """Le cercle runique tel que le dispose UI/Hud.lua."""
+def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=()):
+    """Le cercle tel que le dispose UI/Hud.lua."""
     R = 62
     S = R / 0.465
     urgent = reason is not C["arcane"]
@@ -171,48 +171,49 @@ def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), spin=
     col = C["hot"] if full else C["arcane"]
     line = mix(C["edge"], reason, 0.55)
 
-    def on_ring(angle):
+    def on_ring(angle, radius=R):
         a = math.radians(angle)
-        return cx + R * math.cos(a), cy - R * math.sin(a)
+        return cx + radius * math.cos(a), cy - radius * math.sin(a)
 
     blit("circle", cx, cy, 2 * R + 6, 2 * R + 6, C["ink"], 0.34)
-    blit("glow", cx, cy, R * 2.1, R * 2.1, reason, 0.34 if urgent else 0.14, add=True)
-    blit("runes", cx, cy, S, S, line, 0.34, rot=-spin)
     blit("ring", cx, cy, S, S, line, 0.85)
     if stacks > 0:
         blit("arc", cx, cy, S, S, col, 1, sweep=window)
-    round_icon(cx, cy, 56, tint, reason, glow=0.42 if urgent else 0.16)
-    # charges, en haut de l'anneau
-    for i, angle in enumerate((132, 104, 76, 48)):
-        x, y = on_ring(angle)
+    round_icon(cx, cy, 64, tint, reason, glow=0.35 if urgent else 0.0)
+    # un cristal par charge visée (un de plus quand le jeu en offre une), au-dessus du cercle
+    shown = min(4, max(target, stacks))
+    for i in range(shown):
+        x, y = on_ring(90 + ((shown + 1) / 2 - (i + 1)) * 22, R + 20)
         on = i < stacks
-        aim = 1.0 if i < target else 0.35
         pulse = (0.5 + 0.5 * math.sin(i * 0.9)) if full else 0
         if on:
-            blit("glow", x, y, 18 * 3 * (1 + 0.1 * pulse), 24 * 2.6 * (1 + 0.1 * pulse), col, 0.40 + 0.32 * pulse, add=True)
-        blit("diamond", x, y, 18, 24, C["socket"], 0.95 * (1 if on else aim))
+            blit("glow", x, y, 22 * 3 * (1 + 0.1 * pulse), 28 * 2.6 * (1 + 0.1 * pulse), col, 0.40 + 0.32 * pulse, add=True)
+        blit("diamond", x, y, 22, 28, C["socket"], 0.95)
         if on:
-            blit("diamond", x, y, 18, 24, col, 1)
-            blit("spark", x - 3, y - 5, 16, 16, C["white"], 0.5 + 0.45 * pulse, add=True)
-        blit("diamond-edge", x, y, 18, 24, C["arcaneHi"] if on else C["edge"], 1 if on else 0.45 * aim)
+            blit("diamond", x, y, 22, 28, col, 1)
+            blit("spark", x - 4, y - 6, 18, 18, C["white"], 0.5 + 0.45 * pulse, add=True)
+        blit("diamond-edge", x, y, 22, 28, C["arcaneHi"] if on else C["edge"], 1 if on else 0.45)
     # gros temps de recharge, sertis à gauche et à droite
     for angle, (ctint, active, cooldown) in zip((200, 340), cooldowns):
         x, y = on_ring(angle)
         round_icon(x, y, 28, ctint, active or C["edge"], glow=0.7 if active else 0.0, cooldown=cooldown)
-    # gemmes de proc, en bas
-    for angle, (pcol, left) in zip((248, 292), procs):
+    # orbes de proc, en bas : la couleur seule
+    for angle, (pcol, left) in zip((250, 290), procs):
         if pcol:
             x, y = on_ring(angle)
-            round_icon(x, y, 22, pcol, pcol, glow=0.5, cooldown=1 - left)
+            blit("glow", x, y, 16 * 2.6, 16 * 2.6, pcol, 0.45, add=True)
+            blit("circle", x, y, 20, 20, C["ink"], 0.96)
+            blit("circle", x, y, 16, 16, pcol, 1)
+            blit("circle", x, y, 16, 16, (0.02, 0.01, 0.06), 0.76, sweep=1 - left)
+            blit("circle-edge", x, y, 20, 20, mix(pcol, C["white"], 0.55), 1)
 
 
 def main():
     background()
     # à gauche : cycle normal (Déflagration, 1 charge sur 2 visées) ; à droite : Barrage de projectiles
-    hud(118, 104, 1, 2, C["arcane"], C["arcane"], 0.86,
+    hud(118, 116, 1, 2, C["arcane"], C["arcane"], 0.86,
         [(C["pom"], None, 0.0), (C["power"], None, 0.0)])
-    blit("halo", 322, 104, 250, 250, C["barrage"], 0.22, add=True)
-    hud(322, 104, 2, 2, C["barrage"], C["barrage"], 0.55,
+    hud(322, 116, 2, 2, C["barrage"], C["barrage"], 0.55,
         [(C["pom"], None, 0.7), (C["power"], C["power"], 0.0)],
         procs=((C["barrage"], 0.8), (C["clear"], 0.45)))
 

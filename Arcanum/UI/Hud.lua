@@ -1,12 +1,12 @@
 -- Arcanum — le HUD : un cercle runique.
 --
 -- Au centre, le prochain sort à lancer ; sa couleur dit pourquoi (violet : cycle normal, rose : Barrage
--- de projectiles, bleu clair : Idées claires, or : gros dégâts, bleu : mana). Autour, un anneau gravé de
--- runes discrètes, et chaque information à sa place fixe sur l'anneau :
---   * en haut, quatre cristaux : les charges de Déflagration ;
+-- de projectiles, bleu clair : Idées claires, or : gros dégâts, bleu : mana). Autour, un anneau, et
+-- chaque information à sa place fixe :
+--   * au-dessus du cercle, un cristal par charge visée (un de plus quand le jeu en offre une) ;
 --   * l'arc lumineux qui se vide autour de l'anneau : les 18 secondes de leur fenêtre ;
---   * à gauche et à droite, serties dans l'anneau : les gros temps de recharge ;
---   * en bas : une gemme par proc actif, avec un voile qui grandit à mesure qu'il s'épuise ;
+--   * à gauche et à droite, serties dans l'anneau : les gros temps de recharge, avec leur icône ;
+--   * en bas : un orbe de couleur par proc actif, avec un voile qui grandit à mesure qu'il s'épuise ;
 --   * sous le cercle, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme).
 -- En mode multi-cibles le cercle passe à l'orange ; l'icône rougit quand la cible est hors de portée.
 -- Pendant une incantation, le prochain sort ne change pas : il se découvre à mesure que le sort part.
@@ -29,12 +29,13 @@ local R = 62                          -- rayon de l'anneau
 local RING_SIZE = R / 0.465           -- taille d'affichage des textures d'anneau (leur trait est à 46,5 % du bord)
 local ROOT_W, ROOT_H = 210, 236
 local HUB_Y = -40                     -- haut du cercle, depuis le haut du HUD
-local MAIN = 56                       -- prochain sort
-local CR_W, CR_H = 18, 24             -- cristaux de charge
-local CR_ANGLE = { 132, 104, 76, 48 } -- leur place sur l'anneau (degrés, 90 = en haut)
+local MAIN = 64                       -- prochain sort
+local CR_W, CR_H = 22, 28             -- cristaux de charge
+local CR_RADIUS = R + 20              -- ils flottent au-dessus de l'anneau, sans le recouvrir
+local CR_STEP = 22                    -- écart entre deux cristaux, en degrés
 local CD_SIZE = 28                    -- gros temps de recharge
 local CD_ANGLE = { 200, 340, 170, 10, 225 }
-local BADGE = 22                      -- gemmes de proc
+local BADGE = 16                      -- orbes de proc
 local MANA_W, MANA_H = 110, 4
 local REMIND = 20                     -- rappels avant le combat
 local REMIND_Y = -40                  -- leur centre, sous le cercle
@@ -47,11 +48,11 @@ local REASON_COLOR = {
   aoe = C.heat,   -- mode multi-cibles : tout le cercle passe à l'orange
 }
 local ACTIVE_COLOR = { pom = C.pom, eureka = C.power, power = C.power }
--- Procs montrés en gemme ; angle : leur place en bas de l'anneau ; icons : sorts dont on essaie l'icône.
+-- Procs montrés en orbe de couleur ; angle : leur place en bas de l'anneau.
 local PROCS = {
-  { key = "barrage", color = C.barrage, angle = 248, icons = { "barrage", "missiles" } },
-  { key = "clear", color = C.clear, angle = 292, icons = { "clear", "blast" } },
-  { key = "heat", color = C.heat, angle = 270, icons = { "pyro", "heat" } },
+  { key = "barrage", color = C.barrage, angle = 250 },
+  { key = "clear", color = C.clear, angle = 290 },
+  { key = "heat", color = C.heat, angle = 270 },
 }
 local PROC_SOUND = {
   barrage = { kit = 3175, file = "barrage", color = C.barrage },
@@ -59,12 +60,12 @@ local PROC_SOUND = {
   heat = { kit = 3175, file = "heat", color = C.heat },
 }
 
-local root, mover, hub, main, glow, plate, ring, runes, timer, timerFull, mana, manaCurve
+local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve
 local crystals, cds, halos, badges, reminders = {}, {}, {}, {}, {}
 local rootAlpha, hotBlend = 0, 0
 local shownAlpha = -1                                  -- dernière opacité donnée au cadre
 local crystalsFor, crystalsAim, crystalsStill = -1, -1, false   -- état des cristaux au dernier dessin
-local spinners = {}   -- groupes d'animation qui font tourner le sceau
+local crystalsShown = -1                               -- nombre de cristaux affichés
 local cooldownsDirty, lastFeed = true, 0
 local reasonColor = { C.arcane[1], C.arcane[2], C.arcane[3] }   -- couleur courante, fondue vers la cible
 
@@ -112,8 +113,6 @@ end
 local function makeCrystal(parent, i)
   local f = CreateFrame("Frame", nil, parent)
   f:SetSize(CR_W, CR_H)
-  local x, y = onRing(CR_ANGLE[i])
-  f:SetPoint("CENTER", parent, "CENTER", x, y)
   f.glow = UI.Tex(f, "BACKGROUND", "glow", C.arcane, 0, "ADD", -1)
   f.glow:SetPoint("CENTER")
   f.glow:SetSize(CR_W * 3, CR_H * 2.6)
@@ -125,16 +124,35 @@ local function makeCrystal(parent, i)
   f.edge = UI.Tex(f, "OVERLAY", "diamond-edge", C.edge, 0.45)
   f.edge:SetAllPoints()
   f.spark = UI.Tex(f, "OVERLAY", "spark", C.arcaneHi, 0, "ADD", 2)
-  f.spark:SetSize(16, 16)
-  f.spark:SetPoint("CENTER", -3, 5)
+  f.spark:SetSize(18, 18)
+  f.spark:SetPoint("CENTER", -4, 6)
   f.level, f.pop = 0, 0
+  f:Hide()
   return f
+end
+
+-- Dispose `shown` cristaux en arc, centrés au-dessus du cercle ; les autres sont cachés.
+local function layoutCrystals(shown)
+  crystalsShown = shown
+  for i, f in ipairs(crystals) do
+    if i <= shown and ns.db.showCharges then
+      local x, y = onRing(90 + ((shown + 1) / 2 - i) * CR_STEP, CR_RADIUS)
+      f:ClearAllPoints()
+      f:SetPoint("CENTER", hub, "CENTER", x, y)
+      f:Show()
+    else
+      f:Hide()
+    end
+  end
 end
 
 local function animateCrystals(dt, now)
   local n = State.stacks
   local target = State.Target()
   local full = n >= target
+  -- un cristal par charge visée ; un de plus quand le jeu offre une charge (Déflagration gratuite)
+  local shown = min(4, max(target, n))
+  if shown ~= crystalsShown then layoutCrystals(shown) end
   local blend = UI.Approach(hotBlend, full and 1 or 0, dt, 6)
   -- au repos (rien ne pulse, rien ne change) : on ne touche à aucune texture
   if not full and blend == hotBlend and n == crystalsFor and target == crystalsAim and crystalsStill then return end
@@ -143,12 +161,9 @@ local function animateCrystals(dt, now)
   local r, g, b = UI.Mix(C.arcane, C.hot, hotBlend)
   for i, f in ipairs(crystals) do
     local on = i <= n
-    local aim = i <= target and 1 or 0.35
     f.level = UI.Approach(f.level, on and 1 or 0, dt, on and 18 or 9)
     f.pop = UI.Approach(f.pop, 0, dt, 7)
-    -- au-delà des charges visées, le cristal vide reste en retrait : on ne cherche pas à le remplir
-    f.aim = UI.Approach(f.aim or 1, aim, dt, 8)
-    local settled = f.pop == 0 and f.level == (on and 1 or 0) and f.aim == aim
+    local settled = f.pop == 0 and f.level == (on and 1 or 0)
     if not settled then still = false end
     -- un cristal éteint et au repos est déjà dessiné : seuls les cristaux allumés pulsent
     if not (settled and not on and f.drawnOff) then
@@ -159,9 +174,8 @@ local function animateCrystals(dt, now)
       local gs = 1 + f.pop * 0.45 + pulse * 0.10
       f.glow:SetSize(CR_W * 3 * gs, CR_H * 2.6 * gs)
       f.glow:SetVertexColor(r, g, b, min(1, f.level * (0.40 + 0.32 * pulse) + f.pop * 0.55))
-      f.socket:SetAlpha(max(f.aim, f.level))
       local er, eg, eb = UI.Mix(C.edge, C.arcaneHi, f.level)
-      f.edge:SetVertexColor(er, eg, eb, (0.45 + 0.55 * f.level) * max(f.aim, f.level))
+      f.edge:SetVertexColor(er, eg, eb, 0.45 + 0.55 * f.level)
       f.spark:SetVertexColor(1, 1, 1, f.level * (0.50 + 0.45 * pulse))
       f.drawnOff = settled and not on
     end
@@ -333,7 +347,7 @@ local function refreshMain()
   end
 end
 
--- Le sceau prend la couleur du conseil et respire doucement ; sa rotation est gérée à part (makeSpinner).
+-- L'anneau et le bord de l'icône prennent la couleur du conseil.
 local function animateSeal(dt, now)
   local target = REASON_COLOR[State.nextReason] or C.arcane
   for i = 1, 3 do reasonColor[i] = UI.Approach(reasonColor[i], target[i], dt, 10) end
@@ -344,15 +358,10 @@ local function animateSeal(dt, now)
   local pulse = 0.5 + 0.5 * sin(now * (urgent and 3.2 or 1.8))
 
   local rr, rg, rb = UI.MixTo(C.edge, r, g, b, 0.55)
-  runes:SetVertexColor(rr, rg, rb, 0.34)       -- gravure discrète : elle habille l'anneau sans se lire
   ring:SetVertexColor(rr, rg, rb, 0.85)
-
-  -- halos retenus : l'icône du sort doit rester l'élément le plus lisible du cercle
-  local strength = urgent and (0.30 + 0.08 * pulse) or (0.12 + 0.04 * pulse)
-  glow:SetVertexColor(r, g, b, min(1, strength + main.pop * 0.3))
-  local gs = R * (2.1 + main.pop * 0.5)
-  glow:SetSize(gs, gs)
-  main.glow:SetVertexColor(r, g, b, min(1, (urgent and 0.42 or 0.16) + main.pop * 0.4))
+  -- pas de halo au repos : l'icône reste l'élément le plus lisible. Une lueur seulement quand il y a
+  -- mieux à faire que le cycle normal, ou quand le conseil vient de changer.
+  main.glow:SetVertexColor(r, g, b, min(1, (urgent and 0.30 + 0.10 * pulse or 0) + main.pop * 0.4))
   main.ring:SetVertexColor(r, g, b, 1)
   -- interruption conseillée : battement rapide, bien distinct de la respiration habituelle
   if State.interrupt then
@@ -369,34 +378,7 @@ local function animateSeal(dt, now)
   end
 end
 
--- Rotation des runes (réglage, coupé d'origine : à cette taille un dessin fin qui tourne lentement
--- avance par à-coups). Elle est confiée au moteur d'animation du jeu ; chaque boucle tourne d'un pas de
--- symétrie du dessin (30°), donc le retour au départ ne se voit pas.
-local function makeSpinner(tex, degrees, seconds)
-  if not tex.CreateAnimationGroup then return nil end
-  local ok, group = pcall(function()
-    local g = tex:CreateAnimationGroup()
-    local a = g:CreateAnimation("Rotation")
-    a:SetDegrees(degrees)
-    a:SetDuration(seconds)
-    a:SetOrigin("CENTER", 0, 0)
-    g:SetLooping("REPEAT")
-    return g
-  end)
-  return ok and group or nil
-end
-
-local function applySpin()
-  for _, g in ipairs(spinners) do
-    if ns.db.spin then
-      if not g:IsPlaying() then g:Play() end
-    elseif g:IsPlaying() then
-      g:Stop()
-    end
-  end
-end
-
--- ------------------------------------------------------------------ gemmes de proc
+-- ------------------------------------------------------------------ orbes de proc
 local function procState(key)
   if key == "heat" then return State.heat.ready, State.heat.expire, State.Duration("heat") end
   local p = State[key]
@@ -411,12 +393,6 @@ local function refreshBadges()
     if active ~= f.on then
       f.on = active
       if active then
-        local icon
-        for _, key in ipairs(f.def.icons) do
-          icon = Spells.Icon(key)
-          if icon then break end
-        end
-        f.icon:SetTexture(icon or 134400)
         f.pop = 1
         f:Show()
       end
@@ -425,7 +401,7 @@ local function refreshBadges()
       if expire and total and total > 0 then
         setCooldown(f, expire - total, total)
       else
-        setCooldown(f, 0, 0)   -- durée inconnue : gemme pleine
+        setCooldown(f, 0, 0)   -- durée inconnue : orbe plein
       end
     end
   end
@@ -581,7 +557,7 @@ end
 function Hud.Layout()
   if not root then return end
   local db = ns.db
-  for _, f in ipairs(crystals) do f:SetShown(db.showCharges) end
+  layoutCrystals(min(4, max(State.Target(), State.stacks)))
   local n = 0
   for _, b in ipairs(cds) do
     b.visible = isVisible(b.key)
@@ -595,7 +571,6 @@ function Hud.Layout()
     end
   end
   mana:SetShown(db.showMana)
-  applySpin()
   cooldownsDirty = true
 end
 
@@ -694,12 +669,6 @@ function Hud.Build()
   plate = UI.Tex(hub, "BACKGROUND", "circle", C.ink, 0.34, nil, -6)
   plate:SetPoint("CENTER")
   plate:SetSize(2 * R + 6, 2 * R + 6)
-  glow = UI.Tex(hub, "BACKGROUND", "glow", C.arcane, 0.12, "ADD", -5)
-  glow:SetPoint("CENTER")
-  glow:SetSize(R * 2.1, R * 2.1)
-  runes = UI.Tex(hub, "BORDER", "runes", C.edge, 0.34, nil, 1)
-  runes:SetPoint("CENTER")
-  runes:SetSize(RING_SIZE, RING_SIZE)
   ring = UI.Tex(hub, "ARTWORK", "ring", C.edge, 0.85)
   ring:SetPoint("CENTER")
   ring:SetSize(RING_SIZE, RING_SIZE)
@@ -707,8 +676,6 @@ function Hud.Build()
   timerFull:SetPoint("CENTER")
   timerFull:SetSize(RING_SIZE, RING_SIZE)
   timerFull:SetAlpha(0)
-
-  spinners[#spinners + 1] = makeSpinner(runes, -30, 10)
 
   local level = hub:GetFrameLevel()
   timer = makeTimer(hub)
@@ -736,6 +703,7 @@ function Hud.Build()
     crystals[i] = makeCrystal(hub, i)
     crystals[i]:SetFrameLevel(level + 5)
   end
+  layoutCrystals(State.Target())
   for i, key in ipairs(CDS) do
     local b = makeRound(hub, CD_SIZE, true)
     b.key = key
@@ -749,7 +717,11 @@ function Hud.Build()
     local x, y = onRing(def.angle)
     f:SetPoint("CENTER", hub, "CENTER", x, y)
     f:SetFrameLevel(level + 6)
-    f.ring:SetVertexColor(def.color[1], def.color[2], def.color[3], 1)
+    -- un orbe : la couleur du proc, sans icône (c'est elle qui porte le sens), bord éclairci
+    f.icon:SetTexture(UI.WHITE)
+    f.icon:SetVertexColor(def.color[1], def.color[2], def.color[3], 1)
+    local er, eg, eb = UI.MixTo(def.color, 1, 1, 1, 0.55)
+    f.ring:SetVertexColor(er, eg, eb, 1)
     f:SetAlpha(0)
     f:Hide()
     badges[i] = f
@@ -769,7 +741,7 @@ function Hud.Build()
     local ok, err = pcall(onUpdate, self, dt)
     if not ok then ns.Report(err) end
   end)
-  Hud.root, Hud.badges, Hud.main, Hud.reminders = root, badges, main, reminders
+  Hud.root, Hud.badges, Hud.main, Hud.reminders, Hud.crystals = root, badges, main, reminders, crystals
   return root
 end
 
@@ -797,22 +769,20 @@ end)
 ns:On("NEXT", function(key, reason, old)
   if not root then return end
   if key ~= old or State.interrupt then main.pop = 1 end
-  if State.interrupt and ns.db.flash then spawnHalo(C.clear, 2 * R, 2 * R + 150, 0.5) end
+  if State.interrupt and ns.db.flash then spawnHalo(C.clear, 2 * R, 2 * R + 80, 0.45) end
 end)
 
 ns:On("STACKS", function(n, old)
   if not root then return end
   for i = (old or 0) + 1, n do
-    if crystals[i] then crystals[i].pop = 1 end
+    if crystals[i] then crystals[i].pop = 1 end   -- le cristal bondit : pas besoin d'onde en plus
   end
-  local target = State.Target()
-  if n >= target and (old or 0) < target and ns.db.flash then spawnHalo(C.hot, 2 * R, 2 * R + 130, 0.6) end
 end)
 
 ns:On("PROC", function(key)
   if not root then return end
   local def = PROC_SOUND[key]
   if not def then return end
-  if ns.db.flash then spawnHalo(def.color, 2 * R, 2 * R + 150, 0.6) end
+  if ns.db.flash then spawnHalo(def.color, 2 * R, 2 * R + 60, 0.45) end
   if not State.demo then playSound(def) end
 end)

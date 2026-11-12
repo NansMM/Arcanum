@@ -171,8 +171,7 @@ def near(angle, count, half_width):
 
 
 def make_runic():
-    """Cercle runique : anneau, graduations runiques, bande du minuteur (découpée en arc par un widget
-    Cooldown), bord des icônes rondes.
+    """Cercle : anneau, bande du minuteur (découpée en arc par un widget Cooldown), bord des icônes rondes.
 
     Ces textures tournent en jeu. Elles sont donc dessinées à leur taille d'affichage (128 px pour
     133 px à l'écran) et aucun trait ne fait moins de 2 px : une texture plus grande, réduite par le jeu,
@@ -181,19 +180,6 @@ def make_runic():
     polar_tex("ring", S, lambda r, a, u, v: 0.456 <= r <= 0.474, ss=4)
     polar_tex("arc", S, lambda r, a, u, v: 0.451 <= r <= 0.479, ss=4)
     polar_tex("circle-edge", 64, lambda r, a, u, v: 0.43 <= r <= 0.5, ss=4)
-
-    def runes(r, a, u, v):
-        if 0.400 <= r <= 0.424 and near(a, 36, 0.020):      # graduations fines (2 px)
-            return True
-        if 0.380 <= r <= 0.430 and near(a, 12, 0.027):      # graduations longues (2,7 px)
-            return True
-        if 0.330 <= r <= 0.346:                             # filet intérieur (2 px)
-            return True
-        # petits losanges entre les graduations longues
-        step = 2 * math.pi / 12
-        d = ((a + math.pi + step / 2) % step) - step / 2
-        return abs(r - 0.365) / 0.020 + abs(d * r) / 0.014 <= 1
-    polar_tex("runes", S, runes, ss=4, soft=True)
 
 
 def main():
