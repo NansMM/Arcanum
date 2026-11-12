@@ -1,5 +1,9 @@
 # Historique d'Arcanum
 
+## 0.9.1 — 12 novembre 2026
+
+- Mode suivi seul : les procs actifs s'affichent en grandes icônes au centre du cercle, à la place du conseil. L'icône est celle du sort que le proc améliore (Projectiles pour le Barrage, Déflagration pour les Idées claires), cerclée de la couleur du proc, avec le temps restant. Un proc : une icône centrée ; deux : côte à côte. Les orbes du bas ne servent plus qu'en mode conseil.
+
 ## 0.9.0 — 12 novembre 2026
 
 - Mode « suivi seul » : le réglage « Prochain sort conseillé » (ou `/arc conseil`) masque l'icône centrale. Le cercle ne montre alors que les charges, leur fenêtre, les procs et les gros temps de recharge, sans rien conseiller.

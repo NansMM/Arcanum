@@ -6,7 +6,7 @@ Arcanum affiche sous ton personnage un cercle, avec au centre le prochain sort �
 
 ![Aperçu du HUD d'Arcanum](docs/apercu.png)
 
-*Aperçu composé avec les textures de l'addon (les icônes de sorts sont remplacées par des aplats). À gauche le cycle normal, à droite un Barrage de projectiles. En jeu : `/arc demo`.*
+*Aperçu composé avec les textures de l'addon (les icônes de sorts sont remplacées par des aplats). De gauche à droite : le cycle normal, un Barrage de projectiles, et le mode suivi seul avec deux procs au centre. En jeu : `/arc demo`.*
 
 - **Au centre** : le sort à lancer ensuite. Sa couleur, reprise par l'anneau, dit pourquoi : violet pour le cycle normal, rose pour un Barrage de projectiles, bleu clair pour des Idées claires, or pour les gros dégâts (Eureka, Présence spirituelle, Courroux instantané), bleu pour le mana (gemme, Évocation, sort moins cher, baguette), orange en multi-cibles. Pendant une incantation il ne change pas : un voile se retire à mesure que le sort part, puis il passe au suivant (une option permet au contraire d'anticiper).
 - **Au-dessus du cercle, les cristaux** : un par charge de Déflagration des Arcanes visée (deux par défaut). Ils pulsent quand la cible est atteinte ; un cristal de plus apparaît quand le jeu t'offre une charge.
@@ -17,7 +17,7 @@ Arcanum affiche sous ton personnage un cercle, avec au centre le prochain sort �
 - **L'icône rougit** quand la cible est hors de portée du sort conseillé.
 - En option : une barre de mana.
 
-**Mode suivi seul.** Si tu préfères décider toi-même, le réglage « Prochain sort conseillé » (ou `/arc conseil`) masque l'icône centrale : le cercle ne montre plus que les charges, leur fenêtre, les procs et les gros temps de recharge.
+**Mode suivi seul.** Si tu préfères décider toi-même, le réglage « Prochain sort conseillé » (ou `/arc conseil`) retire le conseil. Le centre du cercle devient alors la scène des procs : chaque proc actif s'y affiche en grande icône (celle du sort qu'il améliore), cerclée de sa couleur, avec le temps restant. Les charges, leur fenêtre et les gros temps de recharge restent à leur place.
 
 L'ordre conseillé part du guide Method (patch 1.60.1), adapté à ce qui se mesure en jeu : chaque charge double le coût de la Déflagration suivante, et rien ne les consomme pendant leurs 18 secondes. Arcanum vise donc un nombre de charges (**2 par défaut**, réglable à 3 ou 4 dans `/arc`), puis en profite avec des sorts qui ne coûtent pas plus cher :
 

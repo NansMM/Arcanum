@@ -8,6 +8,7 @@
 --   * à gauche et à droite, serties dans l'anneau : les gros temps de recharge, avec leur icône ;
 --   * en bas : un orbe de couleur par proc actif, avec un voile qui grandit à mesure qu'il s'épuise ;
 --   * sous le cercle, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme).
+-- En mode suivi seul (sans conseil), le centre montre à la place les procs actifs, en grandes icônes.
 -- En mode multi-cibles le cercle passe à l'orange ; l'icône rougit quand la cible est hors de portée.
 -- Pendant une incantation, le prochain sort ne change pas : il se découvre à mesure que le sort part.
 -- Exception : des Idées claires pendant un sort bon marché. L'icône passe alors à la Déflagration, un
@@ -48,11 +49,12 @@ local REASON_COLOR = {
   aoe = C.heat,   -- mode multi-cibles : tout le cercle passe à l'orange
 }
 local ACTIVE_COLOR = { pom = C.pom, eureka = C.power, power = C.power }
--- Procs montrés en orbe de couleur ; angle : leur place en bas de l'anneau.
+-- Procs montrés en orbe de couleur ; angle : leur place en bas de l'anneau ; spell : le sort que le proc
+-- améliore, dont l'icône sert en mode suivi seul.
 local PROCS = {
-  { key = "barrage", color = C.barrage, angle = 250 },
-  { key = "clear", color = C.clear, angle = 290 },
-  { key = "heat", color = C.heat, angle = 270 },
+  { key = "barrage", color = C.barrage, angle = 250, spell = "missiles" },
+  { key = "clear", color = C.clear, angle = 290, spell = "blast" },
+  { key = "heat", color = C.heat, angle = 270, spell = "pyro" },
 }
 local PROC_SOUND = {
   barrage = { kit = 3175, file = "barrage", color = C.barrage },
@@ -61,7 +63,7 @@ local PROC_SOUND = {
 }
 
 local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve
-local crystals, cds, halos, badges, reminders = {}, {}, {}, {}, {}
+local crystals, cds, halos, badges, reminders, stage = {}, {}, {}, {}, {}, {}
 local rootAlpha, hotBlend = 0, 0
 local advising = true                                  -- le centre conseille-t-il le prochain sort ?
 local shownAlpha = -1                                  -- dernière opacité donnée au cadre
@@ -393,7 +395,7 @@ local function procState(key)
 end
 
 local function refreshBadges()
-  local show = ns.db.showProcs
+  local show = ns.db.showProcs and advising   -- (en mode suivi seul, les procs sont au centre)
   for _, f in ipairs(badges) do
     local active, expire, total = procState(f.def.key)
     active = show and active and true or false
@@ -468,6 +470,76 @@ local function animateReminders(now)
   local pulse = 0.5 + 0.5 * sin(now * 3.0)
   for _, f in ipairs(reminders) do
     if f.key then f.glow:SetVertexColor(C.manaLow[1], C.manaLow[2], C.manaLow[3], 0.30 + 0.30 * pulse) end
+  end
+end
+
+-- ------------------------------------------------------------------ procs au centre (mode suivi seul)
+-- Sans conseil, les procs sont l'information principale : chaque proc actif s'affiche en grande icône
+-- au centre du cercle (l'icône du sort qu'il améliore, à la couleur du proc, avec le temps restant).
+-- Un proc : une icône centrée. Deux ou trois : côte à côte, plus petites.
+local STAGE_SIZE = { 56, 40, 32 }     -- taille des icônes selon le nombre de procs actifs
+local STAGE_GAP = 6
+local stageCount = -1
+
+local function layoutStage()
+  local n = 0
+  for _, f in ipairs(stage) do if f.on then n = n + 1 end end
+  stageCount = n
+  if n == 0 then return end
+  local size = STAGE_SIZE[n] or STAGE_SIZE[#STAGE_SIZE]
+  local x = -((n - 1) * (size + STAGE_GAP)) / 2
+  for _, f in ipairs(stage) do
+    if f.on then
+      f.size = size
+      f:SetSize(size, size)
+      f:ClearAllPoints()
+      f:SetPoint("CENTER", hub, "CENTER", x, 0)
+      x = x + size + STAGE_GAP
+    end
+  end
+end
+
+local function refreshStage()
+  local show = ns.db.showProcs and not advising
+  local changed = false
+  for _, f in ipairs(stage) do
+    local active, expire, total = procState(f.def.key)
+    active = show and active and true or false
+    if active ~= f.on then
+      f.on, changed = active, true
+      if active then
+        f.icon:SetTexture(Spells.Icon(f.def.spell) or 134400)
+        f.pop = 1
+        f:Show()
+      end
+    end
+    if active then
+      if expire and total and total > 0 then
+        setCooldown(f, expire - total, total)
+      else
+        setCooldown(f, 0, 0)   -- durée inconnue : icône pleine
+      end
+    end
+  end
+  if changed then layoutStage() end
+end
+
+local function animateStage(dt, now)
+  for _, f in ipairs(stage) do
+    if f.on or f.vis > 0 then
+      f.vis = UI.Approach(f.vis, f.on and 1 or 0, dt, f.on and 14 or 10)
+      f.pop = UI.Approach(f.pop, 0, dt, 7)
+      f:SetAlpha(f.vis)
+      if f.vis <= 0 and not f.on then
+        f:Hide()
+      else
+        local c = f.def.color
+        local pulse = 0.5 + 0.5 * sin(now * 4.4)
+        f.glow:SetVertexColor(c[1], c[2], c[3], min(1, 0.30 + 0.16 * pulse + f.pop * 0.5))
+        local s = (f.size or STAGE_SIZE[1]) * (1.9 + f.pop * 0.7)
+        f.glow:SetSize(s, s)
+      end
+    end
   end
 end
 
@@ -649,6 +721,7 @@ local function onUpdate(_, dt)
   end
   animateCooldowns(dt)
   animateBadges(dt, now)
+  animateStage(dt, now)
   animateReminders(now)
   animateHalos(now)
 end
@@ -659,6 +732,7 @@ function Hud.Refresh()
   refreshMain()
   refreshTimer()
   refreshBadges()
+  refreshStage()
   refreshReminders()
   refreshCooldowns(now)
   refreshMana()
@@ -736,6 +810,21 @@ function Hud.Build()
     badges[i] = f
   end
 
+  for i, def in ipairs(PROCS) do
+    local f = makeRound(hub, STAGE_SIZE[1], true, true)   -- avec le temps restant en chiffres
+    f.def, f.vis, f.on = def, 0, false
+    f:SetPoint("CENTER", hub, "CENTER", 0, 0)
+    f:SetFrameLevel(level + 4)
+    f.ring:SetVertexColor(def.color[1], def.color[2], def.color[3], 1)
+    if f.cd.GetCountdownFontString then
+      local okF, fs = pcall(f.cd.GetCountdownFontString, f.cd)
+      if okF and fs and fs.SetFont then pcall(fs.SetFont, fs, UI.FONT.body, 15, "OUTLINE") end
+    end
+    f:SetAlpha(0)
+    f:Hide()
+    stage[i] = f
+  end
+
   mana = makeMana(root)
   mana:SetPoint("TOP", hub, "BOTTOM", 0, -18)
   manaCurve = makeManaCurve()
@@ -751,6 +840,7 @@ function Hud.Build()
     if not ok then ns.Report(err) end
   end)
   Hud.root, Hud.badges, Hud.main, Hud.reminders, Hud.crystals = root, badges, main, reminders, crystals
+  Hud.stage = stage
   return root
 end
 

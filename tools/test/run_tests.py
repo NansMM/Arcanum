@@ -613,15 +613,23 @@ def main():
     f.M.proc("Barrage de projectiles", 400588)
     f.M.advance(0.3)
     orb = f.run("for _, b in ipairs(Mock.ns.Hud.badges) do if b.def.key == 'barrage' then return b end end")
-    check(f.S.barrage.active and orb.on is True and orb._shown is True, "les procs restent suivis et affichés")
+    big = f.run("for _, b in ipairs(Mock.ns.Hud.stage) do if b.def.key == 'barrage' then return b end end")
+    check(f.S.barrage.active and big.on is True and big._shown is True and big._w == 56 and big.cd._cd[2] == 15,
+          "le Barrage s'affiche en grande icône au centre, avec ses 15 s")
+    check(orb.on is False, "l'orbe du bas laisse la place à l'icône centrale")
     f.M.startCast(FROSTBOLT_1, 1.5)
     f.M.proc("Idées claires", 12536)
     f.M.advance(0.3)
     check(f.S.interrupt is False and f.S.next is None, "aucun conseil, donc aucun signal d'interruption")
+    shown = [b for b in f.ns.Hud.stage.values() if b.on]
+    check(len(shown) == 2 and all(b._w == 40 for b in shown) and shown[0]._points[1][4] != shown[1]._points[1][4],
+          "deux procs : deux icônes côte à côte, plus petites")
     f.M.stopCast()
     f.run('SlashCmdList.ARCANUM("conseil")')
     f.M.advance(0.3)
     check(f.S.next is not None and f.ns.Hud.main._shown is True, "/arc conseil de nouveau : le conseil revient")
+    check(not any(b.on for b in f.ns.Hud.stage.values()) and orb.on is True,
+          "mode conseil : les procs retournent en orbes, en bas de l'anneau")
     f.run('Mock.ns.Set("showNext", false); SlashCmdList.ARCANUM("demo")')
     f.M.advance(2.0)
     check(f.S.next is not None and f.ns.Hud.main._shown is True, "la démonstration montre toujours le conseil")

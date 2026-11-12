@@ -15,7 +15,7 @@ MEDIA = os.path.join(ROOT, "Arcanum", "Media")
 OUT = os.path.join(ROOT, "docs", "apercu.png")
 
 K = 2.4                      # échelle du rendu
-W, H = int(440 * K), int(216 * K)
+W, H = int(644 * K), int(216 * K)
 
 C = dict(
     ink=(0.030, 0.024, 0.066), socket=(0.130, 0.108, 0.240), edge=(0.470, 0.380, 0.860),
@@ -162,7 +162,7 @@ def round_icon(cx, cy, size, tint, ring, glow=0.0, cooldown=0.0):
     blit("circle-edge", cx, cy, size + 4, size + 4, ring, 0.95)
 
 
-def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=()):
+def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), stage=None):
     """Le cercle tel que le dispose UI/Hud.lua."""
     R = 62
     S = R / 0.465
@@ -179,7 +179,15 @@ def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=()):
     blit("ring", cx, cy, S, S, line, 0.85)
     if stacks > 0:
         blit("arc", cx, cy, S, S, col, 1, sweep=window)
-    round_icon(cx, cy, 64, tint, reason, glow=0.35 if urgent else 0.0)
+    if stage is None:
+        round_icon(cx, cy, 64, tint, reason, glow=0.35 if urgent else 0.0)
+    else:
+        # mode suivi seul : les procs actifs en grandes icônes au centre
+        size = (56, 40, 32)[min(len(stage), 3) - 1] if stage else 0
+        x = cx - (len(stage) - 1) * (size + 6) / 2
+        for pcol, left in stage:
+            round_icon(x, cy, size, pcol, pcol, glow=0.40, cooldown=1 - left)
+            x += size + 6
     # un cristal par charge visée (un de plus quand le jeu en offre une), au-dessus du cercle
     shown = min(4, max(target, stacks))
     for i in range(shown):
@@ -210,12 +218,16 @@ def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=()):
 
 def main():
     background()
-    # à gauche : cycle normal (Déflagration, 1 charge sur 2 visées) ; à droite : Barrage de projectiles
+    # cycle normal (Déflagration, 1 charge sur 2 visées), Barrage de projectiles, puis mode suivi seul
     hud(118, 116, 1, 2, C["arcane"], C["arcane"], 0.86,
         [(C["pom"], None, 0.0), (C["power"], None, 0.0)])
     hud(322, 116, 2, 2, C["barrage"], C["barrage"], 0.55,
         [(C["pom"], None, 0.7), (C["power"], C["power"], 0.0)],
         procs=((C["barrage"], 0.8), (C["clear"], 0.45)))
+    # mode suivi seul : pas de conseil, les deux procs au centre
+    hud(526, 116, 2, 2, C["arcane"], C["arcane"], 0.55,
+        [(C["pom"], None, 0.0), (C["power"], None, 0.4)],
+        stage=((C["barrage"], 0.8), (C["clear"], 0.45)))
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     raw = bytearray()
