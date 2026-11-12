@@ -257,11 +257,15 @@ local function makeMacro()
     ns.Print(L["ton personnage ne connaît pas encore le Courroux des Arcanes."])
     return false
   end
+  -- Après un sort instantané, le jeu refuse le sort suivant du même appui (« une autre action est en
+  -- cours »). /stopcasting entre deux sorts lève ce blocage : c'est la forme classique de la macro
+  -- Présence spirituelle + sort.
   local lines, used = { "#showtooltip " .. wrath }, {}
   for _, key in ipairs({ "eureka", "pom" }) do
     local name = Spells.Known(key) and Spells.Name(key)
     if name then
       lines[#lines + 1] = "/cast " .. name
+      lines[#lines + 1] = "/stopcasting"
       used[#used + 1] = name
     end
   end

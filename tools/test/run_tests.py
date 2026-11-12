@@ -757,8 +757,8 @@ def main():
     d.M.setCombat(False)
     d.run('SlashCmdList.ARCANUM("macro")')
     body = d.M.macros[1].body
-    check(body == "#showtooltip Courroux des Arcanes\n/cast Eurêka !\n/cast Présence spirituelle\n/cast Courroux des Arcanes",
-          "/arc macro : Eureka, Présence spirituelle, Courroux, avec les noms du jeu")
+    check(body == "#showtooltip Courroux des Arcanes\n/cast Eurêka !\n/stopcasting\n/cast Présence spirituelle\n/stopcasting\n/cast Courroux des Arcanes",
+          "/arc macro : Eureka, Présence spirituelle, Courroux, séparés par /stopcasting, avec les noms du jeu")
     d.run('Mock.spells[12043].known = false; Mock.fire("SPELLS_CHANGED"); SlashCmdList.ARCANUM("macro")')
     check(len(d.M.macros) == 1 and "Présence" not in d.M.macros[1].body, "relancée : la macro est mise à jour, pas doublée")
     d.run('SlashCmdList.ARCANUM("reset")')
