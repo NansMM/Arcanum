@@ -27,6 +27,7 @@ local State = {
   next = nil,                    -- clé du prochain sort conseillé
   nextReason = nil,
   nextId = nil,                  -- identifiant du sort conseillé (le rang à lancer)
+  interrupt = false,             -- le conseil demande d'interrompre l'incantation en cours
   cast = nil,                    -- sort en cours : { key, start, finish }
   aoe = false,                   -- mode multi-cibles
   aoeForced = false,             -- mode multi-cibles demandé par /arc aoe
@@ -724,7 +725,7 @@ end
 -- La variante Feu ajoute l'Explosion pyrotechnique sur 3 charges d'Échauffement et le Trait de feu.
 -- En mode multi-cibles, c'est computeAoe qui conseille (Choc de flammes, Explosion des Arcanes).
 -- Pendant une incantation ou une canalisation, le conseil ne bouge pas : il change quand le sort est
--- parti. Avec l'option « anticiper », il montre au contraire le sort d'après dès le début de
+-- parti. Une exception : des Idées claires pendant un sort bon marché (voir worthInterrupting). Avec l'option « anticiper », il montre au contraire le sort d'après dès le début de
 -- l'incantation, en tenant compte de ce que le sort en cours va changer (une charge de plus…).
 local DEMO_KNOWN = { blast = true, wrath = true, missiles = true, pom = true, eureka = true, evoc = true }
 
@@ -947,14 +948,39 @@ local function computeNext()
   return nil
 end
 
+-- Des Idées claires arrivent pendant l'incantation d'un sort bon marché : c'est ce sort qui dépenserait
+-- le proc en se terminant (25 de mana économisés par un Éclair de givre de rang 1, contre plusieurs
+-- centaines par une Déflagration chargée). Mieux vaut l'interrompre, s'il reste assez d'incantation
+-- pour que ça vaille le coup. Un Barrage de projectiles, lui, attend sagement : on n'interrompt pas.
+local CHEAP_CAST = { frostbolt = true, fireball = true, frostfire = true, scorch = true }
+local function worthInterrupting(db, now)
+  local cast = State.cast
+  if not cast or db.cutForClear == false or State.demo or State.aoe then return false end
+  if not State.clear.active or not CHEAP_CAST[cast.key] then return false end
+  if cast.finish - now < 0.5 then return false end   -- presque fini : autant le laisser partir
+  return Spells.Known("blast")
+end
+
 local function updateNext()
   local db = ns.db or ns.DEFAULTS
-  if State.cast and State.next and not db.anticipate then return end   -- on attend la fin du sort en cours
-  local key, reason, id = computeNext()
+  local key, reason, id
+  local cut = worthInterrupting(db, GetTime())
+  if cut then
+    key, reason = "blast", "clear"
+  elseif State.cast and State.next and not db.anticipate then
+    -- on attend la fin du sort en cours ; si on venait de conseiller d'interrompre, le signal s'arrête
+    if State.interrupt then
+      State.interrupt = false
+      ns:Fire("NEXT", State.next, State.nextReason, State.next)
+    end
+    return
+  else
+    key, reason, id = computeNext()
+  end
   if key and key ~= "gem" then id = id or Spells.Best(key) end
-  if key ~= State.next or reason ~= State.nextReason or id ~= State.nextId then
+  if key ~= State.next or reason ~= State.nextReason or id ~= State.nextId or cut ~= State.interrupt then
     local old = State.next
-    State.next, State.nextReason, State.nextId = key, reason, id
+    State.next, State.nextReason, State.nextId, State.interrupt = key, reason, id, cut
     ns:Fire("NEXT", key, reason, old)
   end
 end

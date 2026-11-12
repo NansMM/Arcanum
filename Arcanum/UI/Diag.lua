@@ -32,7 +32,9 @@ ns:On("PROC_END", function(key) if not State.demo then record("fin " .. key) end
 ns:On("CAST", function(key) record("sort " .. key) end)
 ns:On("AOE", function(on) record(on and "mode multi-cibles" or "fin du mode multi-cibles") end)
 ns:On("NEXT", function(key, reason)
-  if not State.demo then record("conseil " .. tostring(key) .. " (" .. tostring(reason) .. ")") end
+  if not State.demo then
+    record("conseil " .. tostring(key) .. " (" .. tostring(reason) .. ")" .. (State.interrupt and " : interrompre" or ""))
+  end
 end)
 
 local function show(v)

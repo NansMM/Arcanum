@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.7.1"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.7.2"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -129,6 +129,7 @@ ns.DEFAULTS = {
   fillerRank = 1,         -- rang de l'Éclair de givre de remplissage : 1 (économe) ou "max" (plus de dégâts)
   burstOne = true,        -- montrer directement le Courroux pendant Eureka + Présence spirituelle (macro de burst)
   showReminders = true,   -- hors combat, signaler une amélioration manquante ou l'absence de gemme de mana
+  cutForClear = true,     -- conseiller d'interrompre un sort bon marché quand des Idées claires arrivent
   openWrath = true,       -- hors combat, conseiller le Courroux pour engager
   adviseBurst = true,     -- conseiller les gros temps de recharge (Pouvoir des Arcanes, Eureka, Présence spirituelle)
   anticipate = false,     -- pendant une incantation, montrer déjà le sort d'après (sinon le conseil attend la fin)

@@ -22,7 +22,7 @@ L'ordre conseillé part du guide Method (patch 1.60.1), adapté à ce qui se mes
 
 1. Pouvoir des Arcanes dès qu'il est prêt.
 2. Projectiles des Arcanes sur un Barrage de projectiles : ils sont gratuits, et un nouveau proc serait perdu tant que celui-ci n'est pas dépensé.
-3. Déflagration sur des Idées claires : c'est le sort le plus cher, elle devient gratuite et la charge en plus aussi. (Le Courroux dépenserait le proc pour deux fois moins de mana économisé.)
+3. Déflagration sur des Idées claires : c'est le sort le plus cher, elle devient gratuite et la charge en plus aussi. (Le Courroux dépenserait le proc pour deux fois moins de mana économisé.) Si le proc arrive pendant l'incantation d'un Éclair de givre ou d'une Boule de feu, c'est ce sort qui le dépenserait : un bord blanc bat alors vite autour de l'icône pour te dire d'interrompre (réglable).
 4. Hors combat, sans charge : Courroux en ouverture. Le premier sort ne coûte pas de temps de combat, autant y mettre la plus longue incantation (réglable).
 5. Charges visées atteintes, Courroux prêt : Eureka, puis Présence spirituelle, puis Courroux des Arcanes. Avec la macro de burst (`/arc macro`), une seule touche fait les trois : Arcanum montre alors directement le Courroux, en or (réglable).
 6. Gemme de mana, puis Évocation, sous 15 % de mana.

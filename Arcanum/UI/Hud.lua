@@ -10,6 +10,8 @@
 --   * sous le cercle, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme).
 -- En mode multi-cibles le cercle passe à l'orange ; l'icône rougit quand la cible est hors de portée.
 -- Pendant une incantation, le prochain sort ne change pas : il se découvre à mesure que le sort part.
+-- Exception : des Idées claires pendant un sort bon marché. L'icône passe alors à la Déflagration, un
+-- bord blanc bat vite autour d'elle : interromps ton sort.
 --
 -- Tout est animé à la main dans un seul OnUpdate (approche douce vers une cible) : pas de groupes
 -- d'animation à synchroniser, et le rendu reste fluide quel que soit le nombre d'images par seconde.
@@ -352,6 +354,14 @@ local function animateSeal(dt, now)
   glow:SetSize(gs, gs)
   main.glow:SetVertexColor(r, g, b, min(1, (urgent and 0.42 or 0.16) + main.pop * 0.4))
   main.ring:SetVertexColor(r, g, b, 1)
+  -- interruption conseillée : battement rapide, bien distinct de la respiration habituelle
+  if State.interrupt then
+    main.alertOn = true
+    main.alert:SetVertexColor(1, 1, 1, 0.35 + 0.65 * (0.5 + 0.5 * sin(now * 20)))
+  elseif main.alertOn then
+    main.alertOn = false
+    main.alert:SetVertexColor(1, 1, 1, 0)
+  end
   local scale = 1 + main.pop * 0.16
   if scale ~= main.scale then
     main.scale = scale
@@ -708,6 +718,10 @@ function Hud.Build()
   main:SetPoint("CENTER", hub, "CENTER", 0, 0)
   main:SetFrameLevel(level + 3)
   main.icon:SetTexture(134400)
+  -- signal « interromps » : un second bord, blanc, qui bat vite autour de l'icône
+  main.alert = UI.Tex(main.over, "OVERLAY", "circle-edge", { 1, 1, 1 }, 0, "ADD", 2)
+  main.alert:SetPoint("TOPLEFT", -7, 7)
+  main.alert:SetPoint("BOTTOMRIGHT", 7, -7)
   main.rank = UI.Text(main.over, 12, C.text, UI.FONT.body, "OUTLINE")
   main.rank:SetPoint("BOTTOMRIGHT", -6, 5)
 
@@ -782,7 +796,8 @@ end)
 -- Le conseil change : l'icône bondit légèrement, pour que l'œil le remarque sans lire.
 ns:On("NEXT", function(key, reason, old)
   if not root then return end
-  if key ~= old then main.pop = 1 end
+  if key ~= old or State.interrupt then main.pop = 1 end
+  if State.interrupt and ns.db.flash then spawnHalo(C.clear, 2 * R, 2 * R + 150, 0.5) end
 end)
 
 ns:On("STACKS", function(n, old)

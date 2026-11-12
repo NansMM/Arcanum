@@ -1,5 +1,9 @@
 # Historique d'Arcanum
 
+## 0.7.2 — 12 novembre 2026
+
+- Idées claires pendant une incantation : si le proc arrive pendant un Éclair de givre ou une Boule de feu, c'est ce sort bon marché qui le dépenserait. Arcanum conseille alors d'interrompre : l'icône passe à la Déflagration, en bleu clair, avec un bord blanc qui bat vite. Rien ne change pour un Barrage de projectiles (il attend la fin du sort), ni quand il reste moins d'une demi-seconde d'incantation. Réglable.
+
 ## 0.7.1 — 12 novembre 2026
 
 Passe de performance, de nettoyage et de relecture du cycle. Rien ne change à l'écran.

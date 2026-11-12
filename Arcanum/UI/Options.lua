@@ -191,6 +191,7 @@ function Options.Build()
   y = choice(f, L["Rang du remplissage (Éclair de givre)"], "fillerRank", { 1, "max" }, y)
   y = toggle(f, L["Burst en une icône (macro ArcBurst)"], "burstOne", y)
   y = toggle(f, L["Engager à la Colère"], "openWrath", y)
+  y = toggle(f, L["Interrompre pour des Idées claires"], "cutForClear", y)
   y = toggle(f, L["Conseiller les gros temps de recharge"], "adviseBurst", y)
   y = toggle(f, L["Anticiper pendant l'incantation"], "anticipate", y)
 
