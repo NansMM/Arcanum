@@ -942,7 +942,7 @@ local function computeNext()
   if burst and fighting and not State.power.active and ready("power") then return "power", "burst" end
   -- Le Barrage d'abord : les Projectiles sont gratuits, et une Déflagration lancée pendant qu'il est
   -- actif peut en déclencher un autre, qui serait perdu. (La Présence spirituelle, si elle est déjà
-  -- active, n'est pas dépensée par une canalisation : elle attend le Courroux.)
+  -- active, n'est pas dépensée par une canalisation : elle attend le Courroux. Vérifié en jeu, 1.60.1.)
   if barrage and known("missiles") then return "missiles", "barrage" end
   if known("pyro") then
     if State.heat.ready then return "pyro", "heat" end
