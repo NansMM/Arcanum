@@ -128,6 +128,29 @@ local function choice(parent, label, key, values, y)
   return y - 34
 end
 
+-- Choix d'un son : « < nom > ». Les flèches passent au son suivant et le font entendre ; un clic sur le
+-- nom le rejoue.
+local function soundRow(parent, label, key, y)
+  local text = UI.Text(parent, 13, C.text)
+  text:SetPoint("TOPLEFT", 24, y - 7)
+  text:SetText(label)
+  local name
+  local function refresh() name.label:SetText(ns.Hud.SoundName(key)) end
+  local after = pillButton(parent, ">", 28, function() ns.Hud.CycleSound(key, 1); refresh() end)
+  after:SetPoint("TOPRIGHT", -22, y)
+  name = pillButton(parent, "", 150, function() ns.Hud.PreviewSound(key) end)
+  name.label:SetFont(UI.FONT.body, 12, "")
+  name:SetPoint("RIGHT", after, "LEFT", -4, 0)
+  local before = pillButton(parent, "<", 28, function() ns.Hud.CycleSound(key, -1); refresh() end)
+  before:SetPoint("RIGHT", name, "LEFT", -4, 0)
+  refreshers[#refreshers + 1] = refresh
+  return y - 34
+end
+
+local function seconds(v)
+  return v > 0 and string.format("%d s", v) or L["non"]
+end
+
 -- ------------------------------------------------------------------ fenêtre
 function Options.Build()
   if frame then return frame end
@@ -170,43 +193,59 @@ function Options.Build()
     function() cross:SetTextColor(C.muted[1], C.muted[2], C.muted[3], 1) end)
   close:SetScript("OnClick", function() f:Hide() end)
 
+  -- Deux colonnes : l'affichage à gauche, les alertes et le cycle à droite. Chaque colonne est un cadre
+  -- de la largeur d'une fenêtre simple, auquel les briques s'ancrent comme avant.
+  local GUTTER = 14
+  local left = CreateFrame("Frame", nil, f)
+  left:SetSize(W, 10)
+  left:SetPoint("TOPLEFT", 0, 0)
+  local right = CreateFrame("Frame", nil, f)
+  right:SetSize(W, 10)
+  right:SetPoint("TOPLEFT", W - GUTTER, 0)
+
   local y = -70
-  y = sectionTitle(f, L["Affichage"], y)
-  y = toggle(f, L["Activer le HUD"], "enabled", y)
-  y = toggle(f, L["Visible aussi hors combat"], "showIdle", y)
-  y = toggle(f, L["Prochain sort conseillé"], "showNext", y)
-  y = toggle(f, L["Cristaux de charge"], "showCharges", y)
-  y = toggle(f, L["Procs"], "showProcs", y)
-  y = toggle(f, L["Gros temps de recharge"], "showCooldowns", y)
-  y = toggle(f, L["Barre de mana"], "showMana", y)
-  y = toggle(f, L["Rappels avant le combat"], "showReminders", y)
-  y = stepper(f, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y - 4)
+  y = sectionTitle(left, L["Affichage"], y)
+  y = toggle(left, L["Activer le HUD"], "enabled", y)
+  y = toggle(left, L["Visible aussi hors combat"], "showIdle", y)
+  y = toggle(left, L["Prochain sort conseillé"], "showNext", y)
+  y = toggle(left, L["Cristaux de charge"], "showCharges", y)
+  y = toggle(left, L["Procs"], "showProcs", y)
+  y = toggle(left, L["Gros temps de recharge"], "showCooldowns", y)
+  y = toggle(left, L["Barre de mana"], "showMana", y)
+  y = toggle(left, L["Rappels avant le combat"], "showReminders", y)
+  y = stepper(left, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y - 4)
 
-  y = sectionTitle(f, L["Alertes"], y - 8)
-  y = toggle(f, L["Sons (procs, moment du burst)"], "sound", y)
-  y = toggle(f, L["Onde lumineuse"], "flash", y)
+  local ry = -70
+  ry = sectionTitle(right, L["Alertes"], ry)
+  ry = toggle(right, L["Sons (procs, moment du burst)"], "sound", ry)
+  ry = soundRow(right, L["Idées claires"], "clear", ry - 2)
+  ry = soundRow(right, L["Barrage"], "barrage", ry)
+  ry = soundRow(right, L["Burst"], "burst", ry)
+  ry = toggle(right, L["Onde lumineuse"], "flash", ry)
+  ry = stepper(right, L["Recharge bientôt finie"], "soonSeconds", 0, 30, 5, seconds, ry - 4)
+  ry = stepper(right, L["Rappel du burst"], "burstRemind", 0, 12, 2, seconds, ry)
 
-  y = sectionTitle(f, L["Cycle"], y - 8)
-  y = choice(f, L["Charges visées"], "targetStacks", { 2, 3, 4 }, y)
-  y = choice(f, L["Rang du remplissage (Éclair de givre)"], "fillerRank", { 1, "max" }, y)
-  y = toggle(f, L["Burst en une icône (macro ArcBurst)"], "burstOne", y)
-  y = toggle(f, L["Engager à la Colère"], "openWrath", y)
-  y = toggle(f, L["Interrompre pour des Idées claires"], "cutForClear", y)
-  y = toggle(f, L["Signaler le moment du burst"], "adviseBurst", y)
-  y = toggle(f, L["Anticiper pendant l'incantation"], "anticipate", y)
+  ry = sectionTitle(right, L["Cycle"], ry - 8)
+  ry = choice(right, L["Charges visées"], "targetStacks", { 2, 3, 4 }, ry)
+  ry = choice(right, L["Rang du remplissage (Éclair de givre)"], "fillerRank", { 1, "max" }, ry)
+  ry = toggle(right, L["Burst en une icône (macro ArcBurst)"], "burstOne", ry)
+  ry = toggle(right, L["Engager à la Colère"], "openWrath", ry)
+  ry = toggle(right, L["Interrompre pour des Idées claires"], "cutForClear", ry)
+  ry = toggle(right, L["Signaler le moment du burst"], "adviseBurst", ry)
+  ry = toggle(right, L["Anticiper pendant l'incantation"], "anticipate", ry)
 
   local bw = (W - 44 - 16) / 3
-  local move = pillButton(f, "", bw, function()
+  local move = pillButton(left, "", bw, function()
     ns.Set("locked", not ns.db.locked)
     Options.Refresh()
   end)
   move:SetPoint("TOPLEFT", 22, y - 10)
-  local demo = pillButton(f, "", bw, function()
+  local demo = pillButton(left, "", bw, function()
     State.SetDemo(not State.demo)
     Options.Refresh()
   end)
   demo:SetPoint("LEFT", move, "RIGHT", 8, 0)
-  local diag = pillButton(f, L["Diagnostic"], bw, function() ns.Diag.Show() end)
+  local diag = pillButton(left, L["Diagnostic"], bw, function() ns.Diag.Show() end)
   diag:SetPoint("LEFT", demo, "RIGHT", 8, 0)
   refreshers[#refreshers + 1] = function()
     move.label:SetText(ns.db.locked and L["Déplacer"] or L["Verrouiller"])
@@ -216,7 +255,7 @@ function Options.Build()
   end
   y = y - 10 - 28
 
-  f:SetSize(W, -y + 22)
+  f:SetSize(2 * W - GUTTER, math.max(-y, -ry) + 22)
   frame = f
   return f
 end
@@ -296,6 +335,7 @@ Options.MakeMacro = makeMacro
 -- /arc sons                  : écouter les trois sons
 -- /arc son 3071              : écouter un son du jeu, par son identifiant
 -- /arc son burst 3071        : jouer ce son du jeu au moment du burst (ou « clear », « barrage »)
+-- /arc son burst voix        : faire dire « Burst » par la voix du jeu
 -- /arc son burst             : revenir au son d'origine
 local SOUND_KEYS = { clear = "clear", claires = "clear", barrage = "barrage", burst = "burst" }
 local SOUND_LABEL = { clear = "Idées claires", barrage = "Barrage de projectiles", burst = "Moment du burst" }
@@ -318,7 +358,15 @@ local function soundCommand(arg)
   end
   if type(ns.db.soundKit) ~= "table" then ns.db.soundKit = {} end
   id = tonumber(b)
-  if not id or id <= 0 then
+  if b == "voix" or b == "voice" then
+    if ns.Hud.CanSpeak() then
+      ns.db.soundKit[key] = "voix"
+      ns.Hud.PreviewSound(key)
+      ns.Print(string.format(L["%s : voix du jeu."], L[SOUND_LABEL[key]]))
+    else
+      ns.Print(L["ce client n'a aucune voix de synthèse installée : choix inchangé."])
+    end
+  elseif not id or id <= 0 then
     ns.db.soundKit[key] = nil
     ns.Print(string.format(L["%s : son d'origine."], L[SOUND_LABEL[key]]))
   elseif ns.Hud.PlayKit(id) then
@@ -339,6 +387,7 @@ local HELP = {
   "/arc aoe : mode multi-cibles (Choc de flammes, Explosion des Arcanes) ; il s'active aussi tout seul",
   "/arc sons : écouter les trois sons (Idées claires, Barrage, moment du burst)",
   "/arc son 3071 : écouter un son du jeu ; /arc son burst 3071 : le choisir (clear, barrage, burst)",
+  "/arc son burst voix : faire dire « Burst » par la voix du jeu ; les sons se choisissent aussi dans les réglages",
   "/arc macro : créer la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts",
   "/arc diag : rapport à copier (sorts reconnus, signaux lus en combat)",
   "/arc reset : remettre les réglages d'origine",
@@ -386,6 +435,7 @@ SlashCmdList.ARCANUM = function(msg)
       or L["mode multi-cibles arrêté."])
   elseif cmd == "sons" or cmd == "son" or cmd == "sound" then
     soundCommand(arg)
+    Options.Refresh()
   elseif cmd == "macro" then
     makeMacro()
   elseif cmd == "diag" or cmd == "rapport" then

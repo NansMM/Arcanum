@@ -202,9 +202,13 @@ def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), stage
             blit("spark", x - 4, y - 6, 18, 18, C["white"], 0.85 if full else 0.5, add=True)
         blit("diamond-edge", x, y, 22, 28, C["arcaneHi"] if on else C["edge"], 1 if on else 0.45)
     # gros temps de recharge, sertis à gauche et à droite
-    for angle, (ctint, active, cooldown) in zip((200, 340), cooldowns):
+    for angle, cd in zip((200, 340), cooldowns):
+        ctint, active, cooldown = cd[:3]
         x, y = on_ring(angle)
-        if cue and cooldown == 0:   # c'est le moment : la gemme grossit et bat en or
+        if len(cd) > 3 and cd[3]:   # bientôt prête : en couleurs, bord doré fixe
+            round_icon(x, y, 28, ctint, C["power"], glow=0.22, cooldown=cooldown)
+            blit(None, x, y, 6, 10, C["power"], 0.95)   # secondes restantes (aplat)
+        elif cue and cooldown == 0:   # c'est le moment : la gemme grossit et bat en or
             round_icon(x, y, 35, ctint, C["power"], glow=0.85, cooldown=0)
         else:
             round_icon(x, y, 28, ctint, active or C["edge"], glow=0.7 if active else 0.0, cooldown=cooldown)
@@ -229,7 +233,7 @@ def main():
         procs=((C["barrage"], 0.8), (C["clear"], 0.45)))
     # mode suivi seul : pas de conseil, les deux procs au centre
     hud(526, 116, 2, 2, C["arcane"], C["arcane"], 0.55,
-        [(C["pom"], None, 0.0), (C["power"], None, 0.4)],
+        [(C["pom"], None, 0.0), (C["power"], None, 0.06, True)],
         stage=((C["barrage"], 0.8), (C["clear"], 0.45)))
     # mode suivi seul : charges visées atteintes, c'est le moment du burst
     hud(730, 116, 2, 2, C["arcane"], C["arcane"], 0.70,

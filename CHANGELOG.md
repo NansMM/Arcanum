@@ -1,5 +1,12 @@
 # Historique d'Arcanum
 
+## 0.12.0 — 12 novembre 2026
+
+- Gemme « bientôt prête » : dix secondes avant la fin d'une recharge, la gemme reprend ses couleurs, prend un bord doré et compte les secondes. Réglage « Recharge bientôt finie » (de 5 à 30 secondes, ou « non »).
+- Rappel du burst : si le signal reste allumé 6 secondes sans que tu lances un gros temps de recharge, l'onde dorée et le son sont redonnés une fois. Lancer l'un d'eux relance le délai pour les suivants. Réglage « Rappel du burst » (de 2 à 12 secondes, ou « non »). En mode suivi seul.
+- Les sons se choisissent par leur nom dans les réglages : une ligne par signal (Idées claires, Barrage, Burst), deux flèches pour passer d'un son à l'autre en l'écoutant. Une quinzaine de sons du jeu, plus la voix du jeu, qui dit le mot (« Burst ») si une voix de synthèse est installée. `/arc son burst voix` fait la même chose.
+- La fenêtre des réglages passe sur deux colonnes : elle devenait trop haute.
+
 ## 0.11.0 — 12 novembre 2026
 
 - Un son quand c'est le moment du burst (la Témérité du guerrier, par défaut). Il retentit une fois quand le moment arrive, en mode suivi seul comme en mode conseil, et n'est pas rejoué si le signal s'éteint et revient dans les 8 secondes.

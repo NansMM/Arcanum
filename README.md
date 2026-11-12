@@ -6,12 +6,12 @@ Arcanum affiche sous ton personnage un cercle, avec au centre le prochain sort �
 
 ![Aperçu du HUD d'Arcanum](docs/apercu.png)
 
-*Aperçu composé avec les textures de l'addon (les icônes de sorts sont remplacées par des aplats). De gauche à droite : le cycle normal, un Barrage de projectiles, puis le mode suivi seul avec deux procs au centre, et au moment du burst. En jeu : `/arc demo`.*
+*Aperçu composé avec les textures de l'addon (les icônes de sorts sont remplacées par des aplats). De gauche à droite : le cycle normal, un Barrage de projectiles, puis le mode suivi seul avec deux procs au centre (et, à droite, une gemme bientôt prête), et au moment du burst. En jeu : `/arc demo`.*
 
 - **Au centre** : le sort à lancer ensuite. Sa couleur, reprise par l'anneau, dit pourquoi : violet pour le cycle normal, rose pour un Barrage de projectiles, bleu clair pour des Idées claires, or pour les gros dégâts (Eureka, Présence spirituelle, Courroux instantané), bleu pour le mana (gemme, Évocation, sort moins cher, baguette), orange en multi-cibles. Pendant une incantation il ne change pas : un voile se retire à mesure que le sort part, puis il passe au suivant (une option permet au contraire d'anticiper).
 - **Au-dessus du cercle, les cristaux** : un par charge de Déflagration des Arcanes visée (deux par défaut). Ils s'éclaircissent quand la cible est atteinte ; un cristal de plus apparaît quand le jeu t'offre une charge.
 - **L'arc lumineux autour de l'anneau** : les 18 secondes de la fenêtre des charges, qui se vide.
-- **À gauche et à droite, sertis dans l'anneau** : tes gros temps de recharge, avec leur icône (Présence spirituelle, Eureka du gnome, Pouvoir des Arcanes, Berserker ou Fureur sanguinaire, selon ce que ton personnage connaît).
+- **À gauche et à droite, sertis dans l'anneau** : tes gros temps de recharge, avec leur icône (Présence spirituelle, Eureka du gnome, Pouvoir des Arcanes, Berserker ou Fureur sanguinaire, selon ce que ton personnage connaît). Dix secondes avant la fin d'une recharge, la gemme reprend ses couleurs, prend un bord doré et compte les secondes : tu sais que tu peux garder tes charges pour elle (réglage « Recharge bientôt finie »).
 - **En bas de l'anneau** : un orbe de couleur par proc actif, rose pour le Barrage de projectiles, bleu clair pour les Idées claires, avec un voile qui grandit à mesure que le proc s'épuise.
 - **Sous le cercle, hors combat** : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme de mana).
 - **L'icône rougit** quand la cible est hors de portée du sort conseillé.
@@ -19,11 +19,13 @@ Arcanum affiche sous ton personnage un cercle, avec au centre le prochain sort �
 
 **Les sons.** Un son à l'arrivée d'un proc, un autre quand c'est le moment du burst. Ce sont des sons du jeu : le ping de la mini-carte pour un Barrage de projectiles, la notification Battle.net pour des Idées claires, la Témérité du guerrier pour le burst. `/arc sons` les fait entendre.
 
-Tu peux en choisir d'autres : `/arc son 888` fait entendre le son de cet identifiant, `/arc son burst 888` le choisit pour le moment du burst (`clear` et `barrage` pour les procs), `/arc son burst` revient au son d'origine. Les identifiants se trouvent dans la base de sons de Wowhead (le nombre dans l'adresse de la page). Quelques pistes : 4874 (le son des Idées claires), 3333 (impacts de Projectiles des Arcanes), 888 (montée de niveau), 8960 (appel de préparation), 8959 (alerte de raid). Tu peux aussi déposer tes propres fichiers `.ogg` dans `Arcanum\Sounds` (voir le LISEZMOI du dossier).
+Tu peux en choisir d'autres dans les réglages (`/arc`) : chaque signal a sa ligne, avec le nom du son entre deux flèches. Une flèche passe au son suivant et le fait entendre ; un clic sur le nom le rejoue. La liste propose une quinzaine de sons du jeu (alerte de raid, appel de préparation, montée de niveau, quête terminée, réveil…) et la **voix du jeu**, qui dit « Burst », « Barrage » ou « Idées claires » avec la synthèse vocale de WoW, si une voix est installée sur ton ordinateur. Un son que ton client ne joue pas est sauté.
+
+Pour un son hors liste : `/arc son 888` fait entendre le son de cet identifiant, `/arc son burst 888` le choisit pour le moment du burst (`clear` et `barrage` pour les procs), `/arc son burst` revient au son par défaut. Les identifiants se trouvent dans la base de sons de Wowhead (le nombre dans l'adresse de la page). Tu peux aussi déposer tes propres fichiers `.ogg` dans `Arcanum\Sounds` (voir le LISEZMOI du dossier).
 
 **Mode suivi seul.** Si tu préfères décider toi-même, le réglage « Prochain sort conseillé » (ou `/arc conseil`) retire le conseil. Le centre du cercle devient alors la scène des procs : chaque proc actif s'y affiche en grande icône (celle du sort qu'il améliore), cerclée de sa couleur, avec le temps restant. Les charges, leur fenêtre et les gros temps de recharge restent à leur place.
 
-Dans ce mode, Arcanum te dit quand même **quand claquer ton burst**, pour ne pas l'oublier : au bon moment (charges visées atteintes, Colère prête, aucun proc à dépenser d'abord), les gemmes des temps de recharge prêts grossissent et battent en or, l'anneau passe à l'or, une onde dorée part du cercle et le son du burst retentit. Une gemme a donc trois états : grisée (en recharge), nette (prête, mais ce n'est pas le moment), dorée et battante (maintenant). Le réglage « Signaler le moment du burst » le coupe.
+Dans ce mode, Arcanum te dit quand même **quand claquer ton burst**, pour ne pas l'oublier : au bon moment (charges visées atteintes, Colère prête, aucun proc à dépenser d'abord), les gemmes des temps de recharge prêts grossissent et battent en or, l'anneau passe à l'or, une onde dorée part du cercle et le son du burst retentit. Une gemme a donc quatre états : grisée (en recharge), cerclée d'or avec un chiffre (prête dans quelques secondes), nette (prête, mais ce n'est pas le moment), dorée, agrandie et battante (maintenant). Si le signal reste allumé 6 secondes sans que tu lances un de ces sorts, l'onde et le son sont redonnés une fois (réglage « Rappel du burst », de 2 à 12 secondes, ou « non »). Le réglage « Signaler le moment du burst » coupe le tout.
 
 L'ordre conseillé part du guide Method (patch 1.60.1), adapté à ce qui se mesure en jeu : chaque charge double le coût de la Déflagration suivante, et rien ne les consomme pendant leurs 18 secondes. Arcanum vise donc un nombre de charges (**2 par défaut**, réglable à 3 ou 4 dans `/arc`), puis en profite avec des sorts qui ne coûtent pas plus cher :
 
@@ -61,7 +63,7 @@ Il ne se réveille que sur un mage. Après une mise à jour qui ajoute des textu
 | `/arc conseil` | Affiche ou masque le prochain sort conseillé (sans lui : charges, procs et recharges seulement) |
 | `/arc aoe` | Mode multi-cibles, jusqu'à la fin du combat |
 | `/arc sons` | Fait entendre les trois sons (Idées claires, Barrage, moment du burst) |
-| `/arc son 3071` | Fait entendre un son du jeu ; `/arc son burst 3071` le choisit pour un signal (`clear`, `barrage` ou `burst`) |
+| `/arc son 3071` | Fait entendre un son du jeu ; `/arc son burst 3071` le choisit pour un signal (`clear`, `barrage` ou `burst`), `/arc son burst voix` le fait dire par la voix du jeu |
 | `/arc macro` | Crée la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts que le jeu donne aux sorts |
 | `/arc diag` | Rapport à copier : sorts reconnus, signaux lus, derniers conseils et changements d'état |
 

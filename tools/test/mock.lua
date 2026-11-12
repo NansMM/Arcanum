@@ -219,6 +219,19 @@ function PlaySound(id, channel)
   if id == 999999 then return nil end   -- identifiant inconnu : le jeu ne joue rien
   return true
 end
+-- Synthèse vocale : une voix installée d'origine ; Mock.voices = {} pour un client sans voix.
+M.voices = { { voiceID = 7, name = "Hortense" } }
+M.spoken = {}
+C_VoiceChat = {}
+function C_VoiceChat.GetTtsVoices() return M.voices end
+function C_VoiceChat.SpeakText(voiceID, text, rate, volume, overlap)
+  if type(voiceID) ~= "number" or type(text) ~= "string" or type(rate) ~= "number" or type(volume) ~= "number" then
+    error("SpeakText : arguments invalides", 2)
+  end
+  M.spoken[#M.spoken + 1] = text
+end
+C_TTSSettings = {}
+function C_TTSSettings.GetVoiceOptionID(kind) return 7 end
 -- (le fichier « ne joue pas » : l'addon retombe alors sur PlaySound, que les tests comptent)
 function PlaySoundFile(path, channel)
   M.soundFiles = M.soundFiles or {}

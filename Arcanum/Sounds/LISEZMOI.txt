@@ -1,8 +1,8 @@
 Sons personnalisés d'Arcanum
 ============================
 
-Arcanum joue des sons du jeu. Tu peux en choisir d'autres en jeu (/arc son burst 888), ou déposer ici
-tes propres fichiers .ogg :
+Arcanum joue des sons du jeu. Tu peux en choisir d'autres dans les réglages (/arc), ou déposer ici
+tes propres fichiers .ogg (ils sont joués tant que le son du signal est réglé sur « Par défaut ») :
 
   clear.ogg     Idées claires
   barrage.ogg   Barrage de projectiles

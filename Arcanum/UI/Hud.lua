@@ -10,6 +10,7 @@
 --   * sous le cercle, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme).
 -- En mode suivi seul (sans conseil), le centre montre à la place les procs actifs, en grandes icônes ;
 -- et quand c'est le moment du burst, les gemmes des temps de recharge prêts grossissent et battent en or.
+-- Une gemme dont la recharge finit dans quelques secondes prend un bord doré et un chiffre.
 -- En mode multi-cibles le cercle passe à l'orange ; l'icône rougit quand la cible est hors de portée.
 -- Pendant une incantation, le prochain sort ne change pas : il se découvre à mesure que le sort part.
 -- Exception : des Idées claires pendant un sort bon marché. L'icône passe alors à la Déflagration, un
@@ -60,12 +61,31 @@ local PROCS = {
 -- Les sons sont des sons du jeu (« kit » : leur identifiant ; « alt » : celui joué si ce client ne connaît
 -- pas le premier). Le joueur peut en choisir d'autres (/arc son burst 888), ou déposer ses propres fichiers
 -- dans Sounds (« file »).
+-- « say » : le mot prononcé quand le joueur a choisi la voix du jeu.
 local PROC_SOUND = {
-  barrage = { kit = 3175, file = "barrage", color = C.barrage },   -- ping de la mini-carte
-  clear = { kit = 18019, file = "clear", color = C.clear },        -- notification Battle.net
-  heat = { kit = 3175, file = "barrage", color = C.heat },
+  barrage = { kit = 3175, file = "barrage", color = C.barrage, say = "Barrage" },      -- ping de la mini-carte
+  clear = { kit = 18019, file = "clear", color = C.clear, say = "Idées claires" },     -- notification Battle.net
+  heat = { kit = 3175, file = "barrage", color = C.heat, say = "Pyro" },
 }
-local BURST_SOUND = { kit = 3071, alt = 8960, file = "burst" }      -- Témérité, sinon l'appel de préparation
+local BURST_SOUND = { kit = 3071, alt = 8960, file = "burst", say = "Burst" }   -- Témérité, sinon l'appel de préparation
+local SOUND_DEF = { clear = PROC_SOUND.clear, barrage = PROC_SOUND.barrage, burst = BURST_SOUND }
+-- Sons du jeu proposés par leur nom dans les réglages. Un identifiant que ce client ne joue pas est sauté.
+local SOUNDS = {
+  { 18019, "Notification Battle.net" },
+  { 3175, "Ping de la mini-carte" },
+  { 3081, "Message privé" },
+  { 878, "Quête terminée" },
+  { 888, "Montée de niveau" },
+  { 8960, "Appel de préparation" },
+  { 8959, "Alerte de raid" },
+  { 8459, "File JcJ prête" },
+  { 12889, "Réveil" },
+  { 3071, "Témérité" },
+  { 4874, "Idées claires (le sort)" },
+  { 3333, "Projectiles des Arcanes" },
+  { 3227, "Contresort" },
+  { 1642, "Intelligence des Arcanes" },
+}
 
 local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve
 local crystals, cds, halos, badges, reminders, stage = {}, {}, {}, {}, {}, {}
@@ -197,7 +217,7 @@ end
 local function makeRound(parent, size, numbers, reverse)
   local b = CreateFrame("Frame", nil, parent)
   b:SetSize(size, size)
-  b.size, b.activeLevel, b.pop, b.cueLevel = size, 0, 0, 0
+  b.size, b.activeLevel, b.pop, b.cueLevel, b.soonLevel = size, 0, 0, 0, 0
   b.glow = UI.Tex(b, "BACKGROUND", "glow", C.arcane, 0, "ADD", -2)
   b.glow:SetPoint("CENTER")
   b.glow:SetSize(size * 2.0, size * 2.0)
@@ -570,24 +590,45 @@ local function refreshCooldowns(now)
       local p = State[b.key]
       b.active = type(p) == "table" and p.active or false
       b.cue = not advising and State.burst[b.key] == true   -- c'est le moment de le claquer
-      b.icon:SetDesaturated(info.onCD == true and not b.active)
-      b.icon:SetAlpha((info.onCD == true and not b.active) and 0.75 or 1)
+      -- bientôt prêt : l'icône reprend ses couleurs, et notre chiffre remplace celui du jeu
+      local left = info.onCD == true and info.readyAt and info.readyAt - now or nil
+      local soon = left ~= nil and left > 0 and left <= (ns.db.soonSeconds or 0)
+      if soon ~= b.soon then
+        b.soon = soon
+        if b.cd.SetHideCountdownNumbers then pcall(b.cd.SetHideCountdownNumbers, b.cd, soon) end
+        if not soon then
+          b.soonShown = nil
+          b.soonText:SetText("")
+        end
+      end
+      if soon then
+        local n = math.ceil(left)
+        if n ~= b.soonShown then
+          b.soonShown = n
+          b.soonText:SetText(tostring(n))
+        end
+      end
+      local dim = info.onCD == true and not b.active and not soon
+      b.icon:SetDesaturated(dim)
+      b.icon:SetAlpha(dim and 0.75 or 1)
     end
   end
 end
 
--- Trois états lisibles d'un coup d'œil : en recharge (grisé, voilé), prêt (net, bord discret), et « c'est
--- le moment » : la gemme grossit, passe à l'or et bat. Rien d'autre ne bat en or sur le HUD.
+-- Quatre états lisibles d'un coup d'œil : en recharge (grisé, voilé), bientôt prêt (en couleurs, bord doré
+-- fixe, secondes restantes), prêt (net, bord discret), et « c'est le moment » : la gemme grossit, passe à
+-- l'or et bat. Rien d'autre ne bat en or sur le HUD.
 local function animateCooldowns(dt, now)
   local pulse = 0.5 + 0.5 * sin(now * 5.0)
   for _, b in ipairs(cds) do
     if b.visible then
       b.activeLevel = UI.Approach(b.activeLevel, b.active and 1 or 0, dt, 10)
       b.cueLevel = UI.Approach(b.cueLevel, b.cue and 1 or 0, dt, 10)
-      local a, k = b.activeLevel, b.cueLevel
-      local r, g, bl = UI.Mix(ACTIVE_COLOR[b.key] or C.power, C.power, k)
-      b.glow:SetVertexColor(r, g, bl, max(a * 0.7, k * (0.55 + 0.40 * pulse)))
-      local er, eg, eb = UI.MixTo(C.edge, r, g, bl, max(a, k))
+      b.soonLevel = UI.Approach(b.soonLevel, b.soon and 1 or 0, dt, 8)
+      local a, k, s = b.activeLevel, b.cueLevel, b.soonLevel
+      local r, g, bl = UI.Mix(ACTIVE_COLOR[b.key] or C.power, C.power, max(k, s))
+      b.glow:SetVertexColor(r, g, bl, max(a * 0.7, k * (0.55 + 0.40 * pulse), s * 0.22))
+      local er, eg, eb = UI.MixTo(C.edge, r, g, bl, max(a, k, s))
       b.ring:SetVertexColor(er, eg, eb, 0.9)
       local size = CD_SIZE * (1 + 0.25 * k)   -- (pas de SetScale : il déplacerait la gemme sur l'anneau)
       if size ~= b.size then
@@ -718,12 +759,47 @@ local function playKit(id)
 end
 Hud.PlayKit = playKit
 
--- Dans l'ordre : le son du jeu choisi par le joueur (/arc son burst 888) ; sinon son fichier déposé dans
--- Sounds ; sinon le son d'origine, puis son remplaçant. Retourne l'identifiant joué, "fichier", ou nil.
+-- La voix du jeu (synthèse vocale) : elle dit le mot au lieu de jouer un son. Retourne l'identifiant de la
+-- voix réglée dans le jeu, sinon de la première installée ; nil si ce client n'en a aucune.
+local function voiceID()
+  if not (C_VoiceChat and C_VoiceChat.SpeakText and C_VoiceChat.GetTtsVoices) then return nil end
+  local ok, voices = pcall(C_VoiceChat.GetTtsVoices)
+  if not ok or type(voices) ~= "table" or not voices[1] then return nil end
+  local wanted
+  if C_TTSSettings and C_TTSSettings.GetVoiceOptionID then
+    local okW, id = pcall(C_TTSSettings.GetVoiceOptionID, 0)
+    if okW and type(id) == "number" then wanted = id end
+  end
+  local first
+  for _, v in ipairs(voices) do
+    if type(v) == "table" and type(v.voiceID) == "number" then
+      if v.voiceID == wanted then return wanted end
+      first = first or v.voiceID
+    end
+  end
+  return first
+end
+
+local function speak(text)
+  local id = voiceID()
+  if not id then return false end
+  return (pcall(C_VoiceChat.SpeakText, id, text, 0, 100)) and true or false
+end
+
+function Hud.CanSpeak()
+  return voiceID() ~= nil
+end
+
+-- Dans l'ordre : le choix du joueur (un son du jeu, ou la voix) ; sinon son fichier déposé dans Sounds ;
+-- sinon le son d'origine, puis son remplaçant. Retourne l'identifiant joué, "voix", "fichier", ou nil.
 local function playSound(def, always)
   if not (always or ns.db.sound) then return nil end
   local chosen = type(ns.db.soundKit) == "table" and ns.db.soundKit[def.file]
-  if chosen and playKit(chosen) then return chosen end
+  if chosen == "voix" then
+    if speak(L[def.say]) then return "voix" end
+  elseif chosen and playKit(chosen) then
+    return chosen
+  end
   local ok, played = pcall(PlaySoundFile, "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\" .. def.file .. ".ogg", "Master")
   if ok and played then return "fichier" end
   if playKit(def.kit) then return def.kit end
@@ -741,6 +817,84 @@ local function burstSound()
   playSound(BURST_SOUND)
 end
 
+-- Rappel : le signal de burst reste allumé et aucun gros temps de recharge n'est lancé. L'onde et le son
+-- sont redonnés une fois ; lancer un de ces sorts relance le délai pour les suivants.
+local cueSince, cueReminded = nil, false
+local function remindBurst(now)
+  local lit = false
+  if not advising and State.burst.on and not State.demo then
+    for _, key in ipairs(CDS) do
+      if State.burst[key] == true then lit = true; break end
+    end
+  end
+  if not lit then
+    cueSince = nil
+    return
+  end
+  if not cueSince then
+    cueSince, cueReminded = now, false
+    return
+  end
+  local delay = ns.db.burstRemind or 0
+  if cueReminded or delay <= 0 or now - cueSince < delay then return end
+  cueReminded = true
+  if ns.db.flash then spawnHalo(C.power, 2 * R, 2 * R + 70, 0.5) end
+  burstSoundAt = now
+  playSound(BURST_SOUND)
+end
+
+-- Le nom du son choisi pour un signal ("clear", "barrage" ou "burst"), pour les réglages.
+function Hud.SoundName(key)
+  local v = type(ns.db.soundKit) == "table" and ns.db.soundKit[key]
+  if not v then return L["Par défaut"] end
+  if v == "voix" then return L["Voix du jeu"] end
+  for _, s in ipairs(SOUNDS) do
+    if s[1] == v then return L[s[2]] end
+  end
+  return string.format(L["Son n° %d"], v)
+end
+
+function Hud.PreviewSound(key)
+  local def = SOUND_DEF[key]
+  return def and playSound(def, true) or nil
+end
+
+-- Passe au choix suivant (dir = 1) ou précédent (-1) et le fait entendre. Les choix : le son par défaut,
+-- les sons nommés, la voix du jeu si ce client en a une, et le numéro tapé avec /arc son s'il n'est pas
+-- dans la liste. Un son que le jeu ne joue pas est sauté.
+function Hud.CycleSound(key, dir)
+  local def = SOUND_DEF[key]
+  if not def then return end
+  if type(ns.db.soundKit) ~= "table" then ns.db.soundKit = {} end
+  local cur = ns.db.soundKit[key] or false
+  local list, at, listed = { false }, 1, cur == false
+  for _, s in ipairs(SOUNDS) do list[#list + 1] = s[1] end
+  if Hud.CanSpeak() then list[#list + 1] = "voix" end
+  for i, v in ipairs(list) do
+    if v == cur then at, listed = i, true end
+  end
+  if not listed then
+    list[#list + 1] = cur
+    at = #list
+  end
+  for step = 1, #list do
+    local v = list[(at - 1 + dir * step) % #list + 1]
+    if v == false then
+      ns.db.soundKit[key] = nil
+      playSound(def, true)
+      return
+    elseif v == "voix" then
+      if speak(L[def.say]) then
+        ns.db.soundKit[key] = v
+        return
+      end
+    elseif playKit(v) then
+      ns.db.soundKit[key] = v
+      return
+    end
+  end
+end
+
 -- /arc sons : fait entendre les trois sons, l'un après l'autre, et dit lequel est joué.
 function Hud.TestSounds()
   local list = {
@@ -751,8 +905,8 @@ function Hud.TestSounds()
   for i, item in ipairs(list) do
     local function play()
       local what = playSound(item[1], true)
-      local text = what == "fichier" and L["ton fichier"] or what and string.format(L["son du jeu %d"], what)
-        or L["aucun son"]
+      local text = what == "fichier" and L["ton fichier"] or what == "voix" and L["voix du jeu"]
+        or what and string.format(L["son du jeu %d"], what) or L["aucun son"]
       ns.Print(item[2] .. " : " .. text .. ".")
     end
     if i > 1 and C_Timer and C_Timer.After then C_Timer.After((i - 1) * 1.5, play) else play() end
@@ -797,6 +951,7 @@ function Hud.Refresh()
   refreshReminders()
   refreshCooldowns(now)
   refreshMana()
+  remindBurst(now)
 end
 
 function Hud.Build()
@@ -852,6 +1007,8 @@ function Hud.Build()
     local b = makeRound(hub, CD_SIZE, true)
     b.key = key
     b:SetFrameLevel(level + 5)
+    b.soonText = UI.Text(b.over, 13, C.power, UI.FONT.body, "OUTLINE")   -- secondes restantes, quand c'est bientôt prêt
+    b.soonText:SetPoint("CENTER", 0, 0)
     b:Hide()
     cds[i] = b
   end
@@ -940,6 +1097,13 @@ ns:On("BURST", function(on)
   if not root or not on or advising then return end
   if ns.db.flash then spawnHalo(C.power, 2 * R, 2 * R + 70, 0.5) end
   burstSound()
+end)
+
+-- Un gros temps de recharge vient d'être lancé : le rappel du burst repart de zéro pour les suivants.
+local IS_CD = {}
+for _, key in ipairs(CDS) do IS_CD[key] = true end
+ns:On("CAST", function(key)
+  if IS_CD[key] and cueSince then cueSince, cueReminded = GetTime(), false end
 end)
 
 ns:On("STACKS", function(n, old)

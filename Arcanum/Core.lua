@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.11.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.12.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -135,7 +135,9 @@ ns.DEFAULTS = {
   anticipate = false,     -- pendant une incantation, montrer déjà le sort d'après (sinon le conseil attend la fin)
   targetStacks = 2,       -- charges visées (2, 3 ou 4) : on monte jusque-là, puis Colère et sorts bon marché
   sound = true,
-  soundKit = {},          -- sons du jeu choisis à la place de ceux d'origine : [clear|barrage|burst] = identifiant
+  soonSeconds = 10,       -- une gemme passe à l'or, avec un chiffre, quand sa recharge finit dans moins de N secondes (0 : jamais)
+  burstRemind = 6,        -- le signal de burst est redonné s'il reste allumé N secondes sans rien lancer (0 : jamais)
+  soundKit = {},          -- sons du jeu choisis à la place de ceux d'origine : [clear|barrage|burst] = identifiant, ou "voix"
   flash = true,           -- petite onde autour du cercle quand un proc arrive
 }
 
