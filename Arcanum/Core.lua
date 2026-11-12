@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.12.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.12.1"
 
 local pcall, type, pairs = pcall, type, pairs
 

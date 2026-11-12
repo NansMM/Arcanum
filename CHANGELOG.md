@@ -1,5 +1,9 @@
 # Historique d'Arcanum
 
+## 0.12.1 — 12 novembre 2026
+
+- Mode suivi seul : au moment du burst, le mot « Burst » s'écrit en or au centre du cercle, qui restait vide. Il s'efface si un proc s'y affiche.
+
 ## 0.12.0 — 12 novembre 2026
 
 - Gemme « bientôt prête » : dix secondes avant la fin d'une recharge, la gemme reprend ses couleurs, prend un bord doré et compte les secondes. Réglage « Recharge bientôt finie » (de 5 à 30 secondes, ou « non »).

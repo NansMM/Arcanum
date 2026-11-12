@@ -9,7 +9,8 @@
 --   * en bas : un orbe de couleur par proc actif, avec un voile qui grandit à mesure qu'il s'épuise ;
 --   * sous le cercle, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme).
 -- En mode suivi seul (sans conseil), le centre montre à la place les procs actifs, en grandes icônes ;
--- et quand c'est le moment du burst, les gemmes des temps de recharge prêts grossissent et battent en or.
+-- et quand c'est le moment du burst, le mot « Burst » s'y écrit en or, les gemmes des temps de recharge
+-- prêts grossissent et battent en or.
 -- Une gemme dont la recharge finit dans quelques secondes prend un bord doré et un chiffre.
 -- En mode multi-cibles le cercle passe à l'orange ; l'icône rougit quand la cible est hors de portée.
 -- Pendant une incantation, le prochain sort ne change pas : il se découvre à mesure que le sort part.
@@ -87,10 +88,12 @@ local SOUNDS = {
   { 1642, "Intelligence des Arcanes" },
 }
 
-local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve
+local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve, cueText
 local crystals, cds, halos, badges, reminders, stage = {}, {}, {}, {}, {}, {}
 local rootAlpha, hotBlend = 0, 0
 local ringAlpha, cueBlend = 0.85, 0                    -- opacité de l'anneau ; signal de burst (0 à 1)
+local cueShown = -1                                    -- dernière opacité donnée au mot « Burst »
+local stageCount = -1                                  -- nombre de procs affichés au centre (mode suivi seul)
 local advising = true                                  -- le centre conseille-t-il le prochain sort ?
 local shownAlpha = -1                                  -- dernière opacité donnée au cadre
 local crystalsFor, crystalsAim, crystalsStill = -1, -1, false   -- état des cristaux au dernier dessin
@@ -384,6 +387,12 @@ local function animateSeal(dt, now)
   for i = 1, 3 do reasonColor[i] = UI.Approach(reasonColor[i], target[i], dt, 10) end
   local r, g, b = reasonColor[1], reasonColor[2], reasonColor[3]
   cueBlend = UI.Approach(cueBlend, cue and 1 or 0, dt, 10)
+  -- le mot « Burst » au centre : le regard y est déjà. Il laisse la place à un proc affiché là.
+  local word = stageCount > 0 and 0 or cueBlend
+  if word ~= cueShown then
+    cueShown = word
+    cueText:SetAlpha(word)
+  end
   -- Avec des charges, l'anneau s'efface en piste sombre : l'arc de leur fenêtre se lit dessus. Il revient
   -- en pleine lumière, en or, quand c'est le moment du burst.
   local track = State.stacks > 0 and ns.db.showCharges and not cue
@@ -507,7 +516,6 @@ end
 -- Un proc : une icône centrée. Deux ou trois : côte à côte, plus petites.
 local STAGE_SIZE = { 56, 40, 32 }     -- taille des icônes selon le nombre de procs actifs
 local STAGE_GAP = 6
-local stageCount = -1
 
 local function layoutStage()
   local n = 0
@@ -991,6 +999,15 @@ function Hud.Build()
   main.rank = UI.Text(main.over, 12, C.text, UI.FONT.body, "OUTLINE")
   main.rank:SetPoint("BOTTOMRIGHT", -6, 5)
 
+  -- mode suivi seul : le mot « Burst », au centre du cercle, quand c'est le moment
+  local cueFrame = CreateFrame("Frame", nil, hub)
+  cueFrame:SetAllPoints()
+  cueFrame:SetFrameLevel(level + 4)
+  cueText = UI.Text(cueFrame, 24, C.power, UI.FONT.title, "OUTLINE")
+  cueText:SetPoint("CENTER", 0, 0)
+  cueText:SetText(L["Burst"])
+  cueText:SetAlpha(0)
+
   for i = 1, 3 do
     local f = makeRound(root, REMIND, false)
     f.ring:SetVertexColor(C.manaLow[1], C.manaLow[2], C.manaLow[3], 1)
@@ -1058,7 +1075,7 @@ function Hud.Build()
     if not ok then ns.Report(err) end
   end)
   Hud.root, Hud.badges, Hud.main, Hud.reminders, Hud.crystals = root, badges, main, reminders, crystals
-  Hud.stage, Hud.cds = stage, cds
+  Hud.stage, Hud.cds, Hud.cueText = stage, cds, cueText
   return root
 end
 

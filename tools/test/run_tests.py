@@ -713,6 +713,8 @@ def main():
     played = lambda name: len([p for p in (s.M.soundFiles or {}).values() if p.endswith(name + ".ogg")])
     check(s.S.burst.on is True and gems["power"].cue is True and played("burst") == 1,
           "le moment du burst arrive : le son est joué une fois")
+    word = s.ns.Hud.cueText
+    check(word._text == "Burst" and word._alpha > 0.9, "et le mot « Burst » s'écrit au centre du cercle")
     s.M.advance(4)
     check(played("burst") == 1, "4 s plus tard : pas encore de rappel")
     s.cast(AP, 0.4)
@@ -723,6 +725,12 @@ def main():
     check(played("burst") == 2, "6 s sans rien lancer : l'onde et le son du burst sont redonnés")
     s.M.advance(3)
     check(played("burst") == 2, "une seule fois")
+    s.M.proc("Barrage de projectiles", 400588)
+    s.M.advance(0.5)
+    check(word._alpha == 0, "un proc arrive : le mot laisse le centre à son icône")
+    s.run('SlashCmdList.ARCANUM("conseil")')
+    s.M.advance(0.5)
+    check(word._alpha == 0, "mode conseil : pas de mot, le centre montre le sort")
     no_errors(s, "bientôt prêt, rappel")
 
     q = Game()
