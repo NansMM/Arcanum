@@ -721,7 +721,14 @@ def main():
     s.M.advance(4)
     check(s.S.burst.on is True and gems["pom"].cue is True and played("burst") == 1,
           "un gros temps de recharge lancé relance le délai pour les suivants")
-    check(word.key == "eureka" and word._alpha > 0.9, "au centre, l'icône passe au sort suivant : Eurêka")
+    check(word.key == "wrath" and word._alpha > 0.9,
+          "au centre, l'icône passe au Courroux : la macro de burst lance Eurêka et la Présence spirituelle avec lui")
+    s.run('Mock.ns.Set("burstOne", false)')
+    s.M.advance(0.3)
+    check(word.key == "eureka", "sans la macro (réglage coupé) : l'icône montre Eurêka, le premier à lancer")
+    s.run('Mock.ns.Set("burstOne", true)')
+    s.M.advance(0.3)
+    check(word.key == "wrath", "réglage rétabli : de nouveau le Courroux")
     s.M.advance(2.5)
     check(played("burst") == 2, "6 s sans rien lancer : l'onde et le son du burst sont redonnés")
     s.M.advance(3)

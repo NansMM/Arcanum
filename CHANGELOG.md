@@ -1,5 +1,9 @@
 # Historique d'Arcanum
 
+## 0.12.2 — 12 novembre 2026
+
+- Mode suivi seul : avec la macro de burst (réglage « Burst en une icône », actif par défaut), l'icône du centre montre directement le Courroux des Arcanes au lieu d'Eurêka puis de la Présence spirituelle : une seule touche fait tout. Le Pouvoir des Arcanes, qui n'est pas dans la macro, garde son icône.
+
 ## 0.12.1 — 12 novembre 2026
 
 - Mode suivi seul : au moment du burst, l'icône du sort à lancer s'affiche au centre du cercle, cerclée d'or. Le centre restait vide. Elle suit l'ordre du burst (Pouvoir des Arcanes, puis Eurêka, puis Présence spirituelle, puis le Courroux qui en profite) et s'efface si un proc s'y affiche.

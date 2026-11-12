@@ -586,13 +586,18 @@ end
 -- ------------------------------------------------------------------ burst au centre (mode suivi seul)
 -- Le sort de burst à lancer maintenant : le premier gros temps de recharge signalé, dans l'ordre où ils
 -- se lancent ; quand ils sont tous partis (Présence spirituelle active), le Courroux qui en profite.
+-- Avec « burst en une icône » (la macro ArcBurst : Eurêka + Présence spirituelle + Courroux), une seule
+-- touche fait tout : à la place d'Eurêka ou de la Présence spirituelle, on montre le Courroux, celle de
+-- la macro. La démonstration, elle, déroule les sorts un à un.
 local BURST_ORDER = { "power", "eureka", "pom", "berserking", "bloodfury" }
+local IN_MACRO = { eureka = true, pom = true }
 local function refreshCue()
   if advising or not State.burst.on then return end   -- (l'icône garde son image le temps de s'effacer)
   local key = "wrath"
   for _, k in ipairs(BURST_ORDER) do
     if State.burst[k] == true then key = k; break end
   end
+  if IN_MACRO[key] and ns.db.burstOne ~= false and not State.demo then key = "wrath" end
   if key ~= cueIcon.key then
     cueIcon.key = key
     cueIcon.icon:SetTexture(Spells.Icon(key) or 134400)
