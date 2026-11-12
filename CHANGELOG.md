@@ -1,5 +1,11 @@
 # Historique d'Arcanum
 
+## 0.11.0 — 12 novembre 2026
+
+- Un son quand c'est le moment du burst (la Témérité du guerrier, par défaut). Il retentit une fois quand le moment arrive, en mode suivi seul comme en mode conseil, et n'est pas rejoué si le signal s'éteint et revient dans les 8 secondes.
+- Les sons se choisissent : `/arc son 888` fait entendre un son du jeu, `/arc son burst 888` le choisit pour le moment du burst (`clear` ou `barrage` pour les procs), `/arc son burst` revient au son d'origine. Un identifiant que le jeu ne joue pas n'est pas retenu.
+- `/arc sons` fait entendre les trois sons et dit lesquels sont joués.
+
 ## 0.10.0 — 12 novembre 2026
 
 - Mode suivi seul : Arcanum signale le moment du burst. Quand les charges visées sont atteintes, que la Colère est prête et qu'aucun proc n'est à dépenser d'abord, les gemmes des temps de recharge prêts (Eurêka, Présence spirituelle…) grossissent et battent en or, l'anneau passe à l'or et une onde dorée part du cercle. Le réglage « Signaler le moment du burst » (ancien « Conseiller les gros temps de recharge ») le coupe.

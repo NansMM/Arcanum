@@ -1,11 +1,12 @@
 Sons personnalisés d'Arcanum
 ============================
 
-Dépose ici des fichiers .ogg pour remplacer le son joué à l'arrivée d'un proc :
+Arcanum joue des sons du jeu. Tu peux en choisir d'autres en jeu (/arc son burst 888), ou déposer ici
+tes propres fichiers .ogg :
 
-  barrage.ogg   Barrage de projectiles
   clear.ogg     Idées claires
-  heat.ogg      Échauffement prêt (variante Feu)
+  barrage.ogg   Barrage de projectiles
+  burst.ogg     le moment du burst
 
-Important : WoW ne voit les nouveaux fichiers qu'après un redémarrage complet du jeu
-(un simple /reload ne suffit pas). Sans fichier, Arcanum utilise un son du jeu.
+WoW ne voit les nouveaux fichiers qu'après un redémarrage complet du jeu (un /reload ne suffit pas), et
+une mise à jour d'Arcanum peut effacer ce dossier : garde une copie des tiens.

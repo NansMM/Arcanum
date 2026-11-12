@@ -213,8 +213,18 @@ function InCombatLockdown() return M.combat end
 function GetTime() return M.now end
 function GetBuildInfo() return "1.60.1", "70888", "Nov 10 2026", 16001 end
 function GetLocale() return "frFR" end
-function PlaySound(id, channel) M.sounds = (M.sounds or 0) + 1; return true end
-function PlaySoundFile(path, channel) return false end
+function PlaySound(id, channel)
+  M.sounds = (M.sounds or 0) + 1
+  M.lastKit = id
+  if id == 999999 then return nil end   -- identifiant inconnu : le jeu ne joue rien
+  return true
+end
+-- (le fichier « ne joue pas » : l'addon retombe alors sur PlaySound, que les tests comptent)
+function PlaySoundFile(path, channel)
+  M.soundFiles = M.soundFiles or {}
+  M.soundFiles[#M.soundFiles + 1] = path
+  return false
+end
 function geterrorhandler() return function(err) M.errors[#M.errors + 1] = tostring(err) end end
 function tinsert(t, v) table.insert(t, v) end
 UISpecialFrames = {}

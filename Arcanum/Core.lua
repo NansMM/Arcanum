@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.10.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.11.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -135,6 +135,7 @@ ns.DEFAULTS = {
   anticipate = false,     -- pendant une incantation, montrer déjà le sort d'après (sinon le conseil attend la fin)
   targetStacks = 2,       -- charges visées (2, 3 ou 4) : on monte jusque-là, puis Colère et sorts bon marché
   sound = true,
+  soundKit = {},          -- sons du jeu choisis à la place de ceux d'origine : [clear|barrage|burst] = identifiant
   flash = true,           -- petite onde autour du cercle quand un proc arrive
 }
 
@@ -177,6 +178,7 @@ function ns.InitDB()
   if db.fillerRank ~= 1 and db.fillerRank ~= "max" then db.fillerRank = 1 end
   if type(db.learn.dur) == "table" then db.learn.dur.blast = nil end   -- remplacé par abWindow (fenêtre de 18 s)
   db.spin = nil   -- 0.8 : plus de runes
+  if type(db.soundKit) ~= "table" then db.soundKit = {} end
   if saved < 2 then   -- 0.2 : HUD épuré, la barre de mana n'est plus affichée d'office
     db.showMana = false
   end

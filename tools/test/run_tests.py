@@ -614,6 +614,8 @@ def main():
     gems = {b.key: b for b in f.ns.Hud.cds.values()}
     check(f.S.burst.on is True and gems["power"].cue is True and gems["pom"].cue is False,
           "Pouvoir des Arcanes prêt : il se signale seul, tout de suite")
+    played = lambda name: len([p for p in (f.M.soundFiles or {}).values() if p.endswith(name + ".ogg")])
+    check(played("burst") == 1, "et le son du burst est joué une fois")
     f.cast(AP, 0.4)   # il est lancé : au tour d'Eurêka et de la Présence spirituelle
     check(f.S.burst.on is True and f.S.burst.eureka is True and f.S.burst.pom is True and gems["power"].cue is False,
           "charges visées atteintes, Colère prête : c'est le moment du burst")
@@ -629,6 +631,8 @@ def main():
     f.M.proc("Barrage de projectiles", 400588)
     f.M.advance(0.3)
     check(f.S.burst.on is False and gems["pom"].cue is False, "un Barrage passe avant : le signal de burst attend")
+    check(played("barrage") == 1 and played("burst") == 1,
+          "le Barrage a son propre son ; le burst n'a pas été rejoué quand le signal est revenu aussitôt")
     orb = f.run("for _, b in ipairs(Mock.ns.Hud.badges) do if b.def.key == 'barrage' then return b end end")
     big = f.run("for _, b in ipairs(Mock.ns.Hud.stage) do if b.def.key == 'barrage' then return b end end")
     check(f.S.barrage.active and big.on is True and big._shown is True and big._w == 56 and big.cd._cd[2] == 15,
@@ -666,6 +670,22 @@ def main():
     f.run('SlashCmdList.ARCANUM("demo")')
     f.M.advance(0.5)
     check(f.S.next is None and not any(b.on for b in f.ns.Hud.stage.values()), "fin de la démonstration : tout s'éteint")
+    before = len(list((f.M.soundFiles or {}).values()))
+    f.run('Mock.ns.Set("sound", false); SlashCmdList.ARCANUM("sons")')
+    heard = [p.split(chr(92))[-1] for p in list(f.M.soundFiles.values())[before:]]
+    check(heard == ["clear.ogg", "barrage.ogg", "burst.ogg"], "/arc sons fait entendre les trois sons, même sons coupés")
+    f.run('SlashCmdList.ARCANUM("son 4874")')
+    check(f.M.lastKit == 4874 and f.ns.db.soundKit.burst is None, "/arc son 4874 : écoute un son du jeu, sans rien changer")
+    f.run('SlashCmdList.ARCANUM("son burst 3071")')
+    check(f.ns.db.soundKit.burst == 3071 and f.M.lastKit == 3071, "/arc son burst 3071 : ce son du jeu est choisi pour le burst")
+    before = len(list(f.M.soundFiles.values()))
+    f.run('SlashCmdList.ARCANUM("sons")')
+    heard = [p.split(chr(92))[-1] for p in list(f.M.soundFiles.values())[before:]]
+    check(heard == ["clear.ogg", "barrage.ogg"] and f.M.lastKit == 3071, "le burst joue alors le son choisi, sans chercher de fichier")
+    f.run('SlashCmdList.ARCANUM("son barrage 999999")')
+    check(f.ns.db.soundKit.barrage is None, "identifiant inconnu du jeu : le choix n'est pas retenu")
+    f.run('SlashCmdList.ARCANUM("son burst")')
+    check(f.ns.db.soundKit.burst is None, "/arc son burst : retour au son d'origine")
     no_errors(f, "suivi seul")
 
     print("Fenêtre des charges presque finie")

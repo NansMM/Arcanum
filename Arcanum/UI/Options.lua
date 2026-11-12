@@ -183,7 +183,7 @@ function Options.Build()
   y = stepper(f, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y - 4)
 
   y = sectionTitle(f, L["Alertes"], y - 8)
-  y = toggle(f, L["Son à l'arrivée d'un proc"], "sound", y)
+  y = toggle(f, L["Sons (procs, moment du burst)"], "sound", y)
   y = toggle(f, L["Onde lumineuse"], "flash", y)
 
   y = sectionTitle(f, L["Cycle"], y - 8)
@@ -292,6 +292,43 @@ local function makeMacro()
 end
 Options.MakeMacro = makeMacro
 
+-- ------------------------------------------------------------------ sons
+-- /arc sons                  : écouter les trois sons
+-- /arc son 3071              : écouter un son du jeu, par son identifiant
+-- /arc son burst 3071        : jouer ce son du jeu au moment du burst (ou « clear », « barrage »)
+-- /arc son burst             : revenir au son d'origine
+local SOUND_KEYS = { clear = "clear", claires = "clear", barrage = "barrage", burst = "burst" }
+local SOUND_LABEL = { clear = "Idées claires", barrage = "Barrage de projectiles", burst = "Moment du burst" }
+
+local function soundCommand(arg)
+  local a, b = arg:match("^(%S*)%s*(%S*)")
+  if a == "" then
+    ns.Hud.TestSounds()
+    return
+  end
+  local id = tonumber(a)
+  if id then
+    ns.Print(string.format(ns.Hud.PlayKit(id) and L["son du jeu %d."] or L["le jeu ne joue rien pour le son %d."], id))
+    return
+  end
+  local key = SOUND_KEYS[a]
+  if not key then
+    ns.Print(L["/arc son 3071 pour écouter un son du jeu ; /arc son burst 3071 pour le choisir (clear, barrage ou burst) ; /arc son burst pour revenir au son d'origine."])
+    return
+  end
+  if type(ns.db.soundKit) ~= "table" then ns.db.soundKit = {} end
+  id = tonumber(b)
+  if not id or id <= 0 then
+    ns.db.soundKit[key] = nil
+    ns.Print(string.format(L["%s : son d'origine."], L[SOUND_LABEL[key]]))
+  elseif ns.Hud.PlayKit(id) then
+    ns.db.soundKit[key] = id
+    ns.Print(string.format(L["%s : son du jeu %d."], L[SOUND_LABEL[key]], id))
+  else
+    ns.Print(string.format(L["le jeu ne joue rien pour le son %d : choix inchangé."], id))
+  end
+end
+
 -- ------------------------------------------------------------------ commandes
 local HELP = {
   "/arc : ouvrir les réglages",
@@ -300,6 +337,8 @@ local HELP = {
   "/arc verrou : déplacer ou fixer le HUD",
   "/arc taille 120 : taille du HUD en pourcentage",
   "/arc aoe : mode multi-cibles (Choc de flammes, Explosion des Arcanes) ; il s'active aussi tout seul",
+  "/arc sons : écouter les trois sons (Idées claires, Barrage, moment du burst)",
+  "/arc son 3071 : écouter un son du jeu ; /arc son burst 3071 : le choisir (clear, barrage, burst)",
   "/arc macro : créer la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts",
   "/arc diag : rapport à copier (sorts reconnus, signaux lus en combat)",
   "/arc reset : remettre les réglages d'origine",
@@ -345,6 +384,8 @@ SlashCmdList.ARCANUM = function(msg)
     State.SetAoe(not State.aoe)
     ns.Print(State.aoe and L["mode multi-cibles activé jusqu'à la fin du combat (/arc aoe pour l'arrêter)."]
       or L["mode multi-cibles arrêté."])
+  elseif cmd == "sons" or cmd == "son" or cmd == "sound" then
+    soundCommand(arg)
   elseif cmd == "macro" then
     makeMacro()
   elseif cmd == "diag" or cmd == "rapport" then

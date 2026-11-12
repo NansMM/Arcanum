@@ -57,11 +57,15 @@ local PROCS = {
   { key = "clear", color = C.clear, angle = 290, spell = "blast" },
   { key = "heat", color = C.heat, angle = 270, spell = "pyro" },
 }
+-- Les sons sont des sons du jeu (« kit » : leur identifiant ; « alt » : celui joué si ce client ne connaît
+-- pas le premier). Le joueur peut en choisir d'autres (/arc son burst 888), ou déposer ses propres fichiers
+-- dans Sounds (« file »).
 local PROC_SOUND = {
-  barrage = { kit = 3175, file = "barrage", color = C.barrage },
-  clear = { kit = 18019, file = "clear", color = C.clear },
-  heat = { kit = 3175, file = "heat", color = C.heat },
+  barrage = { kit = 3175, file = "barrage", color = C.barrage },   -- ping de la mini-carte
+  clear = { kit = 18019, file = "clear", color = C.clear },        -- notification Battle.net
+  heat = { kit = 3175, file = "barrage", color = C.heat },
 }
+local BURST_SOUND = { kit = 3071, alt = 8960, file = "burst" }      -- Témérité, sinon l'appel de préparation
 
 local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve
 local crystals, cds, halos, badges, reminders, stage = {}, {}, {}, {}, {}, {}
@@ -707,10 +711,52 @@ local function makeMover()
 end
 
 -- ------------------------------------------------------------------ sons
-local function playSound(def)
-  if not ns.db.sound then return end
+-- Joue un son du jeu par son identifiant ; false si le jeu ne joue rien (identifiant inconnu de ce client).
+local function playKit(id)
+  local ok, played = pcall(PlaySound, id, "Master")
+  return ok and played and true or false
+end
+Hud.PlayKit = playKit
+
+-- Dans l'ordre : le son du jeu choisi par le joueur (/arc son burst 888) ; sinon son fichier déposé dans
+-- Sounds ; sinon le son d'origine, puis son remplaçant. Retourne l'identifiant joué, "fichier", ou nil.
+local function playSound(def, always)
+  if not (always or ns.db.sound) then return nil end
+  local chosen = type(ns.db.soundKit) == "table" and ns.db.soundKit[def.file]
+  if chosen and playKit(chosen) then return chosen end
   local ok, played = pcall(PlaySoundFile, "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\" .. def.file .. ".ogg", "Master")
-  if not (ok and played) then pcall(PlaySound, def.kit, "Master") end
+  if ok and played then return "fichier" end
+  if playKit(def.kit) then return def.kit end
+  if def.alt and playKit(def.alt) then return def.alt end
+  return nil
+end
+
+-- Le son du burst : une fois quand le moment arrive. Le signal peut s'éteindre et revenir aussitôt (un
+-- Barrage à dépenser d'abord) : on ne le rejoue pas avant 8 secondes.
+local burstSoundAt = -100
+local function burstSound()
+  local now = GetTime()
+  if State.demo or now - burstSoundAt < 8 then return end
+  burstSoundAt = now
+  playSound(BURST_SOUND)
+end
+
+-- /arc sons : fait entendre les trois sons, l'un après l'autre, et dit lequel est joué.
+function Hud.TestSounds()
+  local list = {
+    { PROC_SOUND.clear, L["Idées claires"] },
+    { PROC_SOUND.barrage, L["Barrage de projectiles"] },
+    { BURST_SOUND, L["Moment du burst"] },
+  }
+  for i, item in ipairs(list) do
+    local function play()
+      local what = playSound(item[1], true)
+      local text = what == "fichier" and L["ton fichier"] or what and string.format(L["son du jeu %d"], what)
+        or L["aucun son"]
+      ns.Print(item[2] .. " : " .. text .. ".")
+    end
+    if i > 1 and C_Timer and C_Timer.After then C_Timer.After((i - 1) * 1.5, play) else play() end
+  end
 end
 
 -- ------------------------------------------------------------------ boucle d'affichage
@@ -880,8 +926,11 @@ ns:On("SETTINGS", function()
 end)
 
 -- Le conseil change : l'icône bondit légèrement, pour que l'œil le remarque sans lire.
+local advisedBurst = false
 ns:On("NEXT", function(key, reason, old)
   if not root then return end
+  if reason == "burst" and not advisedBurst then burstSound() end   -- le conseil passe au burst
+  advisedBurst = reason == "burst"
   if key ~= old or State.interrupt then main.pop = 1 end
   if State.interrupt and ns.db.flash then spawnHalo(C.clear, 2 * R, 2 * R + 80, 0.45) end
 end)
@@ -890,6 +939,7 @@ end)
 ns:On("BURST", function(on)
   if not root or not on or advising then return end
   if ns.db.flash then spawnHalo(C.power, 2 * R, 2 * R + 70, 0.5) end
+  burstSound()
 end)
 
 ns:On("STACKS", function(n, old)
