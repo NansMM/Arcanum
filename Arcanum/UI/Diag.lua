@@ -149,8 +149,11 @@ function Diag.Report()
   add("")
   add("VÉRIFICATIONS EN JEU (ce que le jeu laisse lire en combat)")
   local checks = l.checks or {}
-  add("  mana du joueur : %s (s'il est secret, l'Évocation n'est conseillée que quand la Déflagration devient impayable)",
-    checks.mana or "pas encore observé")
+  add("  mana du joueur : %s", checks.mana or "pas encore observé")
+  local probe = State.manaProbe
+  add("  seuil des 15 %% de mana quand il est secret : %s", probe
+    and string.format("estimé avec le sort %d (coût %s) : s'il devient impayable, le mana est bas", probe.id, show(probe.cost))
+    or "pas encore de sort témoin (relevé hors combat)")
   add("  « sort utilisable / mana insuffisant » : %s", checks.usable or "pas encore observé")
   add("  temps de recharge des sorts : %s", checks.cooldown or "pas encore observé")
   add("  Présence spirituelle après des Projectiles : %s", checks.pomChannel or "pas encore observé")

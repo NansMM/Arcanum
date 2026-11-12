@@ -256,7 +256,7 @@ def main():
     g.M.stopCast()
     g.M.advance(0.2)
     check(g.next() == ("blast", "arcane"), "incantation interrompue : retour à la Déflagration")
-    g.run("Mock.mana = 320")
+    g.run("Mock.mana = 350")
     g.M.advance(0.2)
     check(g.next() == ("wrath", "arcane"), "Déflagration trop chère : Courroux, moins cher")
     g.run("Mock.mana = 200")
@@ -542,6 +542,39 @@ def main():
     check(not i.S.interrupt, "réglage coupé : jamais d'interruption conseillée")
     i.M.stopCast()
     no_errors(i, "interruption")
+
+    print("Mana caché en combat : estimé par les sorts abordables")
+    m = Game()
+    m.run('Mock.ns.Set("adviseBurst", false); Mock.setCooldown(12042, 180)')
+    m.M.advance(0.3)
+    m.fight()
+    m.cast(WRATH)
+    check(m.next() == ("blast", "arcane"), "mana plein : Déflagration")
+    m.run("Mock.mana = 300")                                 # sous le coût du Choc de flammes (330), soit moins de 15 % de 8000
+    m.M.advance(0.2)
+    check(m.S.manaProbe is not None and m.S.manaProbe.cost == 330, "sort témoin : le plus cher sous 15 % du mana maximum")
+    check(m.next() == ("gem", "mana"), "mana bas, bien que la Déflagration reste payable : gemme de mana")
+    m.run("Mock.items[8008] = nil")
+    m.M.advance(0.2)
+    check(m.next() == ("evoc", "mana"), "plus de gemme : Évocation")
+    m.run("Mock.mana = 5000")
+    m.M.advance(0.2)
+    check(m.next() == ("blast", "arcane"), "mana revenu : Déflagration")
+    no_errors(m, "mana estimé")
+
+    print("Présence spirituelle lancée avant le combat")
+    pm = Game()
+    pm.run('Mock.ns.Set("burstOne", false); Mock.setCooldown(12042, 180)')
+    pm.M.target = True
+    pm.M.advance(0.3)
+    pm.cast(POM)                                             # hors combat : l'aura est lue
+    check(pm.S.pom.active and pm.S.pom.source == "aura", "Présence spirituelle lue sur son aura")
+    pm.cast(WRATH)                                           # elle part avec le Courroux…
+    pm.M.setCombat(True)                                     # …et le combat commence : l'aura n'est plus lisible
+    pm.M.advance(0.3)
+    pm.cast(AB)
+    check(not pm.S.pom.active, "en combat, le sort lancé termine la Présence spirituelle (elle ne reste pas « active »)")
+    no_errors(pm, "Présence spirituelle")
 
     print("Fenêtre des charges presque finie")
     w = Game()

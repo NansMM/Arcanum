@@ -1,5 +1,12 @@
 # Historique d'Arcanum
 
+## 0.8.1 — 12 novembre 2026
+
+D'après un rapport de combat (`/arc diag`).
+
+- Mana : le jeu le cache en combat, ce qui rendait la règle « gemme puis Évocation sous 15 % de mana » inopérante. Arcanum l'estime maintenant avec ce que le jeu dit encore : si un sort qui coûte moins de 15 % de ton mana maximum devient impayable, tu es sous 15 %.
+- Présence spirituelle lancée avant le combat restait notée « active » pendant tout le combat, ce qui pouvait faire conseiller le Courroux à tort. Le premier sort à incantation la termine.
+
 ## 0.8.0 — 12 novembre 2026
 
 Review design : chaque élément a dû justifier sa place.

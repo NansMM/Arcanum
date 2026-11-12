@@ -587,8 +587,12 @@ local function onCast(spellID)
 
   aoeOnCast(key, now)
   if key == "missiles" and State.pom.active and not pomCheck then pomCheck = { at = now } end
-  if key == "missiles" and State.barrage.active and State.barrage.source ~= "aura"
-    and State.barrage.source ~= "gestionnaire" then
+  -- (un proc lu sur son aura avant le combat n'est plus vérifiable une fois les auras cachées : le sort
+  -- lancé le termine alors, comme pour un proc déduit)
+  local function inferred(p)
+    return p.source ~= "gestionnaire" and (State.restricted or p.source ~= "aura")
+  end
+  if key == "missiles" and State.barrage.active and inferred(State.barrage) then
     setProc(State.barrage, "barrage", false)
   end
   if key == "eureka" then
@@ -599,8 +603,7 @@ local function onCast(spellID)
   elseif key == "pom" then
     setProc(State.pom, "pom", true, "sorts", nil, nil, now)
     State.pom.expire = nil
-  elseif CAST_TIME[key] and State.pom.active and State.pom.source ~= "aura"
-    and State.pom.source ~= "gestionnaire" then
+  elseif CAST_TIME[key] and State.pom.active and inferred(State.pom) then
     setProc(State.pom, "pom", false)
   end
   State.dirty = true
@@ -749,13 +752,53 @@ local function affordable(key, id)
   return noMana ~= true
 end
 
--- true sous 15 % de mana, false au-dessus, nil si le jeu cache le mana.
+-- Le jeu cache le mana en combat, mais il dit, pour chaque sort, si le mana manque pour le lancer. Avec
+-- le coût de quelques sorts (relevé hors combat), on sait donc si le mana est passé sous un seuil :
+-- « je ne peux plus lancer un sort qui coûte moins de 15 % de mon mana » veut dire « je suis sous 15 % ».
+local LADDER_KEYS = { "blizzard", "flamestrike", "intellect", "icearmor", "frostarmor", "magearmor", "cone",
+  "explosion", "fireblast", "wrath", "fireball", "frostbolt", "poly", "scorch" }
+local ladder, ladderAt = {}, -100   -- { id, cost }, du moins cher au plus cher
+ns:On("SPELLS", function() ladderAt = -100 end)
+
+local function buildLadder(now)
+  if now - ladderAt < 30 and #ladder > 0 then return end
+  -- seulement quand les coûts annoncés sont ceux de base : hors combat, sans proc ni bonus de coût
+  if State.restricted or State.clear.active or State.eureka.active or State.power.active then return end
+  ladderAt = now
+  for i = #ladder, 1, -1 do ladder[i] = nil end
+  local seen = {}
+  for _, key in ipairs(LADDER_KEYS) do
+    if Spells.Known(key) then
+      for _, id in ipairs({ Spells.Best(key), Spells.Lowest(key) }) do
+        local c = not seen[id] and Spells.CostOf(id)
+        if c and c > 0 then
+          seen[id] = true
+          ladder[#ladder + 1] = { id = id, cost = c }
+        end
+      end
+    end
+  end
+  table.sort(ladder, function(a, b) return a.cost < b.cost end)
+end
+
+-- true sous 15 % de mana, false au-dessus, nil si on ne peut pas le savoir.
 local function manaLow()
-  if State.demo or not (UnitPower and UnitPowerMax) then return nil end
-  local cur = S.Num((S.Call(UnitPower, "player", 0)))
+  if State.demo or not UnitPowerMax then return nil end
   local top = S.Num((S.Call(UnitPowerMax, "player", 0)))
-  if cur and top and top > 0 then return cur / top < 0.15 end
-  return nil
+  if not top or top <= 0 then return nil end
+  local cur = UnitPower and S.Num((S.Call(UnitPower, "player", 0)))
+  if cur then return cur / top < 0.15 end
+  -- mana secret : on interroge le sort le plus cher qui coûte moins de 15 % du mana maximum
+  if State.clear.active or not (C_Spell and C_Spell.IsSpellUsable) then return nil end   -- (tout est gratuit)
+  local limit, probe = 0.15 * top, nil
+  for i = 1, #ladder do
+    if ladder[i].cost <= limit then probe = ladder[i] else break end
+  end
+  State.manaProbe = probe
+  if not probe then return nil end
+  local ok, usable, noMana = pcall(C_Spell.IsSpellUsable, probe.id)
+  if not ok or S.Is(usable) or S.Is(noMana) then return nil end
+  return noMana == true
 end
 
 -- Le sort en cours d'incantation ou de canalisation : clé, début, fin (secondes). nil si aucun.
@@ -1119,6 +1162,7 @@ function State.Update()
     updateHeat(now)
     updateBlast(now)
     updateAoe(now)
+    buildLadder(now)
     updateReminders(now)
     updateChecks(now)
   end
