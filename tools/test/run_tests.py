@@ -552,6 +552,17 @@ def main():
     i.M.advance(0.3)
     check(not i.S.interrupt, "réglage coupé : jamais d'interruption conseillée")
     i.M.stopCast()
+    i.run('Mock.ns.Set("cutForClear", true); Mock.ns.Set("anticipate", true)')
+    i.M.advance(0.2)
+    i.M.startCast(FROSTBOLT_1, 1.5)
+    i.M.proc("Idées claires", 12536)
+    i.M.advance(0.3)
+    check(i.S.interrupt is True and i.next() == ("blast", "clear") and i.ns.Hud.main.alertOn is True,
+          "avec « Anticiper » aussi : le signal d'interruption s'affiche")
+    i.M.advance(0.9)                                         # il reste 0,3 s d'incantation
+    check(i.S.interrupt is False and i.next() != ("blast", "clear"),
+          "incantation presque finie : l'anticipation sait que ce sort va dépenser les Idées claires")
+    i.M.stopCast()
     no_errors(i, "interruption")
 
     print("Mana caché en combat : estimé par les sorts abordables")

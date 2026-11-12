@@ -923,7 +923,11 @@ local function computeNext()
     elseif cast.key == "missiles" then
       barrage = false
     end
-    if CAST_TIME[cast.key] then pomActive = false end
+    if CAST_TIME[cast.key] then
+      pomActive = false
+      -- un sort de dégâts en cours dépensera les Idées claires en partant (pas la Métamorphose)
+      if cast.key ~= "poly" then clear = false end
+    end
   end
   local fighting = State.demo or State.combat or State.hostile
   local db = ns.db or ns.DEFAULTS
