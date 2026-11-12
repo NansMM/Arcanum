@@ -713,24 +713,25 @@ def main():
     played = lambda name: len([p for p in (s.M.soundFiles or {}).values() if p.endswith(name + ".ogg")])
     check(s.S.burst.on is True and gems["power"].cue is True and played("burst") == 1,
           "le moment du burst arrive : le son est joué une fois")
-    word = s.ns.Hud.cueText
-    check(word._text == "Burst" and word._alpha > 0.9, "et le mot « Burst » s'écrit au centre du cercle")
+    word = s.ns.Hud.cueIcon
+    check(word.key == "power" and word._alpha > 0.9, "et l'icône du Pouvoir des Arcanes s'affiche au centre du cercle")
     s.M.advance(4)
     check(played("burst") == 1, "4 s plus tard : pas encore de rappel")
     s.cast(AP, 0.4)
     s.M.advance(4)
     check(s.S.burst.on is True and gems["pom"].cue is True and played("burst") == 1,
           "un gros temps de recharge lancé relance le délai pour les suivants")
+    check(word.key == "eureka" and word._alpha > 0.9, "au centre, l'icône passe au sort suivant : Eurêka")
     s.M.advance(2.5)
     check(played("burst") == 2, "6 s sans rien lancer : l'onde et le son du burst sont redonnés")
     s.M.advance(3)
     check(played("burst") == 2, "une seule fois")
     s.M.proc("Barrage de projectiles", 400588)
     s.M.advance(0.5)
-    check(word._alpha == 0, "un proc arrive : le mot laisse le centre à son icône")
+    check(word._alpha == 0, "un proc arrive : l'icône de burst laisse le centre à celle du proc")
     s.run('SlashCmdList.ARCANUM("conseil")')
     s.M.advance(0.5)
-    check(word._alpha == 0, "mode conseil : pas de mot, le centre montre le sort")
+    check(word._alpha == 0, "mode conseil : pas d'icône de burst en plus, le centre montre le sort conseillé")
     no_errors(s, "bientôt prêt, rappel")
 
     q = Game()

@@ -2,7 +2,7 @@
 
 ## 0.12.1 — 12 novembre 2026
 
-- Mode suivi seul : au moment du burst, le mot « Burst » s'écrit en or au centre du cercle, qui restait vide. Il s'efface si un proc s'y affiche.
+- Mode suivi seul : au moment du burst, l'icône du sort à lancer s'affiche au centre du cercle, cerclée d'or. Le centre restait vide. Elle suit l'ordre du burst (Pouvoir des Arcanes, puis Eurêka, puis Présence spirituelle, puis le Courroux qui en profite) et s'efface si un proc s'y affiche.
 
 ## 0.12.0 — 12 novembre 2026
 

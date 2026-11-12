@@ -189,8 +189,8 @@ def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), stage
         for pcol, left in stage:
             round_icon(x, cy, size, pcol, pcol, glow=0.40, cooldown=1 - left)
             x += size + 6
-        if cue and not stage:   # le mot « Burst », en or (aplat)
-            blit(None, cx, cy, 52, 13, C["power"], 0.95)
+        if cue and not stage:   # l'icône du sort de burst à lancer, cerclée d'or
+            round_icon(cx, cy, 56, C["power"], C["power"], glow=0.50)
     # un cristal par charge visée (un de plus quand le jeu en offre une), au-dessus du cercle
     shown = min(4, max(target, stacks))
     for i in range(shown):

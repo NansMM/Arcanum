@@ -9,8 +9,8 @@
 --   * en bas : un orbe de couleur par proc actif, avec un voile qui grandit à mesure qu'il s'épuise ;
 --   * sous le cercle, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme).
 -- En mode suivi seul (sans conseil), le centre montre à la place les procs actifs, en grandes icônes ;
--- et quand c'est le moment du burst, le mot « Burst » s'y écrit en or, les gemmes des temps de recharge
--- prêts grossissent et battent en or.
+-- et quand c'est le moment du burst, l'icône du sort à lancer s'y affiche, cerclée d'or, pendant que les
+-- gemmes des temps de recharge prêts grossissent et battent en or.
 -- Une gemme dont la recharge finit dans quelques secondes prend un bord doré et un chiffre.
 -- En mode multi-cibles le cercle passe à l'orange ; l'icône rougit quand la cible est hors de portée.
 -- Pendant une incantation, le prochain sort ne change pas : il se découvre à mesure que le sort part.
@@ -88,11 +88,11 @@ local SOUNDS = {
   { 1642, "Intelligence des Arcanes" },
 }
 
-local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve, cueText
+local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve, cueIcon
 local crystals, cds, halos, badges, reminders, stage = {}, {}, {}, {}, {}, {}
 local rootAlpha, hotBlend = 0, 0
 local ringAlpha, cueBlend = 0.85, 0                    -- opacité de l'anneau ; signal de burst (0 à 1)
-local cueShown = -1                                    -- dernière opacité donnée au mot « Burst »
+local cueShown = -1                                    -- dernière opacité donnée à l'icône de burst du centre
 local stageCount = -1                                  -- nombre de procs affichés au centre (mode suivi seul)
 local advising = true                                  -- le centre conseille-t-il le prochain sort ?
 local shownAlpha = -1                                  -- dernière opacité donnée au cadre
@@ -387,11 +387,15 @@ local function animateSeal(dt, now)
   for i = 1, 3 do reasonColor[i] = UI.Approach(reasonColor[i], target[i], dt, 10) end
   local r, g, b = reasonColor[1], reasonColor[2], reasonColor[3]
   cueBlend = UI.Approach(cueBlend, cue and 1 or 0, dt, 10)
-  -- le mot « Burst » au centre : le regard y est déjà. Il laisse la place à un proc affiché là.
-  local word = stageCount > 0 and 0 or cueBlend
-  if word ~= cueShown then
-    cueShown = word
-    cueText:SetAlpha(word)
+  -- l'icône du sort de burst à lancer, au centre : le regard y est déjà. Elle laisse la place à un proc
+  -- affiché là.
+  local shown = stageCount > 0 and 0 or cueBlend
+  if shown ~= cueShown then
+    cueShown = shown
+    cueIcon:SetAlpha(shown)
+  end
+  if shown > 0 then
+    cueIcon.glow:SetVertexColor(C.power[1], C.power[2], C.power[3], 0.35 + 0.25 * (0.5 + 0.5 * sin(now * 5.0)))
   end
   -- Avec des charges, l'anneau s'efface en piste sombre : l'arc de leur fenêtre se lit dessus. Il revient
   -- en pleine lumière, en or, quand c'est le moment du burst.
@@ -576,6 +580,22 @@ local function animateStage(dt, now)
         f.glow:SetSize(s, s)
       end
     end
+  end
+end
+
+-- ------------------------------------------------------------------ burst au centre (mode suivi seul)
+-- Le sort de burst à lancer maintenant : le premier gros temps de recharge signalé, dans l'ordre où ils
+-- se lancent ; quand ils sont tous partis (Présence spirituelle active), le Courroux qui en profite.
+local BURST_ORDER = { "power", "eureka", "pom", "berserking", "bloodfury" }
+local function refreshCue()
+  if advising or not State.burst.on then return end   -- (l'icône garde son image le temps de s'effacer)
+  local key = "wrath"
+  for _, k in ipairs(BURST_ORDER) do
+    if State.burst[k] == true then key = k; break end
+  end
+  if key ~= cueIcon.key then
+    cueIcon.key = key
+    cueIcon.icon:SetTexture(Spells.Icon(key) or 134400)
   end
 end
 
@@ -956,6 +976,7 @@ function Hud.Refresh()
   refreshTimer()
   refreshBadges()
   refreshStage()
+  refreshCue()
   refreshReminders()
   refreshCooldowns(now)
   refreshMana()
@@ -999,14 +1020,13 @@ function Hud.Build()
   main.rank = UI.Text(main.over, 12, C.text, UI.FONT.body, "OUTLINE")
   main.rank:SetPoint("BOTTOMRIGHT", -6, 5)
 
-  -- mode suivi seul : le mot « Burst », au centre du cercle, quand c'est le moment
-  local cueFrame = CreateFrame("Frame", nil, hub)
-  cueFrame:SetAllPoints()
-  cueFrame:SetFrameLevel(level + 4)
-  cueText = UI.Text(cueFrame, 24, C.power, UI.FONT.title, "OUTLINE")
-  cueText:SetPoint("CENTER", 0, 0)
-  cueText:SetText(L["Burst"])
-  cueText:SetAlpha(0)
+  -- mode suivi seul : l'icône du sort de burst à lancer, au centre du cercle, quand c'est le moment
+  cueIcon = makeRound(hub, STAGE_SIZE[1], false)
+  cueIcon:SetPoint("CENTER", hub, "CENTER", 0, 0)
+  cueIcon:SetFrameLevel(level + 4)
+  cueIcon.icon:SetTexture(134400)
+  cueIcon.ring:SetVertexColor(C.power[1], C.power[2], C.power[3], 1)
+  cueIcon:SetAlpha(0)
 
   for i = 1, 3 do
     local f = makeRound(root, REMIND, false)
@@ -1075,7 +1095,7 @@ function Hud.Build()
     if not ok then ns.Report(err) end
   end)
   Hud.root, Hud.badges, Hud.main, Hud.reminders, Hud.crystals = root, badges, main, reminders, crystals
-  Hud.stage, Hud.cds, Hud.cueText = stage, cds, cueText
+  Hud.stage, Hud.cds, Hud.cueIcon = stage, cds, cueIcon
   return root
 end
 
