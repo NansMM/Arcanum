@@ -610,8 +610,25 @@ def main():
     f.cast(AB)
     check(f.S.stacks == 2 and len([c for c in f.ns.Hud.crystals.values() if c._shown]) == 2,
           "les charges restent suivies et affichées")
+    f.M.advance(0.4)
+    gems = {b.key: b for b in f.ns.Hud.cds.values()}
+    check(f.S.burst.on is True and gems["power"].cue is True and gems["pom"].cue is False,
+          "Pouvoir des Arcanes prêt : il se signale seul, tout de suite")
+    f.cast(AP, 0.4)   # il est lancé : au tour d'Eurêka et de la Présence spirituelle
+    check(f.S.burst.on is True and f.S.burst.eureka is True and f.S.burst.pom is True and gems["power"].cue is False,
+          "charges visées atteintes, Colère prête : c'est le moment du burst")
+    check(gems["pom"].cue is True and gems["eureka"].cue is True and gems["pom"]._w > 33,
+          "les gemmes de Présence spirituelle et d'Eurêka grossissent et battent")
+    f.run('Mock.ns.Set("adviseBurst", false)')
+    f.M.advance(0.4)
+    check(f.S.burst.on is False and gems["pom"].cue is False and gems["pom"]._w < 29,
+          "réglage coupé : plus de signal, les gemmes reprennent leur taille")
+    f.run('Mock.ns.Set("adviseBurst", true)')
+    f.M.advance(0.3)
+    check(f.S.burst.on is True, "réglage rétabli : le signal revient")
     f.M.proc("Barrage de projectiles", 400588)
     f.M.advance(0.3)
+    check(f.S.burst.on is False and gems["pom"].cue is False, "un Barrage passe avant : le signal de burst attend")
     orb = f.run("for _, b in ipairs(Mock.ns.Hud.badges) do if b.def.key == 'barrage' then return b end end")
     big = f.run("for _, b in ipairs(Mock.ns.Hud.stage) do if b.def.key == 'barrage' then return b end end")
     check(f.S.barrage.active and big.on is True and big._shown is True and big._w == 56 and big.cd._cd[2] == 15,
@@ -630,18 +647,22 @@ def main():
     check(f.S.next is not None and f.ns.Hud.main._shown is True, "/arc conseil de nouveau : le conseil revient")
     check(not any(b.on for b in f.ns.Hud.stage.values()) and orb.on is True,
           "mode conseil : les procs retournent en orbes, en bas de l'anneau")
+    check(f.S.burst.on is False and not any(b.cue for b in f.ns.Hud.cds.values()),
+          "mode conseil : le burst est dit au centre, pas sur les gemmes")
     f.M.setCombat(False)
     f.run('Mock.auras = {}; Mock.fire("UNIT_AURA", "player", {})')
     f.run('Mock.ns.Set("showNext", false); SlashCmdList.ARCANUM("demo")')
-    most, advised, charges = 0, False, set()
+    most, advised, charges, cued = 0, False, set(), set()
     for _ in range(240):
         f.M.advance(0.05)
+        cued.update(b.key for b in f.ns.Hud.cds.values() if b.cue)
         most = max(most, len([b for b in f.ns.Hud.stage.values() if b.on]))
         advised = advised or f.S.next is not None or f.ns.Hud.main._shown is True
         charges.add(f.S.stacks)
     check(not advised, "démonstration en mode suivi seul : aucun conseil, pas d'icône de sort")
     check(most == 2, "elle montre les procs au centre, jusqu'à deux côte à côte")
     check(charges == {0, 1, 2, 3, 4}, "et les charges qui montent")
+    check(cued == {"eureka", "pom"}, "puis le moment du burst, sur les gemmes d'Eurêka et de Présence spirituelle")
     f.run('SlashCmdList.ARCANUM("demo")')
     f.M.advance(0.5)
     check(f.S.next is None and not any(b.on for b in f.ns.Hud.stage.values()), "fin de la démonstration : tout s'éteint")

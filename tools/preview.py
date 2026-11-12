@@ -15,11 +15,11 @@ MEDIA = os.path.join(ROOT, "Arcanum", "Media")
 OUT = os.path.join(ROOT, "docs", "apercu.png")
 
 K = 2.4                      # échelle du rendu
-W, H = int(644 * K), int(216 * K)
+W, H = int(848 * K), int(216 * K)
 
 C = dict(
     ink=(0.030, 0.024, 0.066), socket=(0.130, 0.108, 0.240), edge=(0.470, 0.380, 0.860),
-    arcane=(0.690, 0.486, 1.000), arcaneHi=(0.900, 0.820, 1.000), hot=(1.000, 0.560, 0.930),
+    arcane=(0.690, 0.486, 1.000), arcaneHi=(0.900, 0.820, 1.000), hot=(0.870, 0.790, 1.000),
     barrage=(1.000, 0.450, 0.800), clear=(0.400, 0.860, 1.000), power=(1.000, 0.800, 0.400),
     pom=(0.560, 1.000, 0.840), heat=(1.000, 0.560, 0.240), mana=(0.340, 0.560, 1.000),
     text=(0.950, 0.930, 1.000), white=(1, 1, 1),
@@ -162,21 +162,22 @@ def round_icon(cx, cy, size, tint, ring, glow=0.0, cooldown=0.0):
     blit("circle-edge", cx, cy, size + 4, size + 4, ring, 0.95)
 
 
-def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), stage=None):
+def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), stage=None, cue=False):
     """Le cercle tel que le dispose UI/Hud.lua."""
     R = 62
     S = R / 0.465
     urgent = reason is not C["arcane"]
     full = stacks >= target
     col = C["hot"] if full else C["arcane"]
-    line = mix(C["edge"], reason, 0.55)
+    # (anneau : piste sombre sous l'arc de la fenêtre ; en or quand c'est le moment du burst)
+    line = mix(C["edge"], C["power"], 0.95) if cue else mix(C["edge"], reason, 0.55)
 
     def on_ring(angle, radius=R):
         a = math.radians(angle)
         return cx + radius * math.cos(a), cy - radius * math.sin(a)
 
     blit("circle", cx, cy, 2 * R + 6, 2 * R + 6, C["ink"], 0.34)
-    blit("ring", cx, cy, S, S, line, 0.85)
+    blit("ring", cx, cy, S, S, line, 0.85 if (cue or stacks == 0) else 0.32)
     if stacks > 0:
         blit("arc", cx, cy, S, S, col, 1, sweep=window)
     if stage is None:
@@ -193,18 +194,20 @@ def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), stage
     for i in range(shown):
         x, y = on_ring(90 + ((shown + 1) / 2 - (i + 1)) * 22, R + 20)
         on = i < stacks
-        pulse = (0.5 + 0.5 * math.sin(i * 0.9)) if full else 0
         if on:
-            blit("glow", x, y, 22 * 3 * (1 + 0.1 * pulse), 28 * 2.6 * (1 + 0.1 * pulse), col, 0.40 + 0.32 * pulse, add=True)
+            blit("glow", x, y, 22 * 3, 28 * 2.6, col, 0.65 if full else 0.40, add=True)
         blit("diamond", x, y, 22, 28, C["socket"], 0.95)
         if on:
             blit("diamond", x, y, 22, 28, col, 1)
-            blit("spark", x - 4, y - 6, 18, 18, C["white"], 0.5 + 0.45 * pulse, add=True)
+            blit("spark", x - 4, y - 6, 18, 18, C["white"], 0.85 if full else 0.5, add=True)
         blit("diamond-edge", x, y, 22, 28, C["arcaneHi"] if on else C["edge"], 1 if on else 0.45)
     # gros temps de recharge, sertis à gauche et à droite
     for angle, (ctint, active, cooldown) in zip((200, 340), cooldowns):
         x, y = on_ring(angle)
-        round_icon(x, y, 28, ctint, active or C["edge"], glow=0.7 if active else 0.0, cooldown=cooldown)
+        if cue and cooldown == 0:   # c'est le moment : la gemme grossit et bat en or
+            round_icon(x, y, 35, ctint, C["power"], glow=0.85, cooldown=0)
+        else:
+            round_icon(x, y, 28, ctint, active or C["edge"], glow=0.7 if active else 0.0, cooldown=cooldown)
     # orbes de proc, en bas : la couleur seule
     for angle, (pcol, left) in zip((250, 290), procs):
         if pcol:
@@ -228,6 +231,10 @@ def main():
     hud(526, 116, 2, 2, C["arcane"], C["arcane"], 0.55,
         [(C["pom"], None, 0.0), (C["power"], None, 0.4)],
         stage=((C["barrage"], 0.8), (C["clear"], 0.45)))
+    # mode suivi seul : charges visées atteintes, c'est le moment du burst
+    hud(730, 116, 2, 2, C["arcane"], C["arcane"], 0.70,
+        [(C["pom"], None, 0.0), (C["power"], None, 0.0)],
+        stage=(), cue=True)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     raw = bytearray()

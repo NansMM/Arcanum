@@ -6,10 +6,10 @@ Arcanum affiche sous ton personnage un cercle, avec au centre le prochain sort �
 
 ![Aperçu du HUD d'Arcanum](docs/apercu.png)
 
-*Aperçu composé avec les textures de l'addon (les icônes de sorts sont remplacées par des aplats). De gauche à droite : le cycle normal, un Barrage de projectiles, et le mode suivi seul avec deux procs au centre. En jeu : `/arc demo`.*
+*Aperçu composé avec les textures de l'addon (les icônes de sorts sont remplacées par des aplats). De gauche à droite : le cycle normal, un Barrage de projectiles, puis le mode suivi seul avec deux procs au centre, et au moment du burst. En jeu : `/arc demo`.*
 
 - **Au centre** : le sort à lancer ensuite. Sa couleur, reprise par l'anneau, dit pourquoi : violet pour le cycle normal, rose pour un Barrage de projectiles, bleu clair pour des Idées claires, or pour les gros dégâts (Eureka, Présence spirituelle, Courroux instantané), bleu pour le mana (gemme, Évocation, sort moins cher, baguette), orange en multi-cibles. Pendant une incantation il ne change pas : un voile se retire à mesure que le sort part, puis il passe au suivant (une option permet au contraire d'anticiper).
-- **Au-dessus du cercle, les cristaux** : un par charge de Déflagration des Arcanes visée (deux par défaut). Ils pulsent quand la cible est atteinte ; un cristal de plus apparaît quand le jeu t'offre une charge.
+- **Au-dessus du cercle, les cristaux** : un par charge de Déflagration des Arcanes visée (deux par défaut). Ils s'éclaircissent quand la cible est atteinte ; un cristal de plus apparaît quand le jeu t'offre une charge.
 - **L'arc lumineux autour de l'anneau** : les 18 secondes de la fenêtre des charges, qui se vide.
 - **À gauche et à droite, sertis dans l'anneau** : tes gros temps de recharge, avec leur icône (Présence spirituelle, Eureka du gnome, Pouvoir des Arcanes, Berserker ou Fureur sanguinaire, selon ce que ton personnage connaît).
 - **En bas de l'anneau** : un orbe de couleur par proc actif, rose pour le Barrage de projectiles, bleu clair pour les Idées claires, avec un voile qui grandit à mesure que le proc s'épuise.
@@ -18,6 +18,8 @@ Arcanum affiche sous ton personnage un cercle, avec au centre le prochain sort �
 - En option : une barre de mana.
 
 **Mode suivi seul.** Si tu préfères décider toi-même, le réglage « Prochain sort conseillé » (ou `/arc conseil`) retire le conseil. Le centre du cercle devient alors la scène des procs : chaque proc actif s'y affiche en grande icône (celle du sort qu'il améliore), cerclée de sa couleur, avec le temps restant. Les charges, leur fenêtre et les gros temps de recharge restent à leur place.
+
+Dans ce mode, Arcanum te dit quand même **quand claquer ton burst**, pour ne pas l'oublier : au bon moment (charges visées atteintes, Colère prête, aucun proc à dépenser d'abord), les gemmes des temps de recharge prêts grossissent et battent en or, l'anneau passe à l'or et une onde dorée part du cercle. Une gemme a donc trois états : grisée (en recharge), nette (prête, mais ce n'est pas le moment), dorée et battante (maintenant). Le réglage « Signaler le moment du burst » le coupe.
 
 L'ordre conseillé part du guide Method (patch 1.60.1), adapté à ce qui se mesure en jeu : chaque charge double le coût de la Déflagration suivante, et rien ne les consomme pendant leurs 18 secondes. Arcanum vise donc un nombre de charges (**2 par défaut**, réglable à 3 ou 4 dans `/arc`), puis en profite avec des sorts qui ne coûtent pas plus cher :
 
@@ -50,7 +52,7 @@ Il ne se réveille que sur un mage. Après une mise à jour qui ajoute des textu
 | Commande | Effet |
 |---|---|
 | `/arc` | Réglages (taille, ce qui s'affiche, sons, charges visées, rang du remplissage, gros temps de recharge) |
-| `/arc demo` | Le HUD conseille un cycle complet, sans combattre (marche sur toute classe) |
+| `/arc demo` | Le HUD joue un cycle complet dans le mode choisi, sans combattre (marche sur toute classe) |
 | `/arc verrou` | Déplacer le HUD, puis le fixer |
 | `/arc conseil` | Affiche ou masque le prochain sort conseillé (sans lui : charges, procs et recharges seulement) |
 | `/arc aoe` | Mode multi-cibles, jusqu'à la fin du combat |

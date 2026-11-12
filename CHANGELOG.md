@@ -1,5 +1,11 @@
 # Historique d'Arcanum
 
+## 0.10.0 — 12 novembre 2026
+
+- Mode suivi seul : Arcanum signale le moment du burst. Quand les charges visées sont atteintes, que la Colère est prête et qu'aucun proc n'est à dépenser d'abord, les gemmes des temps de recharge prêts (Eurêka, Présence spirituelle…) grossissent et battent en or, l'anneau passe à l'or et une onde dorée part du cercle. Le réglage « Signaler le moment du burst » (ancien « Conseiller les gros temps de recharge ») le coupe.
+- Charges visées atteintes : les cristaux et l'arc passent au violet très clair au lieu du rose, trop proche de celui du Barrage de projectiles. Ils ne pulsent plus en continu : ce qui bat est réservé à ce qui demande une action (procs, burst).
+- L'arc de la fenêtre des charges se lit mieux : l'anneau s'efface en piste sombre dessous tant qu'il y a des charges.
+
 ## 0.9.2 — 12 novembre 2026
 
 - La démonstration (`/arc demo`) joue maintenant dans le mode choisi. En mode suivi seul, elle montre les charges qui montent, les procs au centre (un, puis deux côte à côte) et les temps de recharge, sans conseil. Elle montrait jusqu'ici toujours le mode conseil.

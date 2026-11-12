@@ -33,6 +33,7 @@ local State = {
   aoeForced = false,             -- mode multi-cibles demandé par /arc aoe
   reminders = {},                -- améliorations à refaire avant le combat : { clé, … }
   pom = { active = false },
+  burst = { on = false },        -- le moment du burst (mode suivi seul) : on, et [clé] = true par recharge à claquer
   heat = { stacks = nil, ready = false },
   demo = false,
 }
@@ -1015,17 +1016,44 @@ local function worthInterrupting(db, now)
   return Spells.Known("blast")
 end
 
+-- Le moment du burst, pour le mode « suivi seul ». Sans conseil au centre, le HUD doit quand même dire
+-- quand claquer les gros temps de recharge, sinon on les oublie : il fait briller leurs gemmes. Le moment
+-- est celui où le conseil dirait « burst » (charges visées atteintes, Colère prête, pas de Barrage ni
+-- d'Idées claires à dépenser d'abord) ; les gemmes désignées sont celles qui sont prêtes. Le Pouvoir des
+-- Arcanes, lui, se lance dès qu'il est prêt : il se signale seul, Eurêka et la Présence spirituelle
+-- attendent les charges.
+local BURST_CDS = { "eureka", "pom", "power", "berserking", "bloodfury" }
+local WAITS_FOR_CHARGES = { eureka = true, pom = true }
+local function setBurst(on, advised)
+  local b = State.burst
+  if not on and not b.on then return end
+  for i = 1, #BURST_CDS do
+    local key = BURST_CDS[i]
+    local p = State[key]
+    local lit = on and known(key) and ready(key) and not (type(p) == "table" and p.active)
+    if lit and advised == "power" and WAITS_FOR_CHARGES[key] then lit = false end
+    b[key] = lit or false
+  end
+  if on ~= b.on then
+    b.on = on
+    ns:Fire("BURST", on)
+  end
+end
+
 local function updateNext()
   local db = ns.db or ns.DEFAULTS
-  -- Mode « suivi seul » : aucun conseil. Rien n'est calculé, le HUD ne montre que charges, procs et recharges.
+  -- Mode « suivi seul » : aucun conseil au centre. Le calcul ne sert qu'à repérer le moment du burst.
   if db.showNext == false then
     if State.next or State.interrupt then
       local old = State.next
       State.next, State.nextReason, State.nextId, State.interrupt = nil, nil, nil, false
       ns:Fire("NEXT", nil, nil, old)
     end
+    local advised, reason = computeNext()
+    setBurst(reason == "burst" and (State.demo or State.combat or State.hostile) and true or false, advised)
     return
   end
+  setBurst(false)
   local key, reason, id
   local cut = worthInterrupting(db, GetTime())
   if cut then

@@ -8,7 +8,8 @@
 --   * à gauche et à droite, serties dans l'anneau : les gros temps de recharge, avec leur icône ;
 --   * en bas : un orbe de couleur par proc actif, avec un voile qui grandit à mesure qu'il s'épuise ;
 --   * sous le cercle, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme).
--- En mode suivi seul (sans conseil), le centre montre à la place les procs actifs, en grandes icônes.
+-- En mode suivi seul (sans conseil), le centre montre à la place les procs actifs, en grandes icônes ;
+-- et quand c'est le moment du burst, les gemmes des temps de recharge prêts grossissent et battent en or.
 -- En mode multi-cibles le cercle passe à l'orange ; l'icône rougit quand la cible est hors de portée.
 -- Pendant une incantation, le prochain sort ne change pas : il se découvre à mesure que le sort part.
 -- Exception : des Idées claires pendant un sort bon marché. L'icône passe alors à la Déflagration, un
@@ -65,6 +66,7 @@ local PROC_SOUND = {
 local root, mover, hub, main, plate, ring, timer, timerFull, mana, manaCurve
 local crystals, cds, halos, badges, reminders, stage = {}, {}, {}, {}, {}, {}
 local rootAlpha, hotBlend = 0, 0
+local ringAlpha, cueBlend = 0.85, 0                    -- opacité de l'anneau ; signal de burst (0 à 1)
 local advising = true                                  -- le centre conseille-t-il le prochain sort ?
 local shownAlpha = -1                                  -- dernière opacité donnée au cadre
 local crystalsFor, crystalsAim, crystalsStill = -1, -1, false   -- état des cristaux au dernier dessin
@@ -158,9 +160,9 @@ local function animateCrystals(dt, now)
   if shown ~= crystalsShown then layoutCrystals(shown) end
   local blend = UI.Approach(hotBlend, full and 1 or 0, dt, 6)
   -- au repos (rien ne pulse, rien ne change) : on ne touche à aucune texture
-  if not full and blend == hotBlend and n == crystalsFor and target == crystalsAim and crystalsStill then return end
+  if blend == hotBlend and n == crystalsFor and target == crystalsAim and crystalsStill then return end
   hotBlend, crystalsFor, crystalsAim = blend, n, target
-  local still = not full
+  local still = true
   local r, g, b = UI.Mix(C.arcane, C.hot, hotBlend)
   for i, f in ipairs(crystals) do
     local on = i <= n
@@ -168,18 +170,18 @@ local function animateCrystals(dt, now)
     f.pop = UI.Approach(f.pop, 0, dt, 7)
     local settled = f.pop == 0 and f.level == (on and 1 or 0)
     if not settled then still = false end
-    -- un cristal éteint et au repos est déjà dessiné : seuls les cristaux allumés pulsent
+    -- un cristal éteint et au repos est déjà dessiné. Cible atteinte : les cristaux s'éclaircissent et
+    -- restent fixes ; ce qui bat en continu est réservé à ce qui demande une action (procs, burst).
     if not (settled and not on and f.drawnOff) then
-      local pulse = full and (0.5 + 0.5 * sin(now * 5.4 - i * 0.55)) or 0
       local scale = 1 + f.pop * 0.6
       f.fill:SetSize(CR_W * scale, CR_H * scale)
       f.fill:SetVertexColor(r, g, b, f.level)
-      local gs = 1 + f.pop * 0.45 + pulse * 0.10
+      local gs = 1 + f.pop * 0.45
       f.glow:SetSize(CR_W * 3 * gs, CR_H * 2.6 * gs)
-      f.glow:SetVertexColor(r, g, b, min(1, f.level * (0.40 + 0.32 * pulse) + f.pop * 0.55))
+      f.glow:SetVertexColor(r, g, b, min(1, f.level * (0.40 + 0.25 * hotBlend) + f.pop * 0.55))
       local er, eg, eb = UI.Mix(C.edge, C.arcaneHi, f.level)
       f.edge:SetVertexColor(er, eg, eb, 0.45 + 0.55 * f.level)
-      f.spark:SetVertexColor(1, 1, 1, f.level * (0.50 + 0.45 * pulse))
+      f.spark:SetVertexColor(1, 1, 1, f.level * (0.50 + 0.35 * hotBlend))
       f.drawnOff = settled and not on
     end
   end
@@ -191,7 +193,7 @@ end
 local function makeRound(parent, size, numbers, reverse)
   local b = CreateFrame("Frame", nil, parent)
   b:SetSize(size, size)
-  b.size, b.activeLevel, b.pop = size, 0, 0
+  b.size, b.activeLevel, b.pop, b.cueLevel = size, 0, 0, 0
   b.glow = UI.Tex(b, "BACKGROUND", "glow", C.arcane, 0, "ADD", -2)
   b.glow:SetPoint("CENTER")
   b.glow:SetSize(size * 2.0, size * 2.0)
@@ -353,21 +355,23 @@ end
 
 -- L'anneau et le bord de l'icône prennent la couleur du conseil.
 local function animateSeal(dt, now)
-  local target = REASON_COLOR[State.nextReason] or C.arcane
+  local cue = not advising and State.burst.on   -- mode « suivi seul » : c'est le moment du burst
+  local target = cue and C.power or REASON_COLOR[State.nextReason] or C.arcane
   for i = 1, 3 do reasonColor[i] = UI.Approach(reasonColor[i], target[i], dt, 10) end
   local r, g, b = reasonColor[1], reasonColor[2], reasonColor[3]
-  if not advising then   -- mode « suivi seul » : l'anneau seul, à sa couleur neutre
-    local rr, rg, rb = UI.MixTo(C.edge, r, g, b, 0.55)
-    ring:SetVertexColor(rr, rg, rb, 0.85)
-    return
-  end
+  cueBlend = UI.Approach(cueBlend, cue and 1 or 0, dt, 10)
+  -- Avec des charges, l'anneau s'efface en piste sombre : l'arc de leur fenêtre se lit dessus. Il revient
+  -- en pleine lumière, en or, quand c'est le moment du burst.
+  local track = State.stacks > 0 and ns.db.showCharges and not cue
+  ringAlpha = UI.Approach(ringAlpha, track and 0.32 or 0.85, dt, 8)
+  local rr, rg, rb = UI.MixTo(C.edge, r, g, b, 0.55 + 0.40 * cueBlend)
+  ring:SetVertexColor(rr, rg, rb, ringAlpha)
+  if not advising then return end   -- mode « suivi seul » : pas d'icône de conseil à animer
   main.pop = UI.Approach(main.pop, 0, dt, 9)
   local urgent = State.nextReason ~= "arcane" and State.nextReason ~= nil
   -- respiration lente : assez pour vivre, pas assez pour clignoter
   local pulse = 0.5 + 0.5 * sin(now * (urgent and 3.2 or 1.8))
 
-  local rr, rg, rb = UI.MixTo(C.edge, r, g, b, 0.55)
-  ring:SetVertexColor(rr, rg, rb, 0.85)
   -- pas de halo au repos : l'icône reste l'élément le plus lisible. Une lueur seulement quand il y a
   -- mieux à faire que le cycle normal, ou quand le conseil vient de changer.
   main.glow:SetVertexColor(r, g, b, min(1, (urgent and 0.30 + 0.10 * pulse or 0) + main.pop * 0.4))
@@ -561,21 +565,32 @@ local function refreshCooldowns(now)
       feedCooldown(b, info, force)
       local p = State[b.key]
       b.active = type(p) == "table" and p.active or false
+      b.cue = not advising and State.burst[b.key] == true   -- c'est le moment de le claquer
       b.icon:SetDesaturated(info.onCD == true and not b.active)
       b.icon:SetAlpha((info.onCD == true and not b.active) and 0.75 or 1)
     end
   end
 end
 
-local function animateCooldowns(dt)
+-- Trois états lisibles d'un coup d'œil : en recharge (grisé, voilé), prêt (net, bord discret), et « c'est
+-- le moment » : la gemme grossit, passe à l'or et bat. Rien d'autre ne bat en or sur le HUD.
+local function animateCooldowns(dt, now)
+  local pulse = 0.5 + 0.5 * sin(now * 5.0)
   for _, b in ipairs(cds) do
     if b.visible then
       b.activeLevel = UI.Approach(b.activeLevel, b.active and 1 or 0, dt, 10)
-      local a = b.activeLevel
-      local color = ACTIVE_COLOR[b.key] or C.power
-      b.glow:SetVertexColor(color[1], color[2], color[3], a * 0.7)
-      local r, g, bl = UI.Mix(C.edge, color, a)
-      b.ring:SetVertexColor(r, g, bl, 0.9)
+      b.cueLevel = UI.Approach(b.cueLevel, b.cue and 1 or 0, dt, 10)
+      local a, k = b.activeLevel, b.cueLevel
+      local r, g, bl = UI.Mix(ACTIVE_COLOR[b.key] or C.power, C.power, k)
+      b.glow:SetVertexColor(r, g, bl, max(a * 0.7, k * (0.55 + 0.40 * pulse)))
+      local er, eg, eb = UI.MixTo(C.edge, r, g, bl, max(a, k))
+      b.ring:SetVertexColor(er, eg, eb, 0.9)
+      local size = CD_SIZE * (1 + 0.25 * k)   -- (pas de SetScale : il déplacerait la gemme sur l'anneau)
+      if size ~= b.size then
+        b.size = size
+        b:SetSize(size, size)
+        b.glow:SetSize(size * 2.0, size * 2.0)
+      end
     end
   end
 end
@@ -719,7 +734,7 @@ local function onUpdate(_, dt)
     animateCrystals(dt, now)
     animateTimer(now)
   end
-  animateCooldowns(dt)
+  animateCooldowns(dt, now)
   animateBadges(dt, now)
   animateStage(dt, now)
   animateReminders(now)
@@ -840,7 +855,7 @@ function Hud.Build()
     if not ok then ns.Report(err) end
   end)
   Hud.root, Hud.badges, Hud.main, Hud.reminders, Hud.crystals = root, badges, main, reminders, crystals
-  Hud.stage = stage
+  Hud.stage, Hud.cds = stage, cds
   return root
 end
 
@@ -869,6 +884,12 @@ ns:On("NEXT", function(key, reason, old)
   if not root then return end
   if key ~= old or State.interrupt then main.pop = 1 end
   if State.interrupt and ns.db.flash then spawnHalo(C.clear, 2 * R, 2 * R + 80, 0.45) end
+end)
+
+-- Mode « suivi seul » : le moment du burst arrive. Une onde dorée, en plus des gemmes qui battent.
+ns:On("BURST", function(on)
+  if not root or not on or advising then return end
+  if ns.db.flash then spawnHalo(C.power, 2 * R, 2 * R + 70, 0.5) end
 end)
 
 ns:On("STACKS", function(n, old)

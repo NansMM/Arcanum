@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.9.2"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.10.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -131,7 +131,7 @@ ns.DEFAULTS = {
   showReminders = true,   -- hors combat, signaler une amélioration manquante ou l'absence de gemme de mana
   cutForClear = true,     -- conseiller d'interrompre un sort bon marché quand des Idées claires arrivent
   openWrath = true,       -- hors combat, conseiller le Courroux pour engager
-  adviseBurst = true,     -- conseiller les gros temps de recharge (Pouvoir des Arcanes, Eureka, Présence spirituelle)
+  adviseBurst = true,     -- signaler le moment du burst (Pouvoir des Arcanes, Eureka, Présence spirituelle) : au centre en mode conseil, sur les gemmes en suivi seul
   anticipate = false,     -- pendant une incantation, montrer déjà le sort d'après (sinon le conseil attend la fin)
   targetStacks = 2,       -- charges visées (2, 3 ou 4) : on monte jusque-là, puis Colère et sorts bon marché
   sound = true,
