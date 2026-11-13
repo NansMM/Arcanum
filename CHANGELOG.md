@@ -1,5 +1,10 @@
 # Historique d'Arcanum
 
+## 1.3.0 — 13 novembre 2026
+
+- Nouveau décor de procs, « Art du jeu » (`/arc decor jeu`) : les grands arcs peints par Blizzard pour ses propres alertes de proc, lus dans les fichiers du jeu. L'arc violet gravé de runes des Projectiles des Arcanes pour le Barrage de projectiles, un arc ouvragé teinté en bleu pour les Idées claires. Si ton client n'a pas ces images, le décor reste vide : choisis-en un autre.
+- Le réglage « Charges visées » est retiré : il ne servait plus qu'à compter des cristaux vides. Il y a maintenant un cristal par charge, et ils s'éclaircissent à quatre charges.
+
 ## 1.2.0 — 13 novembre 2026
 
 - Eurêka actif : son icône, cerclée d'or, s'affiche au-dessus des charges avec son temps restant, tant que l'amélioration dure. Si la Présence spirituelle est active en même temps, les deux icônes sont côte à côte.

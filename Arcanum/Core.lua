@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.2.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.3.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -120,7 +120,7 @@ ns.DEFAULTS = {
   scale = 1.0,
   point = { "CENTER", "CENTER", 0, 0 },      -- ancre, ancre de l'écran, x, y : le HUD est centré sur le personnage
   spread = 150,           -- écartement : distance entre le personnage et les zones (procs, charges, rappels)
-  decor = "croissants",   -- décor autour des procs : "aucun", "croissants", "losange", "runes" ou "eclat"
+  decor = "croissants",   -- décor autour des procs : "aucun", "croissants", "losange", "runes", "eclat" ou "jeu"
   showIdle = false,       -- afficher aussi hors combat, sans cible
   idleAlpha = 0.35,       -- opacité hors combat quand showIdle est actif
   showCharges = true,     -- cristaux de charge au-dessus du personnage, quand il y a des charges
@@ -182,7 +182,7 @@ function ns.InitDB()
     db.point = { "CENTER", "CENTER", 0, 0 }
     db.showNext, db.showMana, db.showCooldowns, db.soonSeconds = nil, nil, nil, nil
   end
-  if db.decor ~= "aucun" and db.decor ~= "croissants" and db.decor ~= "losange" and db.decor ~= "runes" and db.decor ~= "eclat" then
+  if db.decor ~= "aucun" and db.decor ~= "croissants" and db.decor ~= "losange" and db.decor ~= "runes" and db.decor ~= "eclat" and db.decor ~= "jeu" then
     db.decor = "croissants"
   end
   db.burstRemind = nil   -- 1.1 : plus de signal de burst

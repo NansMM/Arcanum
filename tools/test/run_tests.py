@@ -333,7 +333,7 @@ def main():
     t.M.advance(0.2)
     check(len([f for f in t.ns.Hud.crystals.values() if f._shown]) == 0, "sans charge : aucun cristal affiché")
     t.cast(AB)
-    check(len([f for f in t.ns.Hud.crystals.values() if f._shown]) == 2, "1 charge, 2 visées : deux cristaux affichés, pas quatre")
+    check(len([f for f in t.ns.Hud.crystals.values() if f._shown]) == 1, "1 charge : un seul cristal affiché")
     check(t.next() == ("blast", "arcane"), "1 charge : Déflagration")
     t.M.startCast(AB, 1.5)
     t.M.advance(0.2)
@@ -624,8 +624,8 @@ def main():
     check(not any(c._shown for c in hud.crystals.values()) and hud.bar._alpha == 0, "sans charge : ni cristaux ni barre")
     f.cast(AB)
     shown = [c for c in hud.crystals.values() if c._shown]
-    check(f.S.stacks == 1 and len(shown) == 2 and all(c._points[1][5] > 100 for c in shown),
-          "une charge : les cristaux apparaissent au-dessus du personnage, un par charge visée")
+    check(f.S.stacks == 1 and len(shown) == 1 and all(c._points[1][5] > 100 for c in shown),
+          "une charge : un cristal apparaît au-dessus du personnage")
     check(hud.bar._alpha == 1 and hud.barText._text in ("18 s", "17 s"), "sous les cristaux, la barre de leur fenêtre et ses secondes")
     pom, eur = hud.pomIcon, hud.eurekaIcon
     check(pom.on is False and pom._alpha == 0 and eur.on is False and eur._alpha == 0,
@@ -673,8 +673,15 @@ def main():
     f.run('SlashCmdList.ARCANUM("decor aucun")')
     check(left.decor._shown is False and right.decor._shown is False and left._shown is True,
           "/arc decor aucun : les procs restent, sans décor")
+    f.run('Mock.ns.Set("decor", "jeu")')
+    check(left.decor._tex == 450918 and right.decor._tex == 449486 and left.decor._shown is True,
+          "décor « art du jeu » : les illustrations de proc du jeu, par leur identifiant de fichier")
+    check(abs(left.decor._h - 256) < 12 and abs(left.decor._w - 128) < 6
+          and left.decor._points[1][4] == -48 and right.decor._points[1][4] == 48,
+          "de grands arcs, du côté extérieur de chaque proc")
     f.run('Mock.ns.Set("decor", "eclat")')
-    check(left.decor._shown is True and left.decor._tex.endswith("decor-rays"), "décor « éclat » : des rayons")
+    check(left.decor._shown is True and left.decor._tex.endswith("decor-rays") and left.decor._points[1][4] == 0,
+          "décor « éclat » : des rayons, centrés sur l'icône")
     f.run('Mock.ns.Set("spread", 200)')
     check(left._points[1][4] == -200 and right._points[1][4] == 200, "écartement réglé : les zones s'éloignent du personnage")
     f.run('SlashCmdList.ARCANUM("ecart 120")')

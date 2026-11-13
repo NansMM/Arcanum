@@ -225,7 +225,6 @@ function Options.Build()
   y = toggle(f, L["Procs, Présence spirituelle, Eurêka"], "showProcs", y)
   y = toggle(f, L["Rappels avant le combat (en bas)"], "showReminders", y)
   y = decorRow(f, L["Décor des procs"], y - 4)
-  y = choice(f, L["Charges visées"], "targetStacks", { 2, 3, 4 }, y)
   y = stepper(f, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y)
   y = stepper(f, L["Écartement"], "spread", 80, 320, 10, function(v) return string.format("%d", v) end, y)
 
@@ -385,7 +384,7 @@ local HELP = {
   "/arc verrou : déplacer ou fixer le HUD",
   "/arc taille 120 : taille du HUD en pourcentage",
   "/arc ecart 150 : distance entre le personnage et les zones (de 80 à 320)",
-  "/arc decor : passer au décor de procs suivant ; /arc decor runes : le choisir (aucun, croissants, losange, runes, eclat)",
+  "/arc decor : passer au décor de procs suivant ; /arc decor runes : le choisir (aucun, croissants, losange, runes, eclat, jeu)",
   "/arc sons : écouter les deux sons (Idées claires, Barrage)",
   "/arc son 3071 : écouter un son du jeu ; /arc son barrage 3071 : le choisir (clear ou barrage)",
   "/arc son barrage voix : faire dire « Barrage » par la voix du jeu ; les sons se choisissent aussi dans les réglages",
@@ -440,7 +439,7 @@ SlashCmdList.ARCANUM = function(msg)
     if found or arg == "" then
       ns.Print(string.format(L["décor des procs : %s."], L[ns.Hud.DECOR_NAME[ns.db.decor]]))
     else
-      ns.Print(L["décors possibles : aucun, croissants, losange, runes, eclat. Par exemple /arc decor runes."])
+      ns.Print(L["décors possibles : aucun, croissants, losange, runes, eclat, jeu. Par exemple /arc decor runes."])
     end
     Options.Refresh()
   elseif cmd == "ecart" or cmd == "écart" or cmd == "spread" then

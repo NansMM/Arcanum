@@ -3,8 +3,8 @@
 -- Le HUD est centré sur le personnage, et chaque information a son côté :
 --   * à gauche : les Idées claires ; à droite : le Barrage de projectiles. Une grande icône (celle du
 --     proc), cerclée de sa couleur, avec le temps restant, dans un décor au choix. Pas de proc : rien.
---   * en haut, seulement quand il y a des charges de Déflagration des Arcanes : un cristal par charge
---     visée (un de plus quand le jeu en offre une), et dessous la barre des 18 secondes de leur fenêtre ;
+--   * en haut, seulement quand il y a des charges de Déflagration des Arcanes : un cristal par charge,
+--     et dessous la barre des 18 secondes de leur fenêtre ;
 --   * au-dessus des charges, tant qu'elles sont actives : la Présence spirituelle et Eurêka ;
 --   * en bas, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, eau,
 --     nourriture et gemme de mana à invoquer).
@@ -42,14 +42,20 @@ local BUFFS = {
 -- Décors dessinés autour d'un proc, à sa couleur, tant qu'il est affiché. file : la texture ; size : sa
 -- taille, en nombre de fois celle de l'icône ; flip : retournée du côté droit ; spin : elle tourne
 -- (radians par seconde) ; pulse : elle bat ; burst : son bond à l'arrivée du proc.
+-- « jeu » : les illustrations de proc peintes par Blizzard, lues dans les fichiers du jeu (files : leur
+-- identifiant, par proc). Ce sont de grands arcs, deux fois plus hauts que larges (w, h), posés du côté
+-- extérieur de l'icône (offset, en nombre de fois sa taille) ; tint : ceux qui sont blancs et se teintent.
 local DECORS = {
+  jeu = { files = { clear = 450918, barrage = 449486 }, tint = { clear = true }, w = 2.0, h = 4.0, offset = 0.75,
+    flip = true, pulse = true, burst = 0.08 },
   croissants = { file = "decor-crescent", size = 2.6, flip = true, burst = 0.10 },
   losange = { file = "decor-lozenge", size = 2.1, burst = 0.14 },
   runes = { file = "decor-runes", size = 2.0, spin = 0.35, burst = 0.14 },
   eclat = { file = "decor-rays", size = 2.2, pulse = true, burst = 0.35 },
 }
-Hud.DECORS = { "aucun", "croissants", "losange", "runes", "eclat" }
-Hud.DECOR_NAME = { aucun = "Aucun", croissants = "Croissants", losange = "Losange", runes = "Anneau de runes", eclat = "Éclat" }
+Hud.DECORS = { "aucun", "croissants", "losange", "runes", "eclat", "jeu" }
+Hud.DECOR_NAME = { aucun = "Aucun", croissants = "Croissants", losange = "Losange", runes = "Anneau de runes", eclat = "Éclat",
+  jeu = "Art du jeu" }
 
 -- Les sons sont des sons du jeu (« kit » : leur identifiant ; « alt » : celui joué si ce client ne connaît
 -- pas le premier). Le joueur peut en choisir d'autres (réglages, ou /arc son barrage 888), ou déposer ses
@@ -158,11 +164,9 @@ local function makeCrystal(parent)
   return f
 end
 
--- Nombre de cristaux à montrer : aucun sans charge ; sinon un par charge visée, et un de plus quand le
--- jeu offre une charge (Déflagration gratuite).
+-- Nombre de cristaux à montrer : un par charge, aucun sans charge.
 local function crystalCount()
-  local n = State.stacks
-  return n > 0 and min(4, max(State.Target(), n)) or 0
+  return min(4, max(0, State.stacks))
 end
 
 -- Aligne `shown` cristaux, centrés au-dessus du personnage ; les autres sont cachés.
@@ -181,7 +185,7 @@ end
 
 local function animateCrystals(dt)
   local n = State.stacks
-  local target = State.Target()
+  local target = 4   -- au maximum de charges, les cristaux s'éclaircissent
   local full = n >= target
   local shown = crystalCount()
   if shown ~= crystalsShown then layoutCrystals(shown) end
@@ -355,8 +359,8 @@ local function animateProcs(dt, now)
         f.glow:SetSize(s, s)
         local d = f.decorDef
         if d then
-          local size = PROC * d.size * (1 + f.pop * d.burst)   -- le décor bondit avec le proc
-          f.decor:SetSize(size, size)
+          local k = 1 + f.pop * d.burst   -- le décor bondit avec le proc
+          f.decor:SetSize(f.decorW * k, f.decorH * k)
           if d.spin and f.decor.SetRotation then
             -- l'anneau tourne, plus vite dans les trois dernières secondes du proc
             local p = State[f.def.key]
@@ -477,8 +481,15 @@ local function applyDecor()
   for _, f in ipairs(procs) do
     f.decorDef = d
     if d then
-      f.decor:SetTexture(UI.Media(d.file))
-      f.decor:SetSize(PROC * d.size, PROC * d.size)
+      local key = f.def.key
+      f.decor:SetTexture(d.files and d.files[key] or UI.Media(d.file))
+      f.decorW, f.decorH = PROC * (d.w or d.size), PROC * (d.h or d.size)
+      f.decor:SetSize(f.decorW, f.decorH)
+      f.decor:ClearAllPoints()
+      f.decor:SetPoint("CENTER", f, "CENTER", f.def.side * PROC * (d.offset or 0), 0)
+      -- (une illustration du jeu déjà peinte garde ses couleurs ; le reste prend celle du proc)
+      local c = (d.files and not (d.tint and d.tint[key])) and C.text or f.def.color
+      f.decor:SetVertexColor(c[1], c[2], c[3], 1)
       if d.flip and f.def.side > 0 then
         f.decor:SetTexCoord(1, 0, 0, 1)   -- miroir : le croissant se place du côté extérieur
       else

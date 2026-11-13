@@ -8,14 +8,14 @@ Arcanum place chaque information d'un côté de ton personnage, pour que tu la l
 
 *Aperçu composé avec les textures de l'addon (le personnage est une silhouette, les icônes sont remplacées par des aplats, les zones sont plus rapprochées qu'en jeu). De gauche à droite : en combat avec deux procs et des charges, hors combat avec trois rappels, et la Présence spirituelle et Eurêka actifs. En jeu : `/arc demo`.*
 
-- **À gauche : les Idées claires. À droite : le Barrage de projectiles.** Une grande icône, celle du proc, cerclée de sa couleur (bleu clair ou rose), avec le temps restant en chiffres et un voile qui grandit à mesure que le proc s'épuise. Pas de proc : le côté reste vide. Un **décor** entoure l'icône tant que le proc est là, à sa couleur : croissants (d'origine), losange, anneau de runes qui tourne, éclat de rayons, ou aucun. Il se choisit dans les réglages (« Décor des procs », qui le montre aussitôt sur le HUD) ou avec `/arc decor`.
-- **En haut : les charges de Déflagration des Arcanes**, seulement quand tu en as. Un cristal par charge visée (deux par défaut, réglable à 3 ou 4), qui s'éclaircit quand la cible est atteinte ; un cristal de plus apparaît quand le jeu t'offre une charge. Dessous, une barre se vide pendant les 18 secondes de la fenêtre des charges, avec les secondes restantes ; elle rougit quand la fenêtre va se fermer.
+- **À gauche : les Idées claires. À droite : le Barrage de projectiles.** Une grande icône, celle du proc, cerclée de sa couleur (bleu clair ou rose), avec le temps restant en chiffres et un voile qui grandit à mesure que le proc s'épuise. Pas de proc : le côté reste vide. Un **décor** entoure l'icône tant que le proc est là, à sa couleur : croissants (d'origine), losange, anneau de runes qui tourne, éclat de rayons, **art du jeu** (les grands arcs peints par Blizzard pour ses propres alertes de proc : l'arc violet gravé de runes des Projectiles des Arcanes pour le Barrage, un arc ouvragé teinté en bleu pour les Idées claires), ou aucun. Il se choisit dans les réglages (« Décor des procs », qui le montre aussitôt sur le HUD) ou avec `/arc decor`.
+- **En haut : les charges de Déflagration des Arcanes**, seulement quand tu en as. Un cristal par charge ; à quatre charges, le maximum, ils s'éclaircissent. Dessous, une barre se vide pendant les 18 secondes de la fenêtre des charges, avec les secondes restantes ; elle rougit quand la fenêtre va se fermer.
 - **Au-dessus des charges : la Présence spirituelle et Eurêka**, tant qu'ils sont actifs. L'icône de la Présence spirituelle, cerclée de vert, te rappelle que ton prochain sort sera instantané ; celle d'Eurêka, cerclée d'or, montre son temps restant. Une seule active : elle est centrée ; les deux : côte à côte.
 - **En bas, hors combat : les rappels.** L'icône de ce qu'il manque avant d'engager : Intelligence des Arcanes, armure, et ce qui reste à invoquer : eau, nourriture, gemme de mana. Seuls les objets invoqués comptent (une eau achetée ne dispense pas d'en invoquer), et pour la gemme c'est la meilleure que tu sais invoquer qui est attendue. Rien ne manque : rien ne s'affiche. Au repos en ville, les rappels attendent que tu sortes ou que tu cibles un ennemi.
 
 ![Les quatre décors des procs](docs/decors.png)
 
-*Les décors des procs, de gauche à droite : croissants, losange, anneau de runes, éclat. En haut sur des Idées claires, en bas sur un Barrage de projectiles.*
+*Les décors dessinés par Arcanum, de gauche à droite : croissants, losange, anneau de runes, éclat (le décor « art du jeu » utilise les images du jeu, absentes de cet aperçu). En haut sur des Idées claires, en bas sur un Barrage de projectiles.*
 
 Le HUD est centré sur l'écran, là où se tient ton personnage. Le réglage « Écartement » (ou `/arc ecart 150`) éloigne ou rapproche les quatre zones ; `/arc verrou` permet de déplacer l'ensemble.
 
@@ -39,12 +39,12 @@ Il ne se réveille que sur un mage. Après une mise à jour qui ajoute des textu
 
 | Commande | Effet |
 |---|---|
-| `/arc` | Réglages (ce qui s'affiche, charges visées, taille, écartement, sons) |
+| `/arc` | Réglages (ce qui s'affiche, décor des procs, taille, écartement, sons) |
 | `/arc demo` | Le HUD joue un cycle complet, sans combattre (marche sur toute classe) |
 | `/arc verrou` | Déplacer le HUD, puis le fixer |
 | `/arc taille 120` | Taille du HUD, en pourcentage (de 60 à 180) |
 | `/arc ecart 150` | Distance entre le personnage et les zones (de 80 à 320) |
-| `/arc decor` | Passe au décor de procs suivant ; `/arc decor runes` le choisit (`aucun`, `croissants`, `losange`, `runes`, `eclat`) |
+| `/arc decor` | Passe au décor de procs suivant ; `/arc decor runes` le choisit (`aucun`, `croissants`, `losange`, `runes`, `eclat`, `jeu`) |
 | `/arc sons` | Fait entendre les deux sons (Idées claires, Barrage) |
 | `/arc son 3071` | Fait entendre un son du jeu ; `/arc son barrage 3071` le choisit pour un proc (`clear` ou `barrage`), `/arc son barrage voix` le fait dire par la voix du jeu |
 | `/arc macro` | Crée la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts que le jeu donne aux sorts |

@@ -184,7 +184,9 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=
     top = cy - spread * 0.9
     full = stacks >= target
     col = C["hot"] if full else C["arcane"]
-    shown = min(4, max(target, stacks))
+    full = stacks >= 4
+    col = C["hot"] if full else C["arcane"]
+    shown = stacks   # un cristal par charge
     if stacks > 0:   # (sans charge : aucun cristal)
         for i in range(shown):
             x = cx + (i + 1 - (shown + 1) / 2) * 32
@@ -217,7 +219,7 @@ def main():
     # en combat, deux procs et trois charges sur quatre ; hors combat, trois rappels ; Présence spirituelle et Eurêka actifs
     scene(200, 215, stacks=3, target=4, window=0.62, clear=0.6, barrage=0.85)
     scene(480, 215, reminders=3)
-    scene(790, 215, stacks=2, target=2, window=0.45, pom=True)
+    scene(790, 215, stacks=4, target=4, window=0.45, pom=True)
 
     save(OUT)
     # les quatre décors des procs : en haut sur des Idées claires (côté gauche), en bas sur un Barrage (côté droit)
