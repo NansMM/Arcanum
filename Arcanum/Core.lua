@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.3.2"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.4.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -120,7 +120,7 @@ ns.DEFAULTS = {
   scale = 1.0,
   point = { "CENTER", "CENTER", 0, 0 },      -- ancre, ancre de l'écran, x, y : le HUD est centré sur le personnage
   spread = 150,           -- écartement : distance entre le personnage et les zones (procs, charges, rappels)
-  decor = "croissants",   -- décor autour des procs : "aucun", "croissants", "losange", "runes", "eclat" ou "jeu"
+  decor = true,           -- décor des procs : l'arc de runes du jeu, du côté extérieur de chaque icône
   showIdle = false,       -- afficher aussi hors combat, sans cible
   idleAlpha = 0.35,       -- opacité hors combat quand showIdle est actif
   showCharges = true,     -- cristaux de charge au-dessus du personnage, quand il y a des charges
@@ -135,7 +135,7 @@ ns.DEFAULTS = {
   targetStacks = 2,       -- charges visées (2, 3 ou 4) : on monte jusque-là, puis Colère et sorts bon marché
   sound = true,
   soundKit = {},          -- sons du jeu choisis à la place de ceux d'origine : [clear|barrage] = identifiant, ou "voix"
-  flash = true,           -- onde lumineuse quand un proc arrive : un écho de son décor (un anneau, sans décor)
+  flash = true,           -- onde lumineuse quand un proc arrive : un écho de l'arc de runes (un anneau, sans décor)
 }
 
 -- Ce que l'addon apprend en jeu quand les données sont lisibles (hors combat) : durées et coûts réels.
@@ -182,8 +182,10 @@ function ns.InitDB()
     db.point = { "CENTER", "CENTER", 0, 0 }
     db.showNext, db.showMana, db.showCooldowns, db.soonSeconds = nil, nil, nil, nil
   end
-  if db.decor ~= "aucun" and db.decor ~= "croissants" and db.decor ~= "losange" and db.decor ~= "runes" and db.decor ~= "eclat" and db.decor ~= "jeu" then
-    db.decor = "croissants"
+  if db.decor == "aucun" then   -- 1.4 : un seul décor, affiché ou non (avant : un nom de décor)
+    db.decor = false
+  elseif type(db.decor) ~= "boolean" then
+    db.decor = true
   end
   db.burstRemind = nil   -- 1.1 : plus de signal de burst
   db.soundKit.burst = nil

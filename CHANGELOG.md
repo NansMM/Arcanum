@@ -1,5 +1,10 @@
 # Historique d'Arcanum
 
+## 1.4.0 — 13 novembre 2026
+
+- Un seul décor de procs : l'arc de runes du jeu (l'ancien « Art du jeu »), désormais affiché d'origine. Les quatre décors dessinés par Arcanum (croissants, losange, anneau de runes, éclat) sont retirés, avec leurs textures.
+- Le réglage « Décor des procs » devient un simple interrupteur ; `/arc decor` l'affiche ou le masque. L'activer le montre aussitôt sur le HUD.
+
 ## 1.3.2 — 13 novembre 2026
 
 - Corrigé : dans l'aperçu des réglages, le décor des procs était trop lumineux. L'écho qui sert d'onde lumineuse restait allumé par-dessus le décor après un changement de décor ou de réglage, jusqu'au proc suivant.

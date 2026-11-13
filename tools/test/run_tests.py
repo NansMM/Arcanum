@@ -656,40 +656,26 @@ def main():
     check(left.on is False, "rien à gauche tant qu'il n'y a pas d'Idées claires")
     f.M.proc("Idées claires", 12536)
     f.M.advance(0.3)
-    check(left.echo._tex.endswith("decor-crescent") and 0 < left.echo._alpha < 0.8 and left.echo._w > left.decor._w,
+    check(left.echo._tex == 449486 and 0 < left.echo._alpha < 0.8 and left.echo._w > left.decor._w,
           "à l'arrivée du proc, l'onde lumineuse est un écho de son décor, qui s'élargit")
     check(right.echo._alpha == 0, "l'onde du Barrage, arrivé plus tôt, s'est effacée")
     check(left.on is True and left._shown is True and left.icon._tex == 130536 and right.on is True,
           "les Idées claires s'affichent à gauche, avec leur propre icône, en même temps")
-    check(left.decor._shown is True and left.decor._tex.endswith("decor-crescent") and abs(left.decor._w - 64 * 2.6) < 3,
-          "d'origine, un croissant décore chaque proc")
-    f.run('Mock.ns.Set("decor", "runes")')
-    turn = left.decor._rotation
-    f.M.advance(0.5)
-    check(left.decor._tex.endswith("decor-runes") and left.decor._rotation > turn, "décor « runes » : un anneau, qui tourne")
-    f.run('SlashCmdList.ARCANUM("decor losange")')
-    check(f.ns.db.decor == "losange" and right.decor._tex.endswith("decor-lozenge"), "/arc decor losange : le décor change")
-    f.run('SlashCmdList.ARCANUM("decor")')
-    check(f.ns.db.decor == "runes", "/arc decor : passe au décor suivant")
-    f.run('SlashCmdList.ARCANUM("decor fleurs")')
-    check(f.ns.db.decor == "runes", "/arc decor fleurs : décor inconnu, rien ne change")
-    f.run('SlashCmdList.ARCANUM("decor aucun")')
-    check(left.decor._shown is False and right.decor._shown is False and left._shown is True,
-          "/arc decor aucun : les procs restent, sans décor")
-    f.run('Mock.ns.Set("decor", "jeu")')
-    check(left.decor._tex == 449486 and right.decor._tex == 449486 and left.decor._shown is True,
-          "décor « art du jeu » : l'illustration de proc du jeu, par son identifiant de fichier")
+    check(left.decor._shown is True and left.decor._tex == 449486 and right.decor._tex == 449486,
+          "le décor des procs : l'arc de runes du jeu, par son identifiant de fichier")
     check(left.decor._desat is True and not right.decor._desat,
           "le même arc des deux côtés : passé en gris et teinté pour les Idées claires, tel quel pour le Barrage")
-    check(left.echo._tex == 449486 and left.echo._desat is True, "l'onde lumineuse reprend l'image du décor")
-    check(left.echo._alpha == 0 and right.echo._alpha == 0,
-          "changer de décor ne laisse pas l'écho allumé par-dessus (il rendait l'aperçu trop lumineux)")
     check(abs(left.decor._h - 256) < 12 and abs(left.decor._w - 128) < 6
           and left.decor._points[1][4] == -48 and right.decor._points[1][4] == 48,
           "de grands arcs, du côté extérieur de chaque proc")
-    f.run('Mock.ns.Set("decor", "eclat")')
-    check(left.decor._shown is True and left.decor._tex.endswith("decor-rays") and left.decor._points[1][4] == 0,
-          "décor « éclat » : des rayons, centrés sur l'icône")
+    f.run('SlashCmdList.ARCANUM("decor")')
+    check(f.ns.db.decor is False and left.decor._shown is False and right.decor._shown is False and left._shown is True,
+          "/arc decor : les procs restent, sans décor")
+    f.run('SlashCmdList.ARCANUM("decor")')
+    check(f.ns.db.decor is True and left.decor._shown is True and left.echo._tex == 449486,
+          "/arc decor de nouveau : le décor revient, et l'onde reprend son image")
+    f.M.advance(0.8)
+    check(left.echo._alpha == 0 and right.echo._alpha == 0, "une fois l'onde passée, il ne reste que le décor")
     f.run('Mock.ns.Set("spread", 200)')
     check(left._points[1][4] == -200 and right._points[1][4] == 200, "écartement réglé : les zones s'éloignent du personnage")
     f.run('SlashCmdList.ARCANUM("ecart 120")')
@@ -746,8 +732,10 @@ def main():
     f.run('Mock.ns.Hud.PreviewDecor()')
     f.M.advance(0.2)
     check(0 < left.echo._alpha < 0.8, "un nouvel aperçu relance l'onde, même si les procs sont déjà affichés")
-    f.run('Mock.ns.Set("decor", "runes")')
-    check(left.echo._alpha == 0, "et changer de décor pendant l'aperçu éteint l'écho")
+    f.run('Mock.ns.Set("decor", false)')
+    check(left.echo._alpha == 0 and left.decor._shown is False, "masquer le décor pendant l'aperçu éteint l'arc et son écho")
+    f.run('Mock.ns.Set("decor", true)')
+    check(left.on is True and left.decor._shown is True, "le réafficher le montre aussitôt sur le HUD")
     f.M.advance(5.5)
     check(left.on is False and right.on is False, "puis disparaissent au bout de quelques secondes")
     f.run('SlashCmdList.ARCANUM("verrou")')
@@ -757,7 +745,9 @@ def main():
 
     m = Game(pre='ArcanumDB = { version = 4, point = { "CENTER", "CENTER", 0, -170 }, showNext = false, '
                  'showMana = true, scale = 1.2, targetStacks = 3, decor = "fleurs" }')
-    check(m.ns.db.decor == "croissants", "un décor inconnu dans les réglages enregistrés revient au décor d'origine")
+    check(m.ns.db.decor is True, "un ancien nom de décor dans les réglages enregistrés : le décor est affiché")
+    m2 = Game(pre='ArcanumDB = { version = 5, decor = "aucun" }')
+    check(m2.ns.db.decor is False, "l'ancien choix « aucun » : le décor reste masqué")
     check(m.ns.db.point[3] == 0 and m.ns.db.point[4] == 0 and m.ns.db.spread == 150,
           "mise à jour depuis une 0.12 : le HUD est recentré sur le personnage")
     check(m.ns.db.showNext is None and m.ns.db.showMana is None and m.ns.db.scale == 1.2 and m.ns.db.targetStacks == 3,

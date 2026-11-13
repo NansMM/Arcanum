@@ -6,7 +6,8 @@ sous le personnage), et la Présence spirituelle et Eurêka actifs.
 
 Ce n'est pas une capture du jeu : les icônes de sorts et les textes sont remplacés par des aplats.
 Sert à juger les formes, les couleurs et les halos sans lancer WoW. Aucune dépendance.
-Usage : python tools/preview.py   ->   docs/apercu.png et docs/decors.png (les quatre décors des procs)
+Le décor des procs (l'arc de runes, une image du jeu) n'y figure pas.
+Usage : python tools/preview.py   ->   docs/apercu.png
 """
 import math
 import os
@@ -16,7 +17,6 @@ import zlib
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MEDIA = os.path.join(ROOT, "Arcanum", "Media")
 OUT = os.path.join(ROOT, "docs", "apercu.png")
-DECORS = os.path.join(ROOT, "docs", "decors.png")
 
 K = 2.0                      # échelle du rendu
 W, H = int(960 * K), int(400 * K)
@@ -176,9 +176,6 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=
     # procs : Idées claires à gauche, Barrage de projectiles à droite (temps restant en voile)
     for side, proc, col in ((-1, clear, C["clear"]), (1, barrage, C["barrage"])):
         if proc is not None:
-            # (décor d'origine : un croissant du côté extérieur, à la couleur du proc)
-            blit("decor-crescent", cx + side * spread, cy, 64 * 2.6, 64 * 2.6, col, 1,
-                 uv=(1, 0, 0, 1) if side > 0 else (0, 1, 0, 1))
             round_icon(cx + side * spread, cy, 64, col, col, glow=0.40, cooldown=1 - proc)
     # charges : un cristal par charge visée (un de plus quand le jeu en offre une), et la barre de leur fenêtre
     top = cy - spread * 0.9
@@ -222,15 +219,6 @@ def main():
     scene(790, 215, stacks=4, target=4, window=0.45, pom=True)
 
     save(OUT)
-    # les quatre décors des procs : en haut sur des Idées claires (côté gauche), en bas sur un Barrage (côté droit)
-    background()
-    for i, (name, size) in enumerate((("decor-crescent", 2.6), ("decor-lozenge", 2.1), ("decor-runes", 2.0), ("decor-rays", 2.2))):
-        x = 120 + i * 240
-        for y, col, side, left in ((115, C["clear"], -1, 0.6), (290, C["barrage"], 1, 0.85)):
-            flip = name == "decor-crescent" and side > 0
-            blit(name, x, y, 64 * size, 64 * size, col, 1, uv=(1, 0, 0, 1) if flip else (0, 1, 0, 1))
-            round_icon(x, y, 64, col, col, glow=0.40, cooldown=1 - left)
-    save(DECORS)
 
 
 def save(out):

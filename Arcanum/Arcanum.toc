@@ -2,7 +2,7 @@
 ## Title: |cffb07cffArcanum|r
 ## Notes: HUD du mage Arcanes, autour du personnage : Idées claires à gauche, Barrage de projectiles à droite, charges de Déflagration des Arcanes, Présence spirituelle et Eurêka en haut, rappels avant le combat en bas.
 ## Author: Nans
-## Version: 1.3.2
+## Version: 1.4.0
 ## IconTexture: Interface\AddOns\Arcanum\Media\logo
 ## SavedVariables: ArcanumDB
 
