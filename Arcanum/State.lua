@@ -1141,12 +1141,14 @@ local function updateReminders(now)
     end
   end
   if armor and not worn then list[#list + 1] = armor end
-  -- eau et nourriture : à invoquer quand les sacs n'en ont plus
+  -- eau, nourriture et gemme de mana : à invoquer quand les sacs n'en ont plus
   if Spells.Known("water") or Spells.Known("food") then
     local water, food = Spells.Supplies()
     if Spells.Known("water") and not water then list[#list + 1] = "water" end
     if Spells.Known("food") and not food then list[#list + 1] = "food" end
   end
+  local gemSpell = Spells.GemSpell()   -- la meilleure gemme que le personnage sait invoquer
+  if gemSpell and not Spells.HasGemOf(gemSpell) then list[#list + 1] = "gemspell" end
 end
 
 -- ------------------------------------------------------------------ vérifications en jeu
@@ -1365,10 +1367,7 @@ ns:On("START", function()
   ns:RegisterEvent("SPELL_UPDATE_CHARGES", cooldowns)
   ns:RegisterEvent("SPELL_UPDATE_USABLE", function() costsStale = true; State.dirty = true end)
   ns:RegisterEvent("BAG_UPDATE_COOLDOWN", cooldowns)
-  ns:RegisterEvent("BAG_UPDATE_DELAYED", function()
-    Spells.BagsChanged()
-    cooldowns()
-  end)
+  ns:RegisterEvent("BAG_UPDATE_DELAYED", cooldowns)
 
   ns:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW", function(_, spellID)
     spellID = S.Num(spellID)

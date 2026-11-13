@@ -1,13 +1,13 @@
 -- Arcanum — le HUD : quatre zones autour du personnage.
 --
 -- Le HUD est centré sur le personnage, et chaque information a son côté :
---   * à gauche : les Idées claires ; à droite : le Barrage de projectiles. Une grande icône (celle du sort
---     que le proc améliore), cerclée de la couleur du proc, avec le temps restant. Pas de proc : rien.
---   * en haut : un cristal par charge de Déflagration des Arcanes visée (un de plus quand le jeu en offre
---     une), et dessous la barre des 18 secondes de leur fenêtre ;
---   * au-dessus des charges, seulement quand c'est le moment du burst : l'icône du sort à lancer, en or ;
+--   * à gauche : les Idées claires ; à droite : le Barrage de projectiles. Une grande icône (celle du
+--     proc), cerclée de sa couleur, avec le temps restant. Pas de proc : rien.
+--   * en haut, seulement quand il y a des charges de Déflagration des Arcanes : un cristal par charge
+--     visée (un de plus quand le jeu en offre une), et dessous la barre des 18 secondes de leur fenêtre ;
+--   * au-dessus des charges, tant qu'elle est active : la Présence spirituelle ;
 --   * en bas, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, eau,
---     nourriture).
+--     nourriture et gemme de mana à invoquer).
 -- Les zones s'écartent du personnage avec le réglage « écartement ».
 --
 -- Tout est animé à la main dans un seul OnUpdate (approche douce vers une cible) : pas de groupes
@@ -25,27 +25,24 @@ local sin, min, max, ceil = math.sin, math.min, math.max, math.ceil
 local PROC = 64                       -- icônes de proc, à gauche et à droite
 local CR_W, CR_H, CR_GAP = 26, 34, 32 -- cristaux de charge, et l'écart entre deux cristaux
 local BAR_W, BAR_H = 124, 4           -- barre de la fenêtre des charges
-local BURST = 46                      -- icône du sort de burst
+local POM = 46                        -- icône de la Présence spirituelle
 local REMIND, REMIND_GAP = 30, 38     -- rappels avant le combat
 
--- Procs affichés ; side : -1 à gauche du personnage, 1 à droite ; spell : le sort que le proc améliore.
+-- Procs affichés, avec leur propre icône ; side : -1 à gauche du personnage, 1 à droite ; spell : le sort
+-- que le proc améliore, dont l'icône sert si le jeu ne donne pas celle du proc.
 local PROCS = {
   { key = "clear", color = C.clear, spell = "blast", side = -1 },
   { key = "barrage", color = C.barrage, spell = "missiles", side = 1 },
 }
--- Gros temps de recharge du burst, dans l'ordre où ils se lancent.
-local BURST_ORDER = { "power", "eureka", "pom", "berserking", "bloodfury" }
-local IN_MACRO = { eureka = true, pom = true }
 
 -- Les sons sont des sons du jeu (« kit » : leur identifiant ; « alt » : celui joué si ce client ne connaît
--- pas le premier). Le joueur peut en choisir d'autres (réglages, ou /arc son burst 888), ou déposer ses
+-- pas le premier). Le joueur peut en choisir d'autres (réglages, ou /arc son barrage 888), ou déposer ses
 -- propres fichiers dans Sounds (« file »). « say » : le mot prononcé quand il a choisi la voix du jeu.
 local PROC_SOUND = {
   barrage = { kit = 3175, file = "barrage", say = "Barrage" },      -- ping de la mini-carte
   clear = { kit = 18019, file = "clear", say = "Idées claires" },   -- notification Battle.net
 }
-local BURST_SOUND = { kit = 3071, alt = 8960, file = "burst", say = "Burst" }   -- Témérité, sinon l'appel de préparation
-local SOUND_DEF = { clear = PROC_SOUND.clear, barrage = PROC_SOUND.barrage, burst = BURST_SOUND }
+local SOUND_DEF = PROC_SOUND
 -- Sons du jeu proposés par leur nom dans les réglages. Un identifiant que ce client ne joue pas est sauté.
 local SOUNDS = {
   { 18019, "Notification Battle.net" },
@@ -64,11 +61,11 @@ local SOUNDS = {
   { 1642, "Intelligence des Arcanes" },
 }
 
-local root, mover, fight, prep, bar, barText, cueIcon
+local root, mover, fight, prep, bar, barText, pomIcon
 local procs, crystals, reminders, halos, ghosts = {}, {}, {}, {}, {}
 local fightAlpha, prepAlpha = 0, 0
 local shownFight, shownPrep = -1, -1                   -- dernières opacités données aux deux groupes
-local hotBlend, cueBlend, cueShown = 0, 0, -1
+local hotBlend, pomBlend, pomShown = 0, 0, -1
 local crystalsFor, crystalsAim, crystalsStill = -1, -1, false   -- état des cristaux au dernier dessin
 local crystalsShown = -1                               -- nombre de cristaux affichés
 local barOn, barSeconds = false, nil
@@ -144,6 +141,13 @@ local function makeCrystal(parent)
   return f
 end
 
+-- Nombre de cristaux à montrer : aucun sans charge ; sinon un par charge visée, et un de plus quand le
+-- jeu offre une charge (Déflagration gratuite).
+local function crystalCount()
+  local n = State.stacks
+  return n > 0 and min(4, max(State.Target(), n)) or 0
+end
+
 -- Aligne `shown` cristaux, centrés au-dessus du personnage ; les autres sont cachés.
 local function layoutCrystals(shown)
   crystalsShown = shown
@@ -162,8 +166,7 @@ local function animateCrystals(dt)
   local n = State.stacks
   local target = State.Target()
   local full = n >= target
-  -- un cristal par charge visée ; un de plus quand le jeu offre une charge (Déflagration gratuite)
-  local shown = min(4, max(target, n))
+  local shown = crystalCount()
   if shown ~= crystalsShown then layoutCrystals(shown) end
   local blend = UI.Approach(hotBlend, full and 1 or 0, dt, 6)
   -- au repos (rien ne bouge, rien ne change) : on ne touche à aucune texture
@@ -178,7 +181,7 @@ local function animateCrystals(dt)
     local settled = f.pop == 0 and f.level == (on and 1 or 0)
     if not settled then still = false end
     -- un cristal éteint et au repos est déjà dessiné. Cible atteinte : les cristaux s'éclaircissent et
-    -- restent fixes ; ce qui bat en continu est réservé à ce qui demande une action (procs, burst).
+    -- restent fixes ; ce qui bat en continu est réservé à ce qui demande une action (les procs).
     if not (settled and not on and f.drawnOff) then
       local scale = 1 + f.pop * 0.6
       f.fill:SetSize(CR_W * scale, CR_H * scale)
@@ -303,7 +306,7 @@ local function refreshProcs()
     if active ~= f.on then
       f.on = active
       if active then
-        f.icon:SetTexture(Spells.Icon(f.def.spell) or 134400)
+        f.icon:SetTexture(Spells.Icon(f.def.key) or Spells.Icon(f.def.spell) or 134400)
         f.pop = 1
         f:Show()
       end
@@ -337,37 +340,31 @@ local function animateProcs(dt, now)
   end
 end
 
--- ------------------------------------------------------------------ burst, au-dessus des charges
--- Le sort de burst à lancer maintenant : le premier gros temps de recharge signalé, dans l'ordre où ils
--- se lancent ; quand ils sont tous partis (Présence spirituelle active), le Courroux qui en profite.
--- Avec « burst en une icône » (la macro ArcBurst : Eurêka + Présence spirituelle + Courroux), une seule
--- touche fait tout : à la place d'Eurêka ou de la Présence spirituelle, on montre le Courroux, celle de
--- la macro. La démonstration, elle, déroule les sorts un à un.
-local function refreshCue()
-  if not State.burst.on then return end   -- (l'icône garde son image le temps de s'effacer)
-  local key = "wrath"
-  for _, k in ipairs(BURST_ORDER) do
-    if State.burst[k] == true then key = k; break end
-  end
-  if IN_MACRO[key] and ns.db.burstOne ~= false and not State.demo then key = "wrath" end
-  if key ~= cueIcon.key then
-    cueIcon.key = key
-    cueIcon.icon:SetTexture(Spells.Icon(key) or 134400)
+-- ------------------------------------------------------------------ Présence spirituelle, au-dessus des charges
+-- Tant qu'elle est active, son icône reste affichée : le prochain sort sera instantané.
+local function refreshPom()
+  local on = ns.db.showProcs and State.pom.active and true or false
+  if on == pomIcon.on then return end
+  pomIcon.on = on
+  if on then
+    pomIcon.icon:SetTexture(Spells.Icon("pom") or 134400)
+    pomIcon.pop = 1
+    if ns.db.flash then spawnHalo(pomIcon, C.pom, POM, POM + 80, 0.45) end
   end
 end
 
-local function animateCue(dt, now)
-  cueBlend = UI.Approach(cueBlend, State.burst.on and 1 or 0, dt, 10)
-  cueIcon.pop = UI.Approach(cueIcon.pop, 0, dt, 7)
-  if cueBlend ~= cueShown then
-    cueShown = cueBlend
-    cueIcon:SetAlpha(cueBlend)
+local function animatePom(dt, now)
+  pomBlend = UI.Approach(pomBlend, pomIcon.on and 1 or 0, dt, 12)
+  pomIcon.pop = UI.Approach(pomIcon.pop, 0, dt, 7)
+  if pomBlend ~= pomShown then
+    pomShown = pomBlend
+    pomIcon:SetAlpha(pomBlend)
   end
-  if cueBlend <= 0 then return end
-  local pulse = 0.5 + 0.5 * sin(now * 5.0)
-  cueIcon.glow:SetVertexColor(C.power[1], C.power[2], C.power[3], min(1, 0.40 + 0.30 * pulse + cueIcon.pop * 0.3))
-  local s = BURST * (2.0 + cueIcon.pop * 0.8)
-  cueIcon.glow:SetSize(s, s)
+  if pomBlend <= 0 then return end
+  local pulse = 0.5 + 0.5 * sin(now * 4.4)
+  pomIcon.glow:SetVertexColor(C.pom[1], C.pom[2], C.pom[3], min(1, 0.32 + 0.18 * pulse + pomIcon.pop * 0.4))
+  local s = POM * (2.0 + pomIcon.pop * 0.8)
+  pomIcon.glow:SetSize(s, s)
 end
 
 -- ------------------------------------------------------------------ rappels avant le combat, en bas
@@ -385,7 +382,7 @@ local function refreshReminders(force)
     local key = list[i]
     f.key = key
     if key then
-      f.icon:SetTexture(Spells.Icon(key) or 134400)
+      f.icon:SetTexture((key == "gemspell" and Spells.IconOf(Spells.GemSpell()) or Spells.Icon(key)) or 134400)
       f:ClearAllPoints()
       f:SetPoint("CENTER", root, "CENTER", (i - (n + 1) / 2) * REMIND_GAP, bottomY())
       f:Show()
@@ -406,16 +403,16 @@ end
 function Hud.Layout()
   if not root then return end
   local sp = spread()
-  root:SetSize(2 * sp + PROC + 24, 2 * sp + 2 * BURST + 60)
+  root:SetSize(2 * sp + PROC + 24, 2 * sp + 2 * POM + 60)
   for _, f in ipairs(procs) do
     f:ClearAllPoints()
     f:SetPoint("CENTER", root, "CENTER", f.def.side * sp, 0)
   end
-  layoutCrystals(min(4, max(State.Target(), State.stacks)))
+  layoutCrystals(crystalCount())
   bar:ClearAllPoints()
   bar:SetPoint("CENTER", root, "CENTER", 0, topY() - CR_H / 2 - 10)
-  cueIcon:ClearAllPoints()
-  cueIcon:SetPoint("CENTER", root, "CENTER", 0, topY() + CR_H / 2 + BURST / 2 + 12)
+  pomIcon:ClearAllPoints()
+  pomIcon:SetPoint("CENTER", root, "CENTER", 0, topY() + CR_H / 2 + POM / 2 + 12)
   refreshReminders(true)
   -- repères montrés quand le HUD est déverrouillé : où tombera chaque zone
   local spots = { { -sp, 0, PROC }, { sp, 0, PROC }, { 0, topY(), CR_H }, { 0, bottomY(), REMIND } }
@@ -522,38 +519,7 @@ local function playSound(def, always)
   return nil
 end
 
--- Le son du burst : une fois quand le moment arrive. Le signal peut s'éteindre et revenir aussitôt (un
--- Barrage à dépenser d'abord) : on ne le rejoue pas avant 8 secondes.
-local burstSoundAt = -100
-local function burstSound()
-  local now = GetTime()
-  if State.demo or now - burstSoundAt < 8 then return end
-  burstSoundAt = now
-  playSound(BURST_SOUND)
-end
-
--- Rappel : le signal de burst reste allumé et aucun gros temps de recharge n'est lancé. L'onde et le son
--- sont redonnés une fois ; lancer un de ces sorts relance le délai pour les suivants.
-local cueSince, cueReminded = nil, false
-local function remindBurst(now)
-  if not State.burst.on or State.demo then
-    cueSince = nil
-    return
-  end
-  if not cueSince then
-    cueSince, cueReminded = now, false
-    return
-  end
-  local delay = ns.db.burstRemind or 0
-  if cueReminded or delay <= 0 or now - cueSince < delay then return end
-  cueReminded = true
-  cueIcon.pop = 1
-  if ns.db.flash then spawnHalo(cueIcon, C.power, BURST, BURST + 90, 0.5) end
-  burstSoundAt = now
-  playSound(BURST_SOUND)
-end
-
--- Le nom du son choisi pour un signal ("clear", "barrage" ou "burst"), pour les réglages.
+-- Le nom du son choisi pour un proc ("clear" ou "barrage"), pour les réglages.
 function Hud.SoundName(key)
   local v = type(ns.db.soundKit) == "table" and ns.db.soundKit[key]
   if not v then return L["Par défaut"] end
@@ -605,12 +571,11 @@ function Hud.CycleSound(key, dir)
   end
 end
 
--- /arc sons : fait entendre les trois sons, l'un après l'autre, et dit lequel est joué.
+-- /arc sons : fait entendre les deux sons, l'un après l'autre, et dit lequel est joué.
 function Hud.TestSounds()
   local list = {
     { PROC_SOUND.clear, L["Idées claires"] },
     { PROC_SOUND.barrage, L["Barrage de projectiles"] },
-    { BURST_SOUND, L["Moment du burst"] },
   }
   for i, item in ipairs(list) do
     local function play()
@@ -624,7 +589,7 @@ function Hud.TestSounds()
 end
 
 -- ------------------------------------------------------------------ boucle d'affichage
--- Les procs, les charges et le burst : visibles dès qu'il y a quelque chose à suivre.
+-- Les procs, les charges et la Présence spirituelle : visibles dès qu'il y a quelque chose à suivre.
 local function wantedFight()
   local db = ns.db
   if not db.enabled then return 0 end
@@ -661,7 +626,7 @@ local function onUpdate(_, dt)
     animateBar(now)
   end
   animateProcs(dt, now)
-  animateCue(dt, now)
+  animatePom(dt, now)
   animateHalos(now)
 end
 
@@ -670,9 +635,8 @@ function Hud.Refresh()
   local now = GetTime()
   refreshBar(now)
   refreshProcs()
-  refreshCue()
+  refreshPom()
   refreshReminders()
-  remindBurst(now)
 end
 
 function Hud.Build()
@@ -681,7 +645,8 @@ function Hud.Build()
   root:SetSize(400, 400)
   root:SetFrameStrata("MEDIUM")
 
-  -- Deux groupes, chacun avec son opacité : le combat (procs, charges, burst) et la préparation (rappels).
+  -- Deux groupes, chacun avec son opacité : le combat (procs, charges, Présence spirituelle) et la
+  -- préparation (rappels).
   fight = CreateFrame("Frame", nil, root)
   fight:SetAllPoints()
   fight:SetAlpha(0)
@@ -708,13 +673,14 @@ function Hud.Build()
   barText = UI.Text(bar, 12, C.muted, UI.FONT.body, "OUTLINE")
   barText:SetPoint("LEFT", bar, "RIGHT", 8, 0)
 
-  cueIcon = makeRound(fight, BURST, false)
-  cueIcon:SetFrameLevel(level + 5)
-  cueIcon.icon:SetTexture(134400)
-  cueIcon.ring:SetVertexColor(C.power[1], C.power[2], C.power[3], 1)
-  cueIcon:SetAlpha(0)
+  pomIcon = makeRound(fight, POM, false)
+  pomIcon.on = false
+  pomIcon:SetFrameLevel(level + 5)
+  pomIcon.icon:SetTexture(134400)
+  pomIcon.ring:SetVertexColor(C.pom[1], C.pom[2], C.pom[3], 1)
+  pomIcon:SetAlpha(0)
 
-  for i = 1, 4 do
+  for i = 1, 5 do
     local f = makeRound(prep, REMIND, false)
     f.ring:SetVertexColor(C.manaLow[1], C.manaLow[2], C.manaLow[3], 1)
     f:Hide()
@@ -732,7 +698,7 @@ function Hud.Build()
     if not ok then ns.Report(err) end
   end)
   Hud.root, Hud.fight, Hud.prep = root, fight, prep
-  Hud.procs, Hud.crystals, Hud.reminders, Hud.bar, Hud.barText, Hud.cueIcon = procs, crystals, reminders, bar, barText, cueIcon
+  Hud.procs, Hud.crystals, Hud.reminders, Hud.bar, Hud.barText, Hud.pomIcon = procs, crystals, reminders, bar, barText, pomIcon
   return root
 end
 
@@ -749,22 +715,6 @@ ns:On("SETTINGS", function()
   applyLock()
   Hud.Layout()
   Hud.Refresh()
-end)
-
--- Le moment du burst arrive : l'icône bondit, une onde dorée part d'elle, le son retentit.
-ns:On("BURST", function(on)
-  if not root or not on then return end
-  refreshCue()
-  cueIcon.pop = 1
-  if ns.db.flash then spawnHalo(cueIcon, C.power, BURST, BURST + 90, 0.5) end
-  burstSound()
-end)
-
--- Un gros temps de recharge vient d'être lancé : le rappel du burst repart de zéro pour les suivants.
-local IS_CD = {}
-for _, key in ipairs(BURST_ORDER) do IS_CD[key] = true end
-ns:On("CAST", function(key)
-  if IS_CD[key] and cueSince then cueSince, cueReminded = GetTime(), false end
 end)
 
 ns:On("STACKS", function(n, old)

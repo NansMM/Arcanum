@@ -1,5 +1,14 @@
 # Historique d'Arcanum
 
+## 1.1.0 — 13 novembre 2026
+
+- Rappels d'eau et de nourriture : seuls les objets invoqués comptent (une eau achetée ne dispense plus d'en invoquer). Les objets de tous les rangs d'Invocation d'eau et de nourriture de Forever sont reconnus.
+- Le rappel de la gemme de mana revient : il s'affiche quand la meilleure gemme que tu sais invoquer n'est pas dans tes sacs.
+- Les charges ne s'affichent que quand tu en as : sans charge, plus de cristaux vides.
+- Les procs montrent leur propre icône (Idées claires, Barrage de projectiles) au lieu de celle du sort à lancer.
+- Le signal de burst est retiré (icône, son, rappel, réglages). À sa place, au-dessus des charges : l'icône de la Présence spirituelle, tant qu'elle est active.
+- Les réglages tiennent de nouveau sur une colonne.
+
 ## 1.0.0 — 13 novembre 2026
 
 Arcanum repart sur de nouvelles bases : le cercle laisse la place à quatre zones autour du personnage.

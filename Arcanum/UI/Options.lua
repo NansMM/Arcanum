@@ -147,10 +147,6 @@ local function soundRow(parent, label, key, y)
   return y - 34
 end
 
-local function seconds(v)
-  return v > 0 and string.format("%d s", v) or L["non"]
-end
-
 -- ------------------------------------------------------------------ fenêtre
 function Options.Build()
   if frame then return frame end
@@ -193,52 +189,35 @@ function Options.Build()
     function() cross:SetTextColor(C.muted[1], C.muted[2], C.muted[3], 1) end)
   close:SetScript("OnClick", function() f:Hide() end)
 
-  -- Deux colonnes : l'affichage à gauche, les alertes et le cycle à droite. Chaque colonne est un cadre
-  -- de la largeur d'une fenêtre simple, auquel les briques s'ancrent comme avant.
-  local GUTTER = 14
-  local left = CreateFrame("Frame", nil, f)
-  left:SetSize(W, 10)
-  left:SetPoint("TOPLEFT", 0, 0)
-  local right = CreateFrame("Frame", nil, f)
-  right:SetSize(W, 10)
-  right:SetPoint("TOPLEFT", W - GUTTER, 0)
-
   local y = -70
-  y = sectionTitle(left, L["Affichage"], y)
-  y = toggle(left, L["Activer le HUD"], "enabled", y)
-  y = toggle(left, L["Visible aussi hors combat"], "showIdle", y)
-  y = toggle(left, L["Charges de Déflagration (en haut)"], "showCharges", y)
-  y = toggle(left, L["Procs (à gauche et à droite)"], "showProcs", y)
-  y = toggle(left, L["Rappels avant le combat (en bas)"], "showReminders", y)
-  y = stepper(left, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y - 4)
-  y = stepper(left, L["Écartement"], "spread", 80, 320, 10, function(v) return string.format("%d", v) end, y)
+  y = sectionTitle(f, L["Affichage"], y)
+  y = toggle(f, L["Activer le HUD"], "enabled", y)
+  y = toggle(f, L["Visible aussi hors combat"], "showIdle", y)
+  y = toggle(f, L["Charges de Déflagration (en haut)"], "showCharges", y)
+  y = toggle(f, L["Procs et Présence spirituelle"], "showProcs", y)
+  y = toggle(f, L["Rappels avant le combat (en bas)"], "showReminders", y)
+  y = choice(f, L["Charges visées"], "targetStacks", { 2, 3, 4 }, y - 4)
+  y = stepper(f, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y)
+  y = stepper(f, L["Écartement"], "spread", 80, 320, 10, function(v) return string.format("%d", v) end, y)
 
-  local ry = -70
-  ry = sectionTitle(right, L["Alertes"], ry)
-  ry = toggle(right, L["Sons (procs, moment du burst)"], "sound", ry)
-  ry = soundRow(right, L["Idées claires"], "clear", ry - 2)
-  ry = soundRow(right, L["Barrage"], "barrage", ry)
-  ry = soundRow(right, L["Burst"], "burst", ry)
-  ry = toggle(right, L["Onde lumineuse"], "flash", ry)
-
-  ry = sectionTitle(right, L["Burst"], ry - 8)
-  ry = toggle(right, L["Signaler le moment du burst"], "adviseBurst", ry)
-  ry = stepper(right, L["Rappel du burst"], "burstRemind", 0, 12, 2, seconds, ry - 4)
-  ry = choice(right, L["Charges visées"], "targetStacks", { 2, 3, 4 }, ry)
-  ry = toggle(right, L["Macro de burst (une seule icône)"], "burstOne", ry)
+  y = sectionTitle(f, L["Alertes"], y - 8)
+  y = toggle(f, L["Sons à l'arrivée d'un proc"], "sound", y)
+  y = soundRow(f, L["Idées claires"], "clear", y - 2)
+  y = soundRow(f, L["Barrage"], "barrage", y)
+  y = toggle(f, L["Onde lumineuse"], "flash", y)
 
   local bw = (W - 44 - 16) / 3
-  local move = pillButton(left, "", bw, function()
+  local move = pillButton(f, "", bw, function()
     ns.Set("locked", not ns.db.locked)
     Options.Refresh()
   end)
   move:SetPoint("TOPLEFT", 22, y - 10)
-  local demo = pillButton(left, "", bw, function()
+  local demo = pillButton(f, "", bw, function()
     State.SetDemo(not State.demo)
     Options.Refresh()
   end)
   demo:SetPoint("LEFT", move, "RIGHT", 8, 0)
-  local diag = pillButton(left, L["Diagnostic"], bw, function() ns.Diag.Show() end)
+  local diag = pillButton(f, L["Diagnostic"], bw, function() ns.Diag.Show() end)
   diag:SetPoint("LEFT", demo, "RIGHT", 8, 0)
   refreshers[#refreshers + 1] = function()
     move.label:SetText(ns.db.locked and L["Déplacer"] or L["Verrouiller"])
@@ -248,7 +227,7 @@ function Options.Build()
   end
   y = y - 10 - 28
 
-  f:SetSize(2 * W - GUTTER, math.max(-y, -ry) + 22)
+  f:SetSize(W, -y + 22)
   frame = f
   return f
 end
@@ -325,13 +304,13 @@ end
 Options.MakeMacro = makeMacro
 
 -- ------------------------------------------------------------------ sons
--- /arc sons                  : écouter les trois sons
+-- /arc sons                  : écouter les deux sons
 -- /arc son 3071              : écouter un son du jeu, par son identifiant
--- /arc son burst 3071        : jouer ce son du jeu au moment du burst (ou « clear », « barrage »)
--- /arc son burst voix        : faire dire « Burst » par la voix du jeu
--- /arc son burst             : revenir au son d'origine
-local SOUND_KEYS = { clear = "clear", claires = "clear", barrage = "barrage", burst = "burst" }
-local SOUND_LABEL = { clear = "Idées claires", barrage = "Barrage de projectiles", burst = "Moment du burst" }
+-- /arc son barrage 3071      : jouer ce son du jeu à l'arrivée d'un Barrage (ou « clear » : Idées claires)
+-- /arc son barrage voix      : faire dire « Barrage » par la voix du jeu
+-- /arc son barrage           : revenir au son d'origine
+local SOUND_KEYS = { clear = "clear", claires = "clear", barrage = "barrage" }
+local SOUND_LABEL = { clear = "Idées claires", barrage = "Barrage de projectiles" }
 
 local function soundCommand(arg)
   local a, b = arg:match("^(%S*)%s*(%S*)")
@@ -346,7 +325,7 @@ local function soundCommand(arg)
   end
   local key = SOUND_KEYS[a]
   if not key then
-    ns.Print(L["/arc son 3071 pour écouter un son du jeu ; /arc son burst 3071 pour le choisir (clear, barrage ou burst) ; /arc son burst pour revenir au son d'origine."])
+    ns.Print(L["/arc son 3071 pour écouter un son du jeu ; /arc son barrage 3071 pour le choisir (clear ou barrage) ; /arc son barrage pour revenir au son d'origine."])
     return
   end
   if type(ns.db.soundKit) ~= "table" then ns.db.soundKit = {} end
@@ -377,9 +356,9 @@ local HELP = {
   "/arc verrou : déplacer ou fixer le HUD",
   "/arc taille 120 : taille du HUD en pourcentage",
   "/arc ecart 150 : distance entre le personnage et les zones (de 80 à 320)",
-  "/arc sons : écouter les trois sons (Idées claires, Barrage, moment du burst)",
-  "/arc son 3071 : écouter un son du jeu ; /arc son burst 3071 : le choisir (clear, barrage, burst)",
-  "/arc son burst voix : faire dire « Burst » par la voix du jeu ; les sons se choisissent aussi dans les réglages",
+  "/arc sons : écouter les deux sons (Idées claires, Barrage)",
+  "/arc son 3071 : écouter un son du jeu ; /arc son barrage 3071 : le choisir (clear ou barrage)",
+  "/arc son barrage voix : faire dire « Barrage » par la voix du jeu ; les sons se choisissent aussi dans les réglages",
   "/arc macro : créer la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts",
   "/arc diag : rapport à copier (sorts reconnus, signaux lus en combat)",
   "/arc reset : remettre les réglages d'origine",

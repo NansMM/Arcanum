@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.0.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.1.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -122,20 +122,19 @@ ns.DEFAULTS = {
   spread = 150,           -- écartement : distance entre le personnage et les zones (procs, charges, rappels)
   showIdle = false,       -- afficher aussi hors combat, sans cible
   idleAlpha = 0.35,       -- opacité hors combat quand showIdle est actif
-  showCharges = true,     -- cristaux de charge au-dessus du personnage
-  showProcs = true,       -- icônes de proc : Idées claires à gauche, Barrage de projectiles à droite
+  showCharges = true,     -- cristaux de charge au-dessus du personnage, quand il y a des charges
+  showProcs = true,       -- icônes de proc : Idées claires à gauche, Barrage de projectiles à droite, Présence spirituelle en haut
   fillerRank = 1,         -- rang de l'Éclair de givre de remplissage : 1 (économe) ou "max" (plus de dégâts)
   burstOne = true,        -- macro de burst (Eureka + Présence spirituelle + Courroux) : l'icône de burst montre directement le Courroux
-  showReminders = true,   -- hors combat, signaler ce qui manque : Intelligence des Arcanes, armure, eau, nourriture
+  showReminders = true,   -- hors combat, signaler ce qui manque : Intelligence des Arcanes, armure, eau, nourriture et gemme de mana invoquées
   cutForClear = true,     -- conseiller d'interrompre un sort bon marché quand des Idées claires arrivent
   openWrath = true,       -- hors combat, conseiller le Courroux pour engager
   adviseBurst = true,     -- signaler le moment du burst (Pouvoir des Arcanes, Eureka, Présence spirituelle) : l'icône du sort à lancer, au-dessus des charges
   anticipate = false,     -- pendant une incantation, montrer déjà le sort d'après (sinon le conseil attend la fin)
   targetStacks = 2,       -- charges visées (2, 3 ou 4) : on monte jusque-là, puis Colère et sorts bon marché
   sound = true,
-  burstRemind = 6,        -- le signal de burst est redonné s'il reste allumé N secondes sans rien lancer (0 : jamais)
-  soundKit = {},          -- sons du jeu choisis à la place de ceux d'origine : [clear|barrage|burst] = identifiant, ou "voix"
-  flash = true,           -- petite onde autour de l'icône quand un proc ou le moment du burst arrive
+  soundKit = {},          -- sons du jeu choisis à la place de ceux d'origine : [clear|barrage] = identifiant, ou "voix"
+  flash = true,           -- petite onde autour de l'icône quand un proc arrive
 }
 
 -- Ce que l'addon apprend en jeu quand les données sont lisibles (hors combat) : durées et coûts réels.
@@ -182,6 +181,8 @@ function ns.InitDB()
     db.point = { "CENTER", "CENTER", 0, 0 }
     db.showNext, db.showMana, db.showCooldowns, db.soonSeconds = nil, nil, nil, nil
   end
+  db.burstRemind = nil   -- 1.1 : plus de signal de burst
+  db.soundKit.burst = nil
   if type(db.spread) ~= "number" or db.spread < 80 or db.spread > 320 then db.spread = 150 end
   db.version = 5
   ns.db = db

@@ -2,7 +2,7 @@
 """Aperçu du HUD d'Arcanum : compose les vraies textures de l'addon selon la mise en page de UI/Hud.lua.
 
 Trois scènes : en combat (procs de part et d'autre du personnage, charges au-dessus), hors combat (rappels
-sous le personnage), et le moment du burst.
+sous le personnage), et la Présence spirituelle active.
 
 Ce n'est pas une capture du jeu : les icônes de sorts et les textes sont remplacés par des aplats.
 Sert à juger les formes, les couleurs et les halos sans lancer WoW. Aucune dépendance.
@@ -165,7 +165,7 @@ def round_icon(cx, cy, size, tint, ring, glow=0.0, cooldown=0.0):
     blit("circle-edge", cx, cy, size + 4, size + 4, ring, 0.95)
 
 
-def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, cue=False, reminders=0, spread=110):
+def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=False, reminders=0, spread=110):
     """Les quatre zones autour du personnage, telles que les dispose UI/Hud.lua (écartement réduit)."""
     # le personnage (une silhouette : il n'appartient pas au HUD)
     body = (0.16, 0.15, 0.24)
@@ -181,7 +181,7 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, cue=
     full = stacks >= target
     col = C["hot"] if full else C["arcane"]
     shown = min(4, max(target, stacks))
-    if stacks > 0 or cue or clear is not None or barrage is not None:
+    if stacks > 0:   # (sans charge : aucun cristal)
         for i in range(shown):
             x = cx + (i + 1 - (shown + 1) / 2) * 32
             on = i < stacks
@@ -197,9 +197,9 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, cue=
         blit(None, cx, by, 126, 6, C["socket"], 0.90)
         blit(None, cx - 62 + 124 * window / 2, by, 124 * window, 4, col, 1)
         blit(None, cx + 62 + 16, by, 14, 7, mix(C["text"], C["ink"], 0.35), 0.9)   # secondes (aplat)
-    # burst : l'icône du sort à lancer, en or, au-dessus des charges
-    if cue:
-        round_icon(cx, top - 17 - 23 - 12, 46, C["power"], C["power"], glow=0.70)
+    # Présence spirituelle active : son icône, au-dessus des charges
+    if pom:
+        round_icon(cx, top - 17 - 23 - 12, 46, C["pom"], C["pom"], glow=0.50)
     # rappels avant le combat, sous le personnage
     amber = (1.000, 0.700, 0.300)
     for i in range(reminders):
@@ -209,10 +209,10 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, cue=
 
 def main():
     background()
-    # en combat, deux procs et trois charges sur quatre ; hors combat, deux rappels ; le moment du burst
+    # en combat, deux procs et trois charges sur quatre ; hors combat, trois rappels ; Présence spirituelle active
     scene(170, 215, stacks=3, target=4, window=0.62, clear=0.6, barrage=0.85)
-    scene(480, 215, reminders=2)
-    scene(790, 215, stacks=4, target=4, window=0.45, cue=True)
+    scene(480, 215, reminders=3)
+    scene(790, 215, stacks=2, target=2, window=0.45, pom=True)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     raw = bytearray()

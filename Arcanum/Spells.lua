@@ -47,8 +47,9 @@ Spells.DEF = {
   magearmor = { id = 6117 },
   icearmor  = { id = 7302 },
   frostarmor = { id = 168 },
-  water     = { id = 5504 },                                 -- Invocation d'eau
-  food      = { id = 587 },                                  -- Invocation de nourriture
+  -- (ranks : tous les rangs, du premier au dernier, au cas où le grimoire ne les rangerait pas sous un même nom)
+  water     = { id = 5504, ranks = { 5504, 5505, 5506, 6127, 10138, 10139, 10140, 468766 } },  -- Invocation d'eau
+  food      = { id = 587, ranks = { 587, 597, 990, 6129, 10144, 10145, 28612 } },             -- Invocation de nourriture
 }
 
 -- Gemmes de mana (objets), de la meilleure à la moins bonne, et les sorts qui les invoquent.
@@ -169,6 +170,15 @@ function Spells.Refresh()
       if def.lowest ~= def.id and isKnown(def.id) then def.lowest = def.id end
     elseif isKnown(def.id) or (def.talent and isKnown(def.talent)) then
       def.known = true
+    end
+    if def.ranks then   -- le plus haut rang connu, quand le grimoire n'a pas suffi
+      for i = #def.ranks, 1, -1 do
+        if isKnown(def.ranks[i]) then
+          if not def.known or def.best == def.id then def.best = def.ranks[i] end
+          def.known = true
+          break
+        end
+      end
     end
     def.auraPlain = auraNeverSecret(def)
     def.baseCD = nil
@@ -295,19 +305,11 @@ function Spells.GemSpell()
   return nil
 end
 
--- Eau et nourriture en sac. Un objet compte s'il fait partie des objets invoqués connus, ou si son effet
--- d'utilisation porte le nom du sort « Boisson » ou « Nourriture » du client : toute eau et toute
--- nourriture comptent alors, quels que soient leurs identifiants et la langue du jeu.
-Spells.WATER = { 8079, 8078, 8077, 3772, 2136, 2288, 5350, 30703, 22018 }
-Spells.FOOD = { 22895, 8076, 8075, 1487, 1114, 1113, 5349, 22019 }
-local DRINK_SPELL, FOOD_SPELL = 430, 433
-local itemKind = {}   -- [objet] = "water", "food" ou false (ni l'un ni l'autre)
-local supplies = { stale = true, water = false, food = false }
-
--- Le contenu des sacs a changé : la prochaine lecture les relira.
-function Spells.BagsChanged()
-  supplies.stale = true
-end
+-- Eau et nourriture invoquées, de la meilleure à la moins bonne (base de données de Forever, 1.60.1) :
+-- chaque rang d'Invocation d'eau ou de nourriture crée un objet différent. Seuls ces objets comptent :
+-- une eau achetée ne dispense pas d'en invoquer.
+Spells.WATER = { 231778, 8079, 8078, 8077, 3772, 2136, 2288, 5350 }
+Spells.FOOD = { 22895, 8076, 8075, 1487, 1114, 1113, 5349 }
 
 local function carries(list)
   local count = C_Item and C_Item.GetItemCount or GetItemCount
@@ -319,53 +321,17 @@ local function carries(list)
   return false
 end
 
--- "water", "food", false, ou nil quand le jeu n'a pas encore chargé l'objet (à relire plus tard).
-local function kindOf(itemID, drink, eat)
-  local kind = itemKind[itemID]
-  if kind ~= nil then return kind end
-  local get = C_Item and C_Item.GetItemSpell or GetItemSpell
-  if not get then return false end
-  local name = S.Plain(S.Call(get, itemID))
-  if type(name) == "string" then
-    kind = (drink and name == drink) and "water" or (eat and name == eat) and "food" or false
-  else
-    local cached = C_Item and C_Item.IsItemDataCachedByID
-    if cached and S.Plain(S.Call(cached, itemID)) == false then
-      if C_Item.RequestLoadItemDataByID then S.Call(C_Item.RequestLoadItemDataByID, itemID) end
-      return nil
-    end
-    kind = false   -- aucun effet d'utilisation
-  end
-  itemKind[itemID] = kind
-  return kind
+-- Le personnage a-t-il de l'eau invoquée, de la nourriture invoquée ?
+function Spells.Supplies()
+  return carries(Spells.WATER), carries(Spells.FOOD)
 end
 
--- Le personnage a-t-il de l'eau, de la nourriture ? Relu seulement quand les sacs ont changé.
-function Spells.Supplies()
-  if not supplies.stale then return supplies.water, supplies.food end
-  local water, food, pending = carries(Spells.WATER), carries(Spells.FOOD), false
-  local CC = C_Container
-  if not (water and food) and CC and CC.GetContainerNumSlots and CC.GetContainerItemID then
-    local drink, eat = spellName(DRINK_SPELL), spellName(FOOD_SPELL)
-    for bag = 0, 4 do
-      local slots = S.Num(S.Call(CC.GetContainerNumSlots, bag)) or 0
-      for slot = 1, slots do
-        local itemID = S.Num(S.Call(CC.GetContainerItemID, bag, slot))
-        if itemID then
-          local kind = kindOf(itemID, drink, eat)
-          if kind == "water" then
-            water = true
-          elseif kind == "food" then
-            food = true
-          elseif kind == nil then
-            pending = true
-          end
-        end
-      end
-    end
+-- La gemme de mana que crée ce sort d'invocation est-elle en sac ?
+function Spells.HasGemOf(spellID)
+  for i, id in ipairs(Spells.GEM_SPELLS) do
+    if id == spellID then return carries({ Spells.GEMS[i] }) end
   end
-  supplies.water, supplies.food, supplies.stale = water, food, pending
-  return water, food
+  return false
 end
 
 -- Icône d'un sort par identifiant.
