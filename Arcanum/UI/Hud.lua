@@ -2,7 +2,7 @@
 --
 -- Le HUD est centré sur le personnage, et chaque information a son côté :
 --   * à gauche : les Idées claires ; à droite : le Barrage de projectiles. Une grande icône (celle du
---     proc), cerclée de sa couleur, avec le temps restant. Pas de proc : rien.
+--     proc), cerclée de sa couleur, avec le temps restant, dans un décor au choix. Pas de proc : rien.
 --   * en haut, seulement quand il y a des charges de Déflagration des Arcanes : un cristal par charge
 --     visée (un de plus quand le jeu en offre une), et dessous la barre des 18 secondes de leur fenêtre ;
 --   * au-dessus des charges, tant qu'elle est active : la Présence spirituelle ;
@@ -34,6 +34,17 @@ local PROCS = {
   { key = "clear", color = C.clear, spell = "blast", side = -1 },
   { key = "barrage", color = C.barrage, spell = "missiles", side = 1 },
 }
+-- Décors dessinés autour d'un proc, à sa couleur, tant qu'il est affiché. file : la texture ; size : sa
+-- taille, en nombre de fois celle de l'icône ; flip : retournée du côté droit ; spin : elle tourne
+-- (radians par seconde) ; pulse : elle bat ; burst : son bond à l'arrivée du proc.
+local DECORS = {
+  croissants = { file = "decor-crescent", size = 2.6, flip = true, burst = 0.10 },
+  losange = { file = "decor-lozenge", size = 2.1, burst = 0.14 },
+  runes = { file = "decor-runes", size = 2.0, spin = 0.35, burst = 0.14 },
+  eclat = { file = "decor-rays", size = 2.2, pulse = true, burst = 0.35 },
+}
+Hud.DECORS = { "aucun", "croissants", "losange", "runes", "eclat" }
+Hud.DECOR_NAME = { aucun = "Aucun", croissants = "Croissants", losange = "Losange", runes = "Anneau de runes", eclat = "Éclat" }
 
 -- Les sons sont des sons du jeu (« kit » : leur identifiant ; « alt » : celui joué si ce client ne connaît
 -- pas le premier). Le joueur peut en choisir d'autres (réglages, ou /arc son barrage 888), ou déposer ses
@@ -69,6 +80,7 @@ local hotBlend, pomBlend, pomShown = 0, 0, -1
 local crystalsFor, crystalsAim, crystalsStill = -1, -1, false   -- état des cristaux au dernier dessin
 local crystalsShown = -1                               -- nombre de cristaux affichés
 local barOn, barSeconds = false, nil
+local previewUntil = -1                                -- aperçu du décor demandé depuis les réglages, jusqu'à cette date
 
 -- ------------------------------------------------------------------ géométrie
 -- Tout se place depuis le centre du HUD, qui est le personnage.
@@ -300,9 +312,10 @@ end
 -- ------------------------------------------------------------------ procs, à gauche et à droite
 local function refreshProcs()
   local show = ns.db.showProcs
+  local preview = GetTime() < previewUntil   -- aperçu du décor : les deux icônes s'affichent sans proc
   for _, f in ipairs(procs) do
     local p = State[f.def.key]
-    local active = show and p.active and true or false
+    local active = show and (p.active or preview) and true or false
     if active ~= f.on then
       f.on = active
       if active then
@@ -312,7 +325,7 @@ local function refreshProcs()
       end
     end
     if active then
-      if p.expire and p.duration and p.duration > 0 then
+      if p.active and p.expire and p.duration and p.duration > 0 then
         setCooldown(f, p.expire - p.duration, p.duration)
       else
         setCooldown(f, 0, 0)   -- durée inconnue : icône pleine
@@ -335,6 +348,19 @@ local function animateProcs(dt, now)
         f.glow:SetVertexColor(c[1], c[2], c[3], min(1, 0.30 + 0.16 * pulse + f.pop * 0.5))
         local s = PROC * (1.9 + f.pop * 0.7)   -- (pas de SetScale : il déplacerait l'icône)
         f.glow:SetSize(s, s)
+        local d = f.decorDef
+        if d then
+          local size = PROC * d.size * (1 + f.pop * d.burst)   -- le décor bondit avec le proc
+          f.decor:SetSize(size, size)
+          if d.spin and f.decor.SetRotation then
+            -- l'anneau tourne, plus vite dans les trois dernières secondes du proc
+            local p = State[f.def.key]
+            local hurry = p.active and p.expire and p.expire - now < 3
+            f.spin = (f.spin or 0) + dt * d.spin * (hurry and 4 or 1)
+            f.decor:SetRotation(f.spin)
+          end
+          if d.pulse then f.decor:SetAlpha(0.60 + 0.40 * pulse) end
+        end
       end
     end
   end
@@ -399,6 +425,37 @@ local function animateReminders(now)
   end
 end
 
+-- ------------------------------------------------------------------ décor des procs
+-- Donne à chaque proc le décor choisi dans les réglages (ou aucun).
+local function applyDecor()
+  local d = DECORS[ns.db.decor]
+  for _, f in ipairs(procs) do
+    f.decorDef = d
+    if d then
+      f.decor:SetTexture(UI.Media(d.file))
+      f.decor:SetSize(PROC * d.size, PROC * d.size)
+      if d.flip and f.def.side > 0 then
+        f.decor:SetTexCoord(1, 0, 0, 1)   -- miroir : le croissant se place du côté extérieur
+      else
+        f.decor:SetTexCoord(0, 1, 0, 1)
+      end
+      if f.decor.SetRotation then f.decor:SetRotation(0) end
+      f.spin = 0
+      f.decor:SetAlpha(1)
+      f.decor:Show()
+    else
+      f.decor:Hide()
+    end
+  end
+end
+
+-- Aperçu du décor, depuis les réglages : les deux icônes de proc s'affichent quelques secondes.
+function Hud.PreviewDecor()
+  if not root then return end
+  previewUntil = GetTime() + 4
+  Hud.Refresh()
+end
+
 -- ------------------------------------------------------------------ mise en page
 function Hud.Layout()
   if not root then return end
@@ -408,6 +465,7 @@ function Hud.Layout()
     f:ClearAllPoints()
     f:SetPoint("CENTER", root, "CENTER", f.def.side * sp, 0)
   end
+  applyDecor()
   layoutCrystals(crystalCount())
   bar:ClearAllPoints()
   bar:SetPoint("CENTER", root, "CENTER", 0, topY() - CR_H / 2 - 10)
@@ -593,7 +651,7 @@ end
 local function wantedFight()
   local db = ns.db
   if not db.enabled then return 0 end
-  if not db.locked or State.live then return 1 end
+  if not db.locked or State.live or GetTime() < previewUntil then return 1 end
   return db.showIdle and db.idleAlpha or 0
 end
 
@@ -658,6 +716,8 @@ function Hud.Build()
   for i, def in ipairs(PROCS) do
     local f = makeRound(fight, PROC, true, true)   -- voile inversé : il grandit à mesure que le proc s'épuise
     f.def, f.vis, f.on = def, 0, false
+    f.decor = UI.Tex(f, "BACKGROUND", nil, def.color, 1, nil, -1)
+    f.decor:SetPoint("CENTER")
     f:SetFrameLevel(level + 4)
     f.ring:SetVertexColor(def.color[1], def.color[2], def.color[3], 1)
     f:SetAlpha(0)

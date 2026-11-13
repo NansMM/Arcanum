@@ -147,6 +147,34 @@ local function soundRow(parent, label, key, y)
   return y - 34
 end
 
+-- Choix du décor des procs : « < nom > ». Les flèches passent au décor suivant et le montrent sur le HUD
+-- pendant quelques secondes ; un clic sur le nom le remontre.
+local function setDecor(dir)
+  local list, at = ns.Hud.DECORS, 1
+  for i, v in ipairs(list) do
+    if v == ns.db.decor then at = i end
+  end
+  ns.Set("decor", list[(at - 1 + dir) % #list + 1])
+  ns.Hud.PreviewDecor()
+end
+
+local function decorRow(parent, label, y)
+  local text = UI.Text(parent, 13, C.text)
+  text:SetPoint("TOPLEFT", 24, y - 7)
+  text:SetText(label)
+  local name
+  local function refresh() name.label:SetText(L[ns.Hud.DECOR_NAME[ns.db.decor] or "Aucun"]) end
+  local after = pillButton(parent, ">", 28, function() setDecor(1); refresh() end)
+  after:SetPoint("TOPRIGHT", -22, y)
+  name = pillButton(parent, "", 150, function() ns.Hud.PreviewDecor() end)
+  name.label:SetFont(UI.FONT.body, 12, "")
+  name:SetPoint("RIGHT", after, "LEFT", -4, 0)
+  local before = pillButton(parent, "<", 28, function() setDecor(-1); refresh() end)
+  before:SetPoint("RIGHT", name, "LEFT", -4, 0)
+  refreshers[#refreshers + 1] = refresh
+  return y - 34
+end
+
 -- ------------------------------------------------------------------ fenêtre
 function Options.Build()
   if frame then return frame end
@@ -196,7 +224,8 @@ function Options.Build()
   y = toggle(f, L["Charges de Déflagration (en haut)"], "showCharges", y)
   y = toggle(f, L["Procs et Présence spirituelle"], "showProcs", y)
   y = toggle(f, L["Rappels avant le combat (en bas)"], "showReminders", y)
-  y = choice(f, L["Charges visées"], "targetStacks", { 2, 3, 4 }, y - 4)
+  y = decorRow(f, L["Décor des procs"], y - 4)
+  y = choice(f, L["Charges visées"], "targetStacks", { 2, 3, 4 }, y)
   y = stepper(f, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y)
   y = stepper(f, L["Écartement"], "spread", 80, 320, 10, function(v) return string.format("%d", v) end, y)
 
@@ -356,6 +385,7 @@ local HELP = {
   "/arc verrou : déplacer ou fixer le HUD",
   "/arc taille 120 : taille du HUD en pourcentage",
   "/arc ecart 150 : distance entre le personnage et les zones (de 80 à 320)",
+  "/arc decor : passer au décor de procs suivant ; /arc decor runes : le choisir (aucun, croissants, losange, runes, eclat)",
   "/arc sons : écouter les deux sons (Idées claires, Barrage)",
   "/arc son 3071 : écouter un son du jeu ; /arc son barrage 3071 : le choisir (clear ou barrage)",
   "/arc son barrage voix : faire dire « Barrage » par la voix du jeu ; les sons se choisissent aussi dans les réglages",
@@ -395,6 +425,24 @@ SlashCmdList.ARCANUM = function(msg)
     else
       ns.Print(L["taille entre 60 et 180, par exemple /arc taille 120."])
     end
+  elseif cmd == "decor" or cmd == "décor" then
+    local wanted = (arg == "éclat" or arg == "etoile") and "eclat" or arg
+    local found
+    for _, v in ipairs(ns.Hud.DECORS) do
+      if v == wanted then found = v end
+    end
+    if found then
+      ns.Set("decor", found)
+      ns.Hud.PreviewDecor()
+    elseif arg == "" then
+      setDecor(1)
+    end
+    if found or arg == "" then
+      ns.Print(string.format(L["décor des procs : %s."], L[ns.Hud.DECOR_NAME[ns.db.decor]]))
+    else
+      ns.Print(L["décors possibles : aucun, croissants, losange, runes, eclat. Par exemple /arc decor runes."])
+    end
+    Options.Refresh()
   elseif cmd == "ecart" or cmd == "écart" or cmd == "spread" then
     local v = tonumber(arg)
     if v and v >= 80 and v <= 320 then

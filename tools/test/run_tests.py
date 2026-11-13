@@ -648,6 +648,23 @@ def main():
     f.M.advance(0.3)
     check(left.on is True and left._shown is True and left.icon._tex == 130536 and right.on is True,
           "les Idées claires s'affichent à gauche, avec leur propre icône, en même temps")
+    check(left.decor._shown is True and left.decor._tex.endswith("decor-crescent") and abs(left.decor._w - 64 * 2.6) < 3,
+          "d'origine, un croissant décore chaque proc")
+    f.run('Mock.ns.Set("decor", "runes")')
+    turn = left.decor._rotation
+    f.M.advance(0.5)
+    check(left.decor._tex.endswith("decor-runes") and left.decor._rotation > turn, "décor « runes » : un anneau, qui tourne")
+    f.run('SlashCmdList.ARCANUM("decor losange")')
+    check(f.ns.db.decor == "losange" and right.decor._tex.endswith("decor-lozenge"), "/arc decor losange : le décor change")
+    f.run('SlashCmdList.ARCANUM("decor")')
+    check(f.ns.db.decor == "runes", "/arc decor : passe au décor suivant")
+    f.run('SlashCmdList.ARCANUM("decor fleurs")')
+    check(f.ns.db.decor == "runes", "/arc decor fleurs : décor inconnu, rien ne change")
+    f.run('SlashCmdList.ARCANUM("decor aucun")')
+    check(left.decor._shown is False and right.decor._shown is False and left._shown is True,
+          "/arc decor aucun : les procs restent, sans décor")
+    f.run('Mock.ns.Set("decor", "eclat")')
+    check(left.decor._shown is True and left.decor._tex.endswith("decor-rays"), "décor « éclat » : des rayons")
     f.run('Mock.ns.Set("spread", 200)')
     check(left._points[1][4] == -200 and right._points[1][4] == 200, "écartement réglé : les zones s'éloignent du personnage")
     f.run('SlashCmdList.ARCANUM("ecart 120")')
@@ -695,13 +712,19 @@ def main():
     check(f.ns.db.soundKit.barrage is None, "/arc son barrage : retour au son d'origine")
     f.run('SlashCmdList.ARCANUM("son burst 3071")')
     check(f.ns.db.soundKit.burst is None, "/arc son burst : ce signal n'existe plus")
+    f.run('Mock.ns.Hud.PreviewDecor()')
+    f.M.advance(0.6)
+    check(left.on is True and right.on is True and hud.fight._alpha > 0.9, "aperçu du décor : les deux procs s'affichent hors combat")
+    f.M.advance(5.5)
+    check(left.on is False and right.on is False, "puis disparaissent au bout de quelques secondes")
     f.run('SlashCmdList.ARCANUM("verrou")')
     check(f.ns.db.locked is False, "/arc verrou : le HUD se déverrouille pour être déplacé")
     f.run('SlashCmdList.ARCANUM("verrou")')
     no_errors(f, "autour du personnage")
 
     m = Game(pre='ArcanumDB = { version = 4, point = { "CENTER", "CENTER", 0, -170 }, showNext = false, '
-                 'showMana = true, scale = 1.2, targetStacks = 3 }')
+                 'showMana = true, scale = 1.2, targetStacks = 3, decor = "fleurs" }')
+    check(m.ns.db.decor == "croissants", "un décor inconnu dans les réglages enregistrés revient au décor d'origine")
     check(m.ns.db.point[3] == 0 and m.ns.db.point[4] == 0 and m.ns.db.spread == 150,
           "mise à jour depuis une 0.12 : le HUD est recentré sur le personnage")
     check(m.ns.db.showNext is None and m.ns.db.showMana is None and m.ns.db.scale == 1.2 and m.ns.db.targetStacks == 3,

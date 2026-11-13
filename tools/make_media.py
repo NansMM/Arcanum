@@ -182,8 +182,54 @@ def make_runic():
     polar_tex("circle-edge", 64, lambda r, a, u, v: 0.43 <= r <= 0.5, ss=4)
 
 
+def make_decor():
+    """Décors des procs : dessinés autour de l'icône (au centre de la texture), blancs, teintés en jeu."""
+    S = 128
+    deg = math.pi / 180
+
+    def crescent(r, a, u, v):
+        # deux arcs effilés, à gauche de l'icône ; la texture est retournée pour le côté droit
+        du = u - 0.24
+        rr = math.hypot(du, v)
+        th = abs(math.atan2(v, -du))
+        if th <= 43 * deg and abs(rr - 0.70) <= 0.017 * (1 - (th / (43 * deg)) ** 2) + 0.003:
+            return True
+        return th <= 36 * deg and abs(rr - 0.585) <= 0.008 * (1 - (th / (36 * deg)) ** 2) + 0.002
+
+    def lozenge(r, a, u, v):
+        # un losange, et une perle à chaque pointe
+        if 0.395 <= abs(u) + abs(v) <= 0.425:
+            return True
+        return math.hypot(abs(u) - 0.445, v) <= 0.035 or math.hypot(u, abs(v) - 0.445) <= 0.035
+
+    def runes(r, a, u, v):
+        # un anneau plein, un anneau de tirets, quatre petits losanges aux points cardinaux
+        if 0.352 <= r <= 0.370:
+            return True
+        if 0.415 <= r <= 0.432 and near(a, 28, 0.05):
+            return True
+        return abs(abs(u) - 0.455) + abs(v) <= 0.034 or abs(u) + abs(abs(v) - 0.455) <= 0.034
+
+    def rays(r, a, u, v):
+        # huit rayons effilés : quatre longs, quatre courts
+        for k in range(8):
+            ang = k * math.pi / 4
+            along = u * math.cos(ang) + v * math.sin(ang)
+            across = abs(-u * math.sin(ang) + v * math.cos(ang))
+            end, half = (0.485, 0.020) if k % 2 == 0 else (0.40, 0.013)
+            if 0.28 <= along <= end and across <= half * (1 - (along - 0.28) / (end - 0.28)) + 0.004:
+                return True
+        return False
+
+    polar_tex("decor-crescent", S, crescent, ss=4)
+    polar_tex("decor-lozenge", S, lozenge, ss=4)
+    polar_tex("decor-runes", S, runes, ss=4, soft=True)   # (il tourne en jeu : bords doux)
+    polar_tex("decor-rays", S, rays, ss=4)
+
+
 def main():
     make_runic()
+    make_decor()
     make_diamond()
     make_glow()
     make_halo()
