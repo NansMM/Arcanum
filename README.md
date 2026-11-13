@@ -6,11 +6,11 @@ Arcanum place chaque information d'un côté de ton personnage, pour que tu la l
 
 ![Aperçu du HUD d'Arcanum](docs/apercu.png)
 
-*Aperçu composé avec les textures de l'addon (le personnage est une silhouette, les icônes sont remplacées par des aplats, les zones sont plus rapprochées qu'en jeu). De gauche à droite : en combat avec deux procs et des charges, hors combat avec trois rappels, et la Présence spirituelle active. En jeu : `/arc demo`.*
+*Aperçu composé avec les textures de l'addon (le personnage est une silhouette, les icônes sont remplacées par des aplats, les zones sont plus rapprochées qu'en jeu). De gauche à droite : en combat avec deux procs et des charges, hors combat avec trois rappels, et la Présence spirituelle et Eurêka actifs. En jeu : `/arc demo`.*
 
 - **À gauche : les Idées claires. À droite : le Barrage de projectiles.** Une grande icône, celle du proc, cerclée de sa couleur (bleu clair ou rose), avec le temps restant en chiffres et un voile qui grandit à mesure que le proc s'épuise. Pas de proc : le côté reste vide. Un **décor** entoure l'icône tant que le proc est là, à sa couleur : croissants (d'origine), losange, anneau de runes qui tourne, éclat de rayons, ou aucun. Il se choisit dans les réglages (« Décor des procs », qui le montre aussitôt sur le HUD) ou avec `/arc decor`.
 - **En haut : les charges de Déflagration des Arcanes**, seulement quand tu en as. Un cristal par charge visée (deux par défaut, réglable à 3 ou 4), qui s'éclaircit quand la cible est atteinte ; un cristal de plus apparaît quand le jeu t'offre une charge. Dessous, une barre se vide pendant les 18 secondes de la fenêtre des charges, avec les secondes restantes ; elle rougit quand la fenêtre va se fermer.
-- **Au-dessus des charges : la Présence spirituelle**, tant qu'elle est active. Son icône, cerclée de vert, te rappelle que ton prochain sort sera instantané.
+- **Au-dessus des charges : la Présence spirituelle et Eurêka**, tant qu'ils sont actifs. L'icône de la Présence spirituelle, cerclée de vert, te rappelle que ton prochain sort sera instantané ; celle d'Eurêka, cerclée d'or, montre son temps restant. Une seule active : elle est centrée ; les deux : côte à côte.
 - **En bas, hors combat : les rappels.** L'icône de ce qu'il manque avant d'engager : Intelligence des Arcanes, armure, et ce qui reste à invoquer : eau, nourriture, gemme de mana. Seuls les objets invoqués comptent (une eau achetée ne dispense pas d'en invoquer), et pour la gemme c'est la meilleure que tu sais invoquer qui est attendue. Rien ne manque : rien ne s'affiche. Au repos en ville, les rappels attendent que tu sortes ou que tu cibles un ennemi.
 
 ![Les quatre décors des procs](docs/decors.png)
@@ -25,7 +25,7 @@ Tu peux en choisir d'autres dans les réglages (`/arc`) : chaque signal a sa lig
 
 Pour un son hors liste : `/arc son 888` fait entendre le son de cet identifiant, `/arc son barrage 888` le choisit pour le Barrage (`clear` pour les Idées claires), `/arc son barrage` revient au son par défaut. Les identifiants se trouvent dans la base de sons de Wowhead (le nombre dans l'adresse de la page). Tu peux aussi déposer tes propres fichiers `.ogg` dans `Arcanum\Sounds` (voir le LISEZMOI du dossier).
 
-**Ce qu'Arcanum ne fait plus.** Jusqu'à la version 0.12, Arcanum était un cercle qui conseillait le prochain sort. Depuis la 1.0 il ne conseille plus le cycle, et depuis la 1.1 il ne signale plus le moment du burst : il montre tes procs, tes charges, ta Présence spirituelle et tes rappels, et te laisse jouer.
+**Ce qu'Arcanum ne fait plus.** Jusqu'à la version 0.12, Arcanum était un cercle qui conseillait le prochain sort. Depuis la 1.0 il ne conseille plus le cycle, et depuis la 1.1 il ne signale plus le moment du burst : il montre tes procs, tes charges, ta Présence spirituelle, ton Eurêka et tes rappels, et te laisse jouer.
 
 ## Installation
 

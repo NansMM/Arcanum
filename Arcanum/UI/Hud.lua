@@ -5,7 +5,7 @@
 --     proc), cerclée de sa couleur, avec le temps restant, dans un décor au choix. Pas de proc : rien.
 --   * en haut, seulement quand il y a des charges de Déflagration des Arcanes : un cristal par charge
 --     visée (un de plus quand le jeu en offre une), et dessous la barre des 18 secondes de leur fenêtre ;
---   * au-dessus des charges, tant qu'elle est active : la Présence spirituelle ;
+--   * au-dessus des charges, tant qu'elles sont actives : la Présence spirituelle et Eurêka ;
 --   * en bas, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, eau,
 --     nourriture et gemme de mana à invoquer).
 -- Les zones s'écartent du personnage avec le réglage « écartement ».
@@ -25,7 +25,7 @@ local sin, min, max, ceil = math.sin, math.min, math.max, math.ceil
 local PROC = 64                       -- icônes de proc, à gauche et à droite
 local CR_W, CR_H, CR_GAP = 26, 34, 32 -- cristaux de charge, et l'écart entre deux cristaux
 local BAR_W, BAR_H = 124, 4           -- barre de la fenêtre des charges
-local POM = 46                        -- icône de la Présence spirituelle
+local POM, POM_GAP = 46, 10           -- icônes des améliorations actives (Présence spirituelle, Eurêka), et leur écart
 local REMIND, REMIND_GAP = 30, 38     -- rappels avant le combat
 
 -- Procs affichés, avec leur propre icône ; side : -1 à gauche du personnage, 1 à droite ; spell : le sort
@@ -33,6 +33,11 @@ local REMIND, REMIND_GAP = 30, 38     -- rappels avant le combat
 local PROCS = {
   { key = "clear", color = C.clear, spell = "blast", side = -1 },
   { key = "barrage", color = C.barrage, spell = "missiles", side = 1 },
+}
+-- Améliorations montrées au-dessus des charges tant qu'elles sont actives ; timed : avec le temps restant.
+local BUFFS = {
+  { key = "pom", color = C.pom },
+  { key = "eureka", color = C.power, timed = true },
 }
 -- Décors dessinés autour d'un proc, à sa couleur, tant qu'il est affiché. file : la texture ; size : sa
 -- taille, en nombre de fois celle de l'icône ; flip : retournée du côté droit ; spin : elle tourne
@@ -72,11 +77,11 @@ local SOUNDS = {
   { 1642, "Intelligence des Arcanes" },
 }
 
-local root, mover, fight, prep, bar, barText, pomIcon
-local procs, crystals, reminders, halos, ghosts = {}, {}, {}, {}, {}
+local root, mover, fight, prep, bar, barText
+local procs, buffs, crystals, reminders, halos, ghosts = {}, {}, {}, {}, {}, {}
 local fightAlpha, prepAlpha = 0, 0
 local shownFight, shownPrep = -1, -1                   -- dernières opacités données aux deux groupes
-local hotBlend, pomBlend, pomShown = 0, 0, -1
+local hotBlend = 0
 local crystalsFor, crystalsAim, crystalsStill = -1, -1, false   -- état des cristaux au dernier dessin
 local crystalsShown = -1                               -- nombre de cristaux affichés
 local barOn, barSeconds = false, nil
@@ -366,31 +371,71 @@ local function animateProcs(dt, now)
   end
 end
 
--- ------------------------------------------------------------------ Présence spirituelle, au-dessus des charges
--- Tant qu'elle est active, son icône reste affichée : le prochain sort sera instantané.
-local function refreshPom()
-  local on = ns.db.showProcs and State.pom.active and true or false
-  if on == pomIcon.on then return end
-  pomIcon.on = on
-  if on then
-    pomIcon.icon:SetTexture(Spells.Icon("pom") or 134400)
-    pomIcon.pop = 1
-    if ns.db.flash then spawnHalo(pomIcon, C.pom, POM, POM + 80, 0.45) end
+-- ------------------------------------------------------------------ améliorations actives, au-dessus des charges
+-- La Présence spirituelle (le prochain sort sera instantané) et Eurêka (avec son temps restant) : leur
+-- icône reste affichée tant que l'amélioration est active. Une seule : centrée ; les deux : côte à côte.
+local function layoutBuffs()
+  local n, i = 0, 0
+  for _, f in ipairs(buffs) do
+    if f.on then n = n + 1 end
+  end
+  for _, f in ipairs(buffs) do
+    if f.on then
+      i = i + 1
+      f:ClearAllPoints()
+      f:SetPoint("CENTER", root, "CENTER", (i - (n + 1) / 2) * (POM + POM_GAP), topY() + CR_H / 2 + POM / 2 + 12)
+    end
   end
 end
 
-local function animatePom(dt, now)
-  pomBlend = UI.Approach(pomBlend, pomIcon.on and 1 or 0, dt, 12)
-  pomIcon.pop = UI.Approach(pomIcon.pop, 0, dt, 7)
-  if pomBlend ~= pomShown then
-    pomShown = pomBlend
-    pomIcon:SetAlpha(pomBlend)
+local function refreshBuffs()
+  local show = ns.db.showProcs
+  local changed = false
+  for _, f in ipairs(buffs) do
+    local p = State[f.def.key]
+    local on = show and p.active and true or false
+    if on ~= f.on then
+      f.on, changed = on, true
+      if on then
+        f.icon:SetTexture(Spells.Icon(f.def.key) or 134400)
+        f.pop = 1
+      end
+    end
+    if on then
+      if p.expire and p.duration and p.duration > 0 then
+        setCooldown(f, p.expire - p.duration, p.duration)
+      else
+        setCooldown(f, 0, 0)   -- pas de durée (Présence spirituelle) : icône pleine
+      end
+    end
   end
-  if pomBlend <= 0 then return end
+  if not changed then return end
+  layoutBuffs()
+  if ns.db.flash then
+    for _, f in ipairs(buffs) do
+      if f.on and f.pop == 1 then spawnHalo(f, f.def.color, POM, POM + 80, 0.45) end   -- celle qui vient d'arriver
+    end
+  end
+end
+
+local function animateBuffs(dt, now)
   local pulse = 0.5 + 0.5 * sin(now * 4.4)
-  pomIcon.glow:SetVertexColor(C.pom[1], C.pom[2], C.pom[3], min(1, 0.32 + 0.18 * pulse + pomIcon.pop * 0.4))
-  local s = POM * (2.0 + pomIcon.pop * 0.8)
-  pomIcon.glow:SetSize(s, s)
+  for _, f in ipairs(buffs) do
+    if f.on or f.vis > 0 then
+      f.vis = UI.Approach(f.vis, f.on and 1 or 0, dt, 12)
+      f.pop = UI.Approach(f.pop, 0, dt, 7)
+      if f.vis ~= f.shown then
+        f.shown = f.vis
+        f:SetAlpha(f.vis)
+      end
+      if f.vis > 0 then
+        local c = f.def.color
+        f.glow:SetVertexColor(c[1], c[2], c[3], min(1, 0.32 + 0.18 * pulse + f.pop * 0.4))
+        local s = POM * (2.0 + f.pop * 0.8)
+        f.glow:SetSize(s, s)
+      end
+    end
+  end
 end
 
 -- ------------------------------------------------------------------ rappels avant le combat, en bas
@@ -469,8 +514,7 @@ function Hud.Layout()
   layoutCrystals(crystalCount())
   bar:ClearAllPoints()
   bar:SetPoint("CENTER", root, "CENTER", 0, topY() - CR_H / 2 - 10)
-  pomIcon:ClearAllPoints()
-  pomIcon:SetPoint("CENTER", root, "CENTER", 0, topY() + CR_H / 2 + POM / 2 + 12)
+  layoutBuffs()
   refreshReminders(true)
   -- repères montrés quand le HUD est déverrouillé : où tombera chaque zone
   local spots = { { -sp, 0, PROC }, { sp, 0, PROC }, { 0, topY(), CR_H }, { 0, bottomY(), REMIND } }
@@ -647,7 +691,7 @@ function Hud.TestSounds()
 end
 
 -- ------------------------------------------------------------------ boucle d'affichage
--- Les procs, les charges et la Présence spirituelle : visibles dès qu'il y a quelque chose à suivre.
+-- Les procs, les charges et les améliorations actives : visibles dès qu'il y a quelque chose à suivre.
 local function wantedFight()
   local db = ns.db
   if not db.enabled then return 0 end
@@ -684,7 +728,7 @@ local function onUpdate(_, dt)
     animateBar(now)
   end
   animateProcs(dt, now)
-  animatePom(dt, now)
+  animateBuffs(dt, now)
   animateHalos(now)
 end
 
@@ -693,7 +737,7 @@ function Hud.Refresh()
   local now = GetTime()
   refreshBar(now)
   refreshProcs()
-  refreshPom()
+  refreshBuffs()
   refreshReminders()
 end
 
@@ -703,7 +747,7 @@ function Hud.Build()
   root:SetSize(400, 400)
   root:SetFrameStrata("MEDIUM")
 
-  -- Deux groupes, chacun avec son opacité : le combat (procs, charges, Présence spirituelle) et la
+  -- Deux groupes, chacun avec son opacité : le combat (procs, charges, améliorations actives) et la
   -- préparation (rappels).
   fight = CreateFrame("Frame", nil, root)
   fight:SetAllPoints()
@@ -733,12 +777,20 @@ function Hud.Build()
   barText = UI.Text(bar, 12, C.muted, UI.FONT.body, "OUTLINE")
   barText:SetPoint("LEFT", bar, "RIGHT", 8, 0)
 
-  pomIcon = makeRound(fight, POM, false)
-  pomIcon.on = false
-  pomIcon:SetFrameLevel(level + 5)
-  pomIcon.icon:SetTexture(134400)
-  pomIcon.ring:SetVertexColor(C.pom[1], C.pom[2], C.pom[3], 1)
-  pomIcon:SetAlpha(0)
+  for i, def in ipairs(BUFFS) do
+    local f = makeRound(fight, POM, def.timed, def.timed)   -- (Eurêka : temps restant en chiffres, voile qui grandit)
+    f.def, f.vis, f.on = def, 0, false
+    f:SetFrameLevel(level + 5)
+    f.icon:SetTexture(134400)
+    f.ring:SetVertexColor(def.color[1], def.color[2], def.color[3], 1)
+    if def.timed and f.cd.GetCountdownFontString then
+      local okF, fs = pcall(f.cd.GetCountdownFontString, f.cd)
+      if okF and fs and fs.SetFont then pcall(fs.SetFont, fs, UI.FONT.body, 15, "OUTLINE") end
+    end
+    f:SetPoint("CENTER", root, "CENTER", 0, 0)
+    f:SetAlpha(0)
+    buffs[i] = f
+  end
 
   for i = 1, 5 do
     local f = makeRound(prep, REMIND, false)
@@ -758,7 +810,8 @@ function Hud.Build()
     if not ok then ns.Report(err) end
   end)
   Hud.root, Hud.fight, Hud.prep = root, fight, prep
-  Hud.procs, Hud.crystals, Hud.reminders, Hud.bar, Hud.barText, Hud.pomIcon = procs, crystals, reminders, bar, barText, pomIcon
+  Hud.procs, Hud.crystals, Hud.reminders, Hud.bar, Hud.barText = procs, crystals, reminders, bar, barText
+  Hud.buffs, Hud.pomIcon, Hud.eurekaIcon = buffs, buffs[1], buffs[2]
   return root
 end
 

@@ -1,5 +1,9 @@
 # Historique d'Arcanum
 
+## 1.2.0 — 13 novembre 2026
+
+- Eurêka actif : son icône, cerclée d'or, s'affiche au-dessus des charges avec son temps restant, tant que l'amélioration dure. Si la Présence spirituelle est active en même temps, les deux icônes sont côte à côte.
+
 ## 1.1.0 — 13 novembre 2026
 
 - Rappels d'eau et de nourriture : seuls les objets invoqués comptent (une eau achetée ne dispense plus d'en invoquer). Les objets de tous les rangs d'Invocation d'eau et de nourriture de Forever sont reconnus.

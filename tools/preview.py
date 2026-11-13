@@ -2,7 +2,7 @@
 """Aperçu du HUD d'Arcanum : compose les vraies textures de l'addon selon la mise en page de UI/Hud.lua.
 
 Trois scènes : en combat (procs de part et d'autre du personnage, charges au-dessus), hors combat (rappels
-sous le personnage), et la Présence spirituelle active.
+sous le personnage), et la Présence spirituelle et Eurêka actifs.
 
 Ce n'est pas une capture du jeu : les icônes de sorts et les textes sont remplacés par des aplats.
 Sert à juger les formes, les couleurs et les halos sans lancer WoW. Aucune dépendance.
@@ -201,9 +201,10 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=
         blit(None, cx, by, 126, 6, C["socket"], 0.90)
         blit(None, cx - 62 + 124 * window / 2, by, 124 * window, 4, col, 1)
         blit(None, cx + 62 + 16, by, 14, 7, mix(C["text"], C["ink"], 0.35), 0.9)   # secondes (aplat)
-    # Présence spirituelle active : son icône, au-dessus des charges
+    # Présence spirituelle et Eurêka actifs : leurs icônes côte à côte, au-dessus des charges
     if pom:
-        round_icon(cx, top - 17 - 23 - 12, 46, C["pom"], C["pom"], glow=0.50)
+        round_icon(cx - 28, top - 17 - 23 - 12, 46, C["pom"], C["pom"], glow=0.50)
+        round_icon(cx + 28, top - 17 - 23 - 12, 46, C["power"], C["power"], glow=0.50, cooldown=0.35)
     # rappels avant le combat, sous le personnage
     amber = (1.000, 0.700, 0.300)
     for i in range(reminders):
@@ -213,7 +214,7 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=
 
 def main():
     background()
-    # en combat, deux procs et trois charges sur quatre ; hors combat, trois rappels ; Présence spirituelle active
+    # en combat, deux procs et trois charges sur quatre ; hors combat, trois rappels ; Présence spirituelle et Eurêka actifs
     scene(200, 215, stacks=3, target=4, window=0.62, clear=0.6, barrage=0.85)
     scene(480, 215, reminders=3)
     scene(790, 215, stacks=2, target=2, window=0.45, pom=True)

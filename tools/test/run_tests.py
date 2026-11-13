@@ -627,15 +627,25 @@ def main():
     check(f.S.stacks == 1 and len(shown) == 2 and all(c._points[1][5] > 100 for c in shown),
           "une charge : les cristaux apparaissent au-dessus du personnage, un par charge visée")
     check(hud.bar._alpha == 1 and hud.barText._text in ("18 s", "17 s"), "sous les cristaux, la barre de leur fenêtre et ses secondes")
-    pom = hud.pomIcon
-    check(pom.on is False and pom._alpha == 0, "Présence spirituelle inactive : rien au-dessus des charges")
+    pom, eur = hud.pomIcon, hud.eurekaIcon
+    check(pom.on is False and pom._alpha == 0 and eur.on is False and eur._alpha == 0,
+          "ni Présence spirituelle ni Eurêka : rien au-dessus des charges")
+    f.cast(EUREKA)
+    f.M.advance(0.4)
+    check(f.S.eureka.active and eur.on is True and eur._alpha > 0.9 and eur.icon._tex == 130817 and eur.cd._cd[2] == 8,
+          "Eurêka actif : son icône s'affiche, avec ses 8 s")
+    check(eur._points[1][4] == 0 and eur._points[1][5] > shown[0]._points[1][5], "au-dessus des charges, centrée")
     f.cast(POM)
     f.M.advance(0.4)
     check(f.S.pom.active and pom.on is True and pom._alpha > 0.9 and pom.icon._tex == 130043
           and pom._points[1][5] > shown[0]._points[1][5], "Présence spirituelle active : son icône s'affiche au-dessus des charges")
+    check(pom._points[1][4] == -28 and eur._points[1][4] == 28, "les deux actives : côte à côte")
     f.cast(WRATH)
     f.M.advance(0.6)
     check(not f.S.pom.active and pom.on is False and pom._alpha == 0, "dépensée par le Courroux : l'icône disparaît")
+    check(eur.on is True and eur._points[1][4] == 0, "Eurêka, toujours actif, se recentre")
+    f.M.advance(7)
+    check(not f.S.eureka.active and eur.on is False and eur._alpha == 0, "Eurêka terminé : son icône disparaît")
     played = lambda name: len([p for p in (f.M.soundFiles or {}).values() if p.endswith(name + ".ogg")])
     check(played("burst") == 0, "plus aucun son de burst")
     f.M.proc("Barrage de projectiles", 400588)
@@ -678,15 +688,16 @@ def main():
     f.M.setCombat(False)
     f.run('Mock.auras = {}; Mock.fire("UNIT_AURA", "player", {})')
     f.run('SlashCmdList.ARCANUM("demo")')
-    sides, charges, pom_seen = set(), set(), False
+    sides, charges, pom_seen, eur_seen = set(), set(), False, False
     for _ in range(240):
         f.M.advance(0.05)
         pom_seen = pom_seen or pom.on is True
+        eur_seen = eur_seen or eur.on is True
         sides.update(k for k, b in (("clear", left), ("barrage", right)) if b.on)
         charges.add(f.S.stacks)
     check(sides == {"clear", "barrage"}, "la démonstration montre les deux procs, chacun de son côté")
     check(charges == {0, 1, 2, 3, 4}, "les charges qui montent")
-    check(pom_seen, "et la Présence spirituelle")
+    check(pom_seen and eur_seen, "la Présence spirituelle et Eurêka")
     f.run('SlashCmdList.ARCANUM("demo")')
     f.M.advance(0.5)
     check(not any(b.on for b in hud.procs.values()) and f.S.stacks == 0 and not any(c._shown for c in hud.crystals.values()),
