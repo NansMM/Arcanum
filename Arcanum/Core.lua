@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.4.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.5.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -123,7 +123,8 @@ ns.DEFAULTS = {
   decor = true,           -- décor des procs : l'arc de runes du jeu, du côté extérieur de chaque icône
   showIdle = false,       -- afficher aussi hors combat, sans cible
   idleAlpha = 0.35,       -- opacité hors combat quand showIdle est actif
-  showCharges = true,     -- cristaux de charge au-dessus du personnage, quand il y a des charges
+  showCharges = true,     -- charges au-dessus du personnage, quand il y en a
+  chargeArt = true,       -- charges en orbes du jeu (illustrations de Blizzard) ; sinon, ou si ce client ne les a pas : cristaux
   showProcs = true,       -- icônes de proc : Idées claires à gauche, Barrage de projectiles à droite, Présence spirituelle et Eurêka en haut
   fillerRank = 1,         -- rang de l'Éclair de givre de remplissage : 1 (économe) ou "max" (plus de dégâts)
   burstOne = true,        -- macro de burst (Eureka + Présence spirituelle + Courroux) : l'icône de burst montre directement le Courroux

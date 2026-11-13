@@ -1,5 +1,10 @@
 # Historique d'Arcanum
 
+## 1.5.0 — 13 novembre 2026
+
+- Charges en orbes du jeu : les charges de Déflagration s'affichent avec les illustrations peintes par Blizzard pour le mage Arcanes (un socle, quatre orbes, et un éclat, un halo et un cercle de runes à chaque charge gagnée ou perdue), montées et animées comme dans l'interface d'origine, en plus grand.
+- Si ton client n'a pas ces images, Arcanum garde ses cristaux, sans rien te demander. `/arc diag` dit si elles ont été trouvées. Le réglage « Charges en orbes du jeu » permet aussi de revenir aux cristaux.
+
 ## 1.4.0 — 13 novembre 2026
 
 - Un seul décor de procs : l'arc de runes du jeu (l'ancien « Art du jeu »), désormais affiché d'origine. Les quatre décors dessinés par Arcanum (croissants, losange, anneau de runes, éclat) sont retirés, avec leurs textures.

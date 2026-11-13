@@ -348,6 +348,23 @@ function Texture:SetVertexColor(r, g, b, a)
   self._color = { r, g, b, a }
   if a ~= nil then self._alpha = a end   -- comme en jeu : l'opacité donnée ici est celle de SetAlpha
 end
+-- Planches d'images du jeu (atlas). Mock.hasOrbs = true : ce client a les orbes de charge de Blizzard.
+M.hasOrbs = false
+M.atlasSize = {
+  ["Mage-ArcaneCharge"] = { 21, 21 }, ["Mage-ArcaneCharge-Rune"] = { 38, 38 }, ["Mage-ArcaneCharge-Spark"] = { 45, 56 },
+  ["Mage-ArcaneCharge-SmallSpark"] = { 30, 30 }, ["Mage-ArcaneCharge-CircleGlow"] = { 34, 34 }, ["Mage-ArcaneChargeBar"] = { 97, 20 },
+}
+C_Texture = {}
+function C_Texture.GetAtlasInfo(name)
+  local s = M.hasOrbs and M.atlasSize[name]
+  return s and { width = s[1], height = s[2] } or nil
+end
+function Texture:SetAtlas(name, useAtlasSize)
+  local s = M.hasOrbs and M.atlasSize[name]
+  if not s then error("atlas inconnu de ce client : " .. tostring(name), 2) end
+  self._atlas = name
+  if useAtlasSize then self._w, self._h = s[1], s[2] end
+end
 function Texture:SetBlendMode(m) if m ~= "ADD" and m ~= "BLEND" then error("fusion invalide", 2) end end
 function Texture:SetDesaturated(v) self._desat = v end
 function Texture:SetRotation(radians) num(radians, "rotation"); self._rotation = radians end

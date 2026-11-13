@@ -3,8 +3,9 @@
 -- Le HUD est centré sur le personnage, et chaque information a son côté :
 --   * à gauche : les Idées claires ; à droite : le Barrage de projectiles. Une grande icône (celle du
 --     proc), cerclée de sa couleur, avec le temps restant, bordée d'un arc de runes (le décor). Pas de proc : rien.
---   * en haut, seulement quand il y a des charges de Déflagration des Arcanes : un cristal par charge,
---     et dessous la barre des 18 secondes de leur fenêtre ;
+--   * en haut, seulement quand il y a des charges de Déflagration des Arcanes : les quatre orbes de
+--     charge peints par Blizzard (ou, si ce client ne les a pas, un cristal par charge), et dessous la
+--     barre des 18 secondes de leur fenêtre ;
 --   * au-dessus des charges, tant qu'elles sont actives : la Présence spirituelle et Eurêka ;
 --   * en bas, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, eau,
 --     nourriture et gemme de mana à invoquer).
@@ -72,8 +73,9 @@ local SOUNDS = {
   { 1642, "Intelligence des Arcanes" },
 }
 
-local root, mover, fight, prep, bar, barText
-local procs, buffs, crystals, reminders, halos, ghosts = {}, {}, {}, {}, {}, {}
+local root, mover, fight, prep, bar, barText, orbBar
+local procs, buffs, crystals, orbs, reminders, halos, ghosts = {}, {}, {}, {}, {}, {}, {}
+local orbVis, orbShown = 0, -1                         -- opacité de la rangée d'orbes
 local fightAlpha, prepAlpha = 0, 0
 local shownFight, shownPrep = -1, -1                   -- dernières opacités données aux deux groupes
 local hotBlend = 0
@@ -94,6 +96,42 @@ end
 
 local function bottomY()
   return -spread()
+end
+
+-- ------------------------------------------------------------------ orbes de charge du jeu
+-- Les charges des Arcanes telles que Blizzard les a peintes pour le mage (2016) : un socle, quatre orbes,
+-- et à chaque charge gagnée ou perdue un éclat, un halo et un cercle de runes. Ce sont des morceaux de
+-- planche, désignés par leur nom. Si ce client n'en connaît pas un seul, on garde les cristaux d'Arcanum.
+local ORB_ATLAS = {
+  orb = "Mage-ArcaneCharge", rune = "Mage-ArcaneCharge-Rune", spark = "Mage-ArcaneCharge-Spark",
+  small = "Mage-ArcaneCharge-SmallSpark", glow = "Mage-ArcaneCharge-CircleGlow", bar = "Mage-ArcaneChargeBar",
+}
+local ORB_W, ORB_H, ORB_SCALE = 125, 39, 1.6   -- taille de la rangée dans l'interface d'origine, et son agrandissement
+local orbsFound
+local function orbsAvailable()
+  if orbsFound == nil then
+    orbsFound = false
+    local get = C_Texture and C_Texture.GetAtlasInfo
+    if get then
+      orbsFound = true
+      for _, name in pairs(ORB_ATLAS) do
+        local ok, info = pcall(get, name)
+        if not ok or not info then orbsFound = false; break end
+      end
+    end
+  end
+  return orbsFound
+end
+Hud.OrbsAvailable = orbsAvailable
+
+-- Les charges s'affichent-elles en orbes du jeu ? (réglage, et images présentes)
+local function orbMode()
+  return ns.db.chargeArt ~= false and orbsAvailable()
+end
+
+-- Demi-hauteur de la zone des charges : la barre se place dessous, les améliorations actives dessus.
+local function chargeHalf()
+  return orbMode() and ORB_H * ORB_SCALE / 2 or CR_H / 2
 end
 
 -- ------------------------------------------------------------------ halos (onde à l'arrivée d'un signal)
@@ -156,6 +194,7 @@ end
 
 -- Nombre de cristaux à montrer : un par charge, aucun sans charge.
 local function crystalCount()
+  if orbMode() then return 0 end   -- (les orbes du jeu les remplacent)
   return min(4, max(0, State.stacks))
 end
 
@@ -207,6 +246,86 @@ local function animateCrystals(dt)
     end
   end
   crystalsStill = still
+end
+
+-- ------------------------------------------------------------------ orbes de charge : animation
+-- Reprise à la main des animations d'origine (MageArcaneChargesBar.xml).
+local function ramp(t, t0, t1)   -- 0 avant t0, 1 après t1
+  if t <= t0 then return 0 end
+  if t >= t1 then return 1 end
+  return (t - t0) / (t1 - t0)
+end
+
+local function easeOut(k)
+  return 1 - (1 - k) * (1 - k)
+end
+
+local function flash(t, rise, hold, gone)   -- monte jusqu'à `rise`, tient jusqu'à `hold`, s'efface jusqu'à `gone`
+  if t < rise then return t / rise end
+  if t < hold then return 1 end
+  if t < gone then return 1 - (t - hold) / (gone - hold) end
+  return 0
+end
+
+local function animateOrbs(dt, now)
+  local n = State.stacks
+  hotBlend = UI.Approach(hotBlend, n >= 4 and 1 or 0, dt, 6)   -- (la barre de la fenêtre s'éclaircit à quatre charges)
+  -- la rangée apparaît vite, et s'efface lentement : on voit les charges s'éteindre
+  orbVis = UI.Approach(orbVis, n > 0 and 1 or 0, dt, n > 0 and 14 or 3)
+  if orbVis ~= orbShown then
+    orbShown = orbVis
+    orbBar:SetAlpha(orbVis)
+  end
+  if orbVis <= 0 then
+    for _, c in ipairs(orbs) do
+      if c.t0 or c.on then   -- au prochain affichage, pas d'animation d'extinction pour des orbes déjà éteints
+        c.on, c.t0, c.settled = false, nil, false
+      end
+    end
+    return
+  end
+  for i, c in ipairs(orbs) do
+    local on = i <= n
+    if on ~= c.on then
+      c.on, c.t0, c.settled = on, now, false
+    end
+    local t = c.t0 and (now - c.t0) or 10
+    if t > 1.1 then
+      if not c.settled then   -- au repos : état final, une fois
+        c.settled = true
+        c.base:SetAlpha(c.on and 1 or 0.3)
+        c.glow:SetAlpha(0)
+        c.small:SetAlpha(0)
+        c.spark:SetAlpha(0)
+        c.rune:SetAlpha(0)
+      end
+    elseif c.on then
+      -- charge gagnée : l'orbe s'allume, un halo se resserre sur lui, un petit éclat s'étire
+      c.base:SetAlpha(0.3 + 0.7 * ramp(t, 0, 1))
+      local s = 1.5 - 0.5 * easeOut(ramp(t, 0, 0.4))
+      c.glow:SetSize(c.glowW * s, c.glowH * s)
+      c.glow:SetAlpha(flash(t, 0.25, 0.5, 1.0))
+      local k = easeOut(ramp(t, 0, 0.3))
+      c.small:SetSize(c.smallW * (1 - 0.5 * k), c.smallH * (1 + 0.5 * k))
+      c.small:SetAlpha(flash(t, 0.25, 0.4, 0.9))
+      c.spark:SetAlpha(0)
+      c.rune:SetAlpha(0)
+    else
+      -- charge perdue : l'orbe s'éteint, un grand éclat s'étire, le cercle de runes tourne, le halo s'élargit
+      c.base:SetAlpha(1 - 0.7 * ramp(t, 0, 1))
+      local s = 0.7 + 0.55 * easeOut(ramp(t, 0, 0.4))
+      c.glow:SetSize(c.glowW * s, c.glowH * s)
+      c.glow:SetAlpha(flash(t, 0.25, 0.5, 1.0))
+      local k = easeOut(ramp(t, 0, 0.3))
+      c.spark:SetSize(c.sparkW * 0.5, c.sparkH * (0.25 + k))
+      c.spark:SetAlpha(flash(t, 0.25, 0.4, 0.9))
+      local r = 0.6 + 0.2 * ramp(t, 0, 0.25)
+      c.rune:SetSize(c.runeW * r, c.runeH * r)
+      if c.rune.SetRotation then c.rune:SetRotation(-math.rad(20) * easeOut(ramp(t, 0, 0.75))) end
+      c.rune:SetAlpha(flash(t, 0.5, 0.5, 1.0))
+      c.small:SetAlpha(0)
+    end
+  end
 end
 
 -- ------------------------------------------------------------------ fenêtre des charges
@@ -383,7 +502,7 @@ local function layoutBuffs()
     if f.on then
       i = i + 1
       f:ClearAllPoints()
-      f:SetPoint("CENTER", root, "CENTER", (i - (n + 1) / 2) * (POM + POM_GAP), topY() + CR_H / 2 + POM / 2 + 12)
+      f:SetPoint("CENTER", root, "CENTER", (i - (n + 1) / 2) * (POM + POM_GAP), topY() + chargeHalf() + POM / 2 + 12)
     end
   end
 end
@@ -530,8 +649,13 @@ function Hud.Layout()
   end
   applyDecor()
   layoutCrystals(crystalCount())
+  if orbBar then
+    orbBar:ClearAllPoints()
+    orbBar:SetPoint("CENTER", root, "CENTER", 0, topY() / ORB_SCALE)   -- (ses coordonnées sont à son échelle)
+    orbBar:SetShown(orbMode() and ns.db.showCharges and true or false)
+  end
   bar:ClearAllPoints()
-  bar:SetPoint("CENTER", root, "CENTER", 0, topY() - CR_H / 2 - 10)
+  bar:SetPoint("CENTER", root, "CENTER", 0, topY() - chargeHalf() - 10)
   layoutBuffs()
   refreshReminders(true)
   -- repères montrés quand le HUD est déverrouillé : où tombera chaque zone
@@ -742,7 +866,7 @@ local function onUpdate(_, dt)
   if prepAlpha > 0 then animateReminders(now) end
   if fightAlpha <= 0 then return end   -- rien à suivre : rien d'autre à faire pour cette image
   if ns.db.showCharges then
-    animateCrystals(dt)
+    if orbMode() then animateOrbs(dt, now) else animateCrystals(dt) end
     animateBar(now)
   end
   animateProcs(dt, now)
@@ -794,6 +918,42 @@ function Hud.Build()
     crystals[i] = makeCrystal(fight)
     crystals[i]:SetFrameLevel(level + 5)
   end
+  -- Les orbes de charge du jeu, montés comme dans l'interface d'origine (mêmes tailles, mêmes décalages),
+  -- puis agrandis d'un bloc. Créés seulement si ce client a les images.
+  if orbsAvailable() then
+    orbBar = CreateFrame("Frame", nil, fight)
+    orbBar:SetSize(ORB_W, ORB_H)
+    orbBar:SetScale(ORB_SCALE)
+    orbBar:SetFrameLevel(level + 5)
+    orbBar:SetAlpha(0)
+    local socle = orbBar:CreateTexture(nil, "BACKGROUND")
+    socle:SetAtlas(ORB_ATLAS.bar, true)
+    socle:SetPoint("TOP")
+    local function piece(parent, layer, atlas, blend, x, y)
+      local tex = parent:CreateTexture(nil, layer)
+      tex:SetAtlas(atlas, true)
+      tex:SetPoint("CENTER", x or 0, y or 0)
+      if blend then tex:SetBlendMode(blend) end
+      return tex
+    end
+    for i = 1, 4 do
+      local c = CreateFrame("Frame", nil, orbBar)
+      c:SetSize(39, 39)
+      c:SetPoint("TOPLEFT", orbBar, "TOPLEFT", 3 + (i - 1) * 27, 4)
+      c.base = piece(c, "BACKGROUND", ORB_ATLAS.orb)
+      c.base:SetAlpha(0.3)
+      c.rune = piece(c, "ARTWORK", ORB_ATLAS.rune, "ADD", -1, 1)
+      c.spark = piece(c, "ARTWORK", ORB_ATLAS.spark, "ADD")
+      c.small = piece(c, "ARTWORK", ORB_ATLAS.small, "ADD")
+      c.glow = piece(c, "OVERLAY", ORB_ATLAS.glow, "ADD", 0, 1)
+      for _, key in ipairs({ "rune", "spark", "small", "glow" }) do
+        c[key .. "W"], c[key .. "H"] = c[key]:GetWidth(), c[key]:GetHeight()
+        c[key]:SetAlpha(0)
+      end
+      c.on = false
+      orbs[i] = c
+    end
+  end
   bar = makeBar(fight)
   barText = UI.Text(bar, 12, C.muted, UI.FONT.body, "OUTLINE")
   barText:SetPoint("LEFT", bar, "RIGHT", 8, 0)
@@ -833,6 +993,7 @@ function Hud.Build()
   Hud.root, Hud.fight, Hud.prep = root, fight, prep
   Hud.procs, Hud.crystals, Hud.reminders, Hud.bar, Hud.barText = procs, crystals, reminders, bar, barText
   Hud.buffs, Hud.pomIcon, Hud.eurekaIcon = buffs, buffs[1], buffs[2]
+  Hud.orbBar, Hud.orbs = orbBar, orbs
   return root
 end
 
