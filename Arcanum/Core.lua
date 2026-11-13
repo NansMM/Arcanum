@@ -1,19 +1,18 @@
--- Arcanum — noyau : espace de noms, événements, réglages, lecture prudente des valeurs « secrètes ».
+-- Arcanum — core: namespace, events, settings, careful reading of "secret" values.
 --
--- WoW Forever applique les règles d'addons de Midnight : en combat, le jeu rend « secrètes » la plupart
--- des données (auras, temps de recharge, mana). Un addon peut les afficher dans un widget, mais ni les
--- comparer ni calculer avec. Arcanum ne lit donc jamais une valeur sans vérifier qu'elle est lisible.
+-- WoW Forever applies Midnight's addon rules: in combat, the game makes most data "secret"
+-- (auras, cooldowns, mana). An addon can display them in a widget, but can neither
+-- compare them nor compute with them. So Arcanum never reads a value without checking that it is readable.
 local ADDON, ns = ...
 
-ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.5.1"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "2.0.0"
 
-local pcall, type, pairs = pcall, type, pairs
+local pcall, type, pairs, ipairs = pcall, type, pairs, ipairs
 
--- ------------------------------------------------------------------ erreurs
+-- ------------------------------------------------------------------ errors
 local function report(err)
   ns.errorCount = (ns.errorCount or 0) + 1
   ns.lastError = tostring(err)
@@ -22,7 +21,7 @@ local function report(err)
 end
 ns.Report = report
 
--- ------------------------------------------------------------------ valeurs secrètes
+-- ------------------------------------------------------------------ secret values
 local S = {}
 ns.Secret = S
 
@@ -34,19 +33,19 @@ function S.IsTable(t)
   return issecrettable ~= nil and issecrettable(t) == true
 end
 
--- La valeur si elle est lisible, sinon nil.
+-- The value if it is readable, otherwise nil.
 function S.Plain(v)
-  if S.Is(v) or v == nil then return nil end   -- l'ordre compte : comparer un secret lève une erreur
+  if S.Is(v) or v == nil then return nil end   -- order matters: comparing a secret raises an error
   return v
 end
 
--- Un nombre lisible, sinon nil.
+-- A readable number, otherwise nil.
 function S.Num(v)
   if S.Is(v) or type(v) ~= "number" then return nil end
   return v
 end
 
--- Appel protégé : les fonctions gardées lèvent une erreur ou ne renvoient rien quand la donnée est secrète.
+-- Protected call: guarded functions raise an error or return nothing when the data is secret.
 function S.Call(fn, ...)
   if type(fn) ~= "function" then return nil end
   local ok, a, b, c, d = pcall(fn, ...)
@@ -54,14 +53,14 @@ function S.Call(fn, ...)
   return a, b, c, d
 end
 
--- Le jeu a-t-il le système de valeurs secrètes ?
+-- Does the game have the secret values system?
 S.RESTRICTED = issecretvalue ~= nil
 
--- ------------------------------------------------------------------ événements
+-- ------------------------------------------------------------------ events
 local eventFrame = CreateFrame("Frame")
 local handlers = {}
 
--- Retourne false si l'événement n'existe pas dans ce client (l'enregistrer lèverait une erreur).
+-- Returns false if the event does not exist in this client (registering it would raise an error).
 function ns:RegisterEvent(event, fn)
   local list = handlers[event]
   if not list then
@@ -82,7 +81,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
   end
 end)
 
--- Événement limité à une unité (évite d'être réveillé par les auras de tout le raid).
+-- Event limited to one unit (avoids being woken up by the auras of the whole raid).
 function ns:RegisterUnitEvent(event, unit, fn)
   local f = CreateFrame("Frame")
   if not (f.RegisterUnitEvent and pcall(f.RegisterUnitEvent, f, event, unit)) then
@@ -95,7 +94,7 @@ function ns:RegisterUnitEvent(event, unit, fn)
   return true
 end
 
--- ------------------------------------------------------------------ bus interne
+-- ------------------------------------------------------------------ internal bus
 local listeners = {}
 
 function ns:On(message, fn)
@@ -113,38 +112,32 @@ function ns:Fire(message, ...)
   end
 end
 
--- ------------------------------------------------------------------ réglages
+-- ------------------------------------------------------------------ settings
 ns.DEFAULTS = {
   enabled = true,
   locked = true,
   scale = 1.0,
-  point = { "CENTER", "CENTER", 0, 0 },      -- ancre, ancre de l'écran, x, y : le HUD est centré sur le personnage
-  spread = 150,           -- écartement : distance entre le personnage et les zones (procs, charges, rappels)
-  decor = true,           -- décor des procs : l'arc de runes du jeu, du côté extérieur de chaque icône
-  showIdle = false,       -- afficher aussi hors combat, sans cible
-  idleAlpha = 0.35,       -- opacité hors combat quand showIdle est actif
-  showCharges = true,     -- cristaux de charge au-dessus du personnage, quand il y a des charges
-  showProcs = true,       -- icônes de proc : Idées claires à gauche, Barrage de projectiles à droite, Présence spirituelle et Eurêka en haut
-  fillerRank = 1,         -- rang de l'Éclair de givre de remplissage : 1 (économe) ou "max" (plus de dégâts)
-  burstOne = true,        -- macro de burst (Eureka + Présence spirituelle + Courroux) : l'icône de burst montre directement le Courroux
-  showReminders = true,   -- hors combat, signaler ce qui manque : Intelligence des Arcanes, armure, eau, nourriture et gemme de mana invoquées
-  cutForClear = true,     -- conseiller d'interrompre un sort bon marché quand des Idées claires arrivent
-  openWrath = true,       -- hors combat, conseiller le Courroux pour engager
-  adviseBurst = true,     -- signaler le moment du burst (Pouvoir des Arcanes, Eureka, Présence spirituelle) : l'icône du sort à lancer, au-dessus des charges
-  anticipate = false,     -- pendant une incantation, montrer déjà le sort d'après (sinon le conseil attend la fin)
-  targetStacks = 2,       -- charges visées (2, 3 ou 4) : on monte jusque-là, puis Colère et sorts bon marché
+  point = { "CENTER", "CENTER", 0, 0 },      -- anchor, screen anchor, x, y: the HUD is centered on the character
+  spread = 150,           -- spread: distance between the character and the zones (procs, charges, reminders)
+  decor = true,           -- proc decoration: the game's rune arc, on the outer side of each icon
+  showCharges = true,     -- charge crystals above the character, when there are charges
+  showProcs = true,       -- proc icons: Clearcasting on the left, Missile Barrage on the right, Presence of Mind and Eureka at the top
+  showReminders = true,   -- out of combat, flag what is missing: Arcane Intellect, armor, conjured water, food and mana gem
   sound = true,
-  soundKit = {},          -- sons du jeu choisis à la place de ceux d'origine : [clear|barrage] = identifiant, ou "voix"
-  flash = true,           -- onde lumineuse quand un proc arrive : un écho de l'arc de runes (un anneau, sans décor)
+  soundKit = {},          -- game sounds chosen in place of the original ones: [clear|barrage] = ID, or "voice"
+  flash = true,           -- light wave when a proc arrives: an echo of the rune arc (a ring, without decoration)
 }
 
--- Ce que l'addon apprend en jeu quand les données sont lisibles (hors combat) : durées et coûts réels.
+-- Settings from previous versions, which no longer exist (next-spell advice, burst, old decorations).
+local RETIRED = { "wrathStacks", "thrifty", "spin", "showNext", "showMana", "showCooldowns", "soonSeconds", "chargeArt",
+  "burstRemind", "showIdle", "idleAlpha", "fillerRank", "burstOne", "cutForClear", "openWrath", "adviseBurst", "anticipate", "targetStacks" }
+
+-- What the addon learns in game when data is readable (out of combat): real durations and costs.
 local LEARN_DEFAULTS = {
-  dur = {},        -- [clé d'aura] = durée en secondes
-  cd = {},         -- [clé de sort] = temps de recharge en secondes
-  abBase = nil,    -- coût de la Déflagration sans charge
-  abStep = nil,    -- surcoût par charge (1.75 = +175 %)
-  costTracks = false,  -- le coût suit-il bien les charges ? (vérifié une fois hors combat)
+  dur = {},        -- [aura key] = duration in seconds
+  abBase = nil,    -- cost of Arcane Blast with no charge
+  abStep = nil,    -- extra cost per charge (1.75 = +175%)
+  costTracks = false,  -- does the cost really follow the charges? (checked once out of combat)
 }
 
 local function copyDefaults(dst, src)
@@ -168,30 +161,31 @@ function ns.InitDB()
   if type(db.learn) ~= "table" then db.learn = {} end
   copyDefaults(db.learn, LEARN_DEFAULTS)
   if type(db.point) ~= "table" or #db.point < 4 then db.point = { "CENTER", "CENTER", 0, 0 } end
-  local saved = db.version or 1   -- version des réglages enregistrés, avant mise à niveau
-  if saved < 3 then   -- 0.3 : « charges visées » remplace le seuil du Courroux et « garder le mana »
-    if db.wrathStacks == 2 or db.wrathStacks == 3 then db.targetStacks = db.wrathStacks end
-    db.wrathStacks, db.thrifty = nil, nil
-  end
-  if db.targetStacks ~= 2 and db.targetStacks ~= 3 and db.targetStacks ~= 4 then db.targetStacks = 2 end
-  if db.fillerRank ~= 1 and db.fillerRank ~= "max" then db.fillerRank = 1 end
-  if type(db.learn.dur) == "table" then db.learn.dur.blast = nil end   -- remplacé par abWindow (fenêtre de 18 s)
-  db.spin = nil   -- 0.8 : plus de runes
+  local saved = db.version or 1   -- version of the saved settings, before upgrade
+  for _, key in ipairs(RETIRED) do db[key] = nil end
+  db.learn.cd = nil
+  if type(db.learn.dur) == "table" then db.learn.dur.blast = nil end   -- replaced by abWindow (18 s window)
   if type(db.soundKit) ~= "table" then db.soundKit = {} end
-  if saved < 5 then   -- 1.0 : HUD en quatre zones autour du personnage, recentré ; réglages de l'ancien cercle oubliés
-    db.point = { "CENTER", "CENTER", 0, 0 }
-    db.showNext, db.showMana, db.showCooldowns, db.soonSeconds = nil, nil, nil, nil
+  db.soundKit.burst = nil
+  for key, value in pairs(db.soundKit) do
+    if value == "voix" then db.soundKit[key] = "voice" end   -- 2.0: values saved in English
   end
-  if db.decor == "aucun" then   -- 1.4 : un seul décor, affiché ou non (avant : un nom de décor)
+  if saved < 5 then db.point = { "CENTER", "CENTER", 0, 0 } end   -- 1.0: the HUD is re-centered on the character
+  if saved < 6 then
+    -- 2.0: the position is saved in screen units (it was in the HUD's own scaled units)
+    local scale, p = type(db.scale) == "number" and db.scale or 1, db.point
+    if type(p[3]) == "number" and type(p[4]) == "number" then p[3], p[4] = p[3] * scale, p[4] * scale end
+    if type(db.learn.checks) == "table" then   -- observations of the removed burst macro check
+      db.learn.checks.burstGap, db.learn.checks.pomChannel = nil, nil
+    end
+  end
+  if db.decor == "aucun" then   -- 1.4: a single decoration, shown or not (before: a decoration name)
     db.decor = false
   elseif type(db.decor) ~= "boolean" then
     db.decor = true
   end
-  db.chargeArt = nil     -- 1.5.1 : les orbes du jeu sont retirés
-  db.burstRemind = nil   -- 1.1 : plus de signal de burst
-  db.soundKit.burst = nil
   if type(db.spread) ~= "number" or db.spread < 80 or db.spread > 320 then db.spread = 150 end
-  db.version = 5
+  db.version = 6
   ns.db = db
   return db
 end
@@ -208,7 +202,7 @@ function ns.Set(key, value)
   ns:Fire("SETTINGS", key)
 end
 
--- ------------------------------------------------------------------ divers
+-- ------------------------------------------------------------------ misc
 function ns.Print(msg)
   print("|cffb07cffArcanum|r " .. tostring(msg))
 end
@@ -218,13 +212,13 @@ function ns.IsMage()
   return class == "MAGE"
 end
 
--- ------------------------------------------------------------------ démarrage
+-- ------------------------------------------------------------------ startup
 ns:RegisterEvent("ADDON_LOADED", function(_, name)
   if name ~= ADDON then return end
   ns.InitDB()
 end)
 
--- Démarre le moteur et le HUD (une seule fois).
+-- Starts the engine and the HUD (once only).
 function ns.Start()
   if ns.started then return end
   ns.started = true
@@ -234,6 +228,6 @@ end
 ns:RegisterEvent("PLAYER_LOGIN", function()
   if not ns.db then ns.InitDB() end
   ns.isMage = ns.IsMage()
-  if not ns.isMage then return end   -- l'addon reste endormi sur les autres classes
+  if not ns.isMage then return end   -- the addon stays dormant on other classes
   ns.Start()
 end)

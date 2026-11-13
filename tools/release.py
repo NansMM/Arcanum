@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Publie une nouvelle version d'Arcanum.
+"""Publishes a new version of Arcanum.
 
   python tools/release.py 1.7.2
 
-1. met le numéro de version à jour (Arcanum.toc et Core.lua) ;
-2. vérifie que CHANGELOG.md a une section « ## 1.7.2 » ;
-3. lance le banc de test (rien n'est publié s'il échoue) ;
-4. crée le commit et l'étiquette v1.7.2, puis pousse sur GitHub.
+1. updates the version number (Arcanum.toc and Core.lua);
+2. checks that CHANGELOG.md has a "## 1.7.2" section;
+3. runs the test suite (nothing is published if it fails);
+4. creates the commit and the v1.7.2 tag, then pushes to GitHub.
 
-GitHub Actions fabrique alors le zip et la release (.github/workflows/release.yml),
-et WowUp propose la mise à jour à tous ceux qui ont installé Arcanum depuis le dépôt.
+GitHub Actions then builds the zip and the release (.github/workflows/release.yml),
+and WowUp offers the update to everyone who installed Arcanum from the repository.
 
-Options : --dry-run (tout sauf le commit et l'envoi), --trailer "Ligne" (ajoutée au message du commit).
+Options: --dry-run (everything except the commit and the push), --trailer "Line" (appended to the commit message).
 """
 import argparse
 import io
@@ -33,7 +33,7 @@ def replace_in(path, pattern, repl):
     text = io.open(full, encoding="utf-8").read()
     new, n = re.subn(pattern, repl, text, count=1, flags=re.M)
     if n != 1:
-        sys.exit("ERREUR : motif introuvable dans %s" % path)
+        sys.exit("ERROR: pattern not found in %s" % path)
     io.open(full, "w", encoding="utf-8", newline="").write(new)
 
 
@@ -45,14 +45,14 @@ def main():
     args = parser.parse_args()
     version = args.version
     if not re.match(r"^\d+\.\d+\.\d+$", version):
-        sys.exit("ERREUR : version attendue au format X.Y.Z")
+        sys.exit("ERROR: version must be in X.Y.Z format")
 
     tags = subprocess.run(["git", "tag", "--list", "v" + version], cwd=ROOT, capture_output=True, text=True).stdout
     if tags.strip():
-        sys.exit("ERREUR : la version %s existe déjà" % version)
+        sys.exit("ERROR: version %s already exists" % version)
     changelog = io.open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8").read()
     if not re.search(r"^## %s\b" % re.escape(version), changelog, re.M):
-        sys.exit("ERREUR : ajoute d'abord une section « ## %s » dans CHANGELOG.md" % version)
+        sys.exit('ERROR: add a "## %s" section to CHANGELOG.md first' % version)
 
     replace_in("Arcanum/Arcanum.toc", r"^## Version: .*$", "## Version: " + version)
     replace_in("Arcanum/Core.lua", r'or "\d+\.\d+\.\d+"$', 'or "%s"' % version)
@@ -62,7 +62,7 @@ def main():
     run([sys.executable, os.path.join("tools", "package.py"), version])
 
     if args.dry_run:
-        print("Essai à blanc terminé : rien n'a été envoyé.")
+        print("Dry run complete: nothing was pushed.")
         return
     message = "Arcanum %s" % version
     if args.trailer:
@@ -72,7 +72,7 @@ def main():
     run(["git", "tag", "-a", "v" + version, "-m", "Arcanum " + version])
     run(["git", "push", "origin", "HEAD"])
     run(["git", "push", "origin", "v" + version])
-    print("Version %s envoyée : GitHub Actions publie la release." % version)
+    print("Version %s pushed: GitHub Actions is publishing the release." % version)
 
 
 if __name__ == "__main__":

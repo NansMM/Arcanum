@@ -1,4 +1,4 @@
--- Arcanum — fenêtre de réglages et commandes /arc.
+-- Arcanum — settings window and /arc commands.
 local ADDON, ns = ...
 local UI, State = ns.UI, ns.State
 local C = UI.C
@@ -17,7 +17,7 @@ local function hover(f, onEnter, onLeave)
   f:SetScript("OnLeave", onLeave)
 end
 
--- ------------------------------------------------------------------ briques
+-- ------------------------------------------------------------------ building blocks
 local function sectionTitle(parent, text, y)
   local fs = UI.Text(parent, 10, C.faint, UI.FONT.title)
   fs:SetPoint("TOPLEFT", 22, y)
@@ -30,7 +30,7 @@ local function sectionTitle(parent, text, y)
   return y - 22
 end
 
--- Interrupteur : une ligne cliquable, libellé à gauche, pastille à droite.
+-- Toggle: a clickable row, label on the left, pill switch on the right.
 local function toggle(parent, label, key, y)
   local row = CreateFrame("Button", nil, parent)
   row:SetSize(W - 32, 28)
@@ -62,14 +62,13 @@ local function toggle(parent, label, key, y)
   return y - 30
 end
 
-local function pillButton(parent, text, width, onClick, accent)
+local function pillButton(parent, text, width, onClick)
   local b = CreateFrame("Button", nil, parent)
   b:SetSize(width, 28)
-  local parts = UI.Pill(b, accent and C.arcane or C.panelHi, 1)
-  local fs = UI.Text(b, 12, accent and C.ink or C.text, UI.FONT.title)
+  local parts = UI.Pill(b, C.panelHi, 1)
+  local fs = UI.Text(b, 12, C.text, UI.FONT.title)
   fs:SetPoint("CENTER", 0, 0)
   fs:SetText(text)
-  if accent then fs:SetShadowColor(0, 0, 0, 0) end
   b.label = fs
   b.SetAccent = function(_, on)
     for _, t in ipairs(parts) do UI.Color(t, on and C.arcane or C.panelHi, 1) end
@@ -82,7 +81,7 @@ local function pillButton(parent, text, width, onClick, accent)
   return b
 end
 
--- Réglage par paliers : libellé, « − valeur + ».
+-- Stepped setting: label, "- value +".
 local function stepper(parent, label, key, lo, hi, step, fmt, y)
   local text = UI.Text(parent, 13, C.text)
   text:SetPoint("TOPLEFT", 24, y - 7)
@@ -106,30 +105,7 @@ local function stepper(parent, label, key, lo, hi, step, fmt, y)
   return y - 34
 end
 
--- Choix entre deux valeurs.
-local function choice(parent, label, key, values, y)
-  local text = UI.Text(parent, 13, C.text)
-  text:SetPoint("TOPLEFT", 24, y - 7)
-  text:SetText(label)
-  local buttons = {}
-  local function refresh()
-    for _, b in ipairs(buttons) do b:SetAccent(ns.db[key] == b.value) end
-  end
-  local anchor
-  for i = #values, 1, -1 do
-    local v = values[i]
-    local b = pillButton(parent, tostring(v), type(v) == "string" and 46 or 36, function() ns.Set(key, v); refresh() end)
-    b.value = v
-    if anchor then b:SetPoint("RIGHT", anchor, "LEFT", -6, 0) else b:SetPoint("TOPRIGHT", -22, y) end
-    anchor = b
-    buttons[#buttons + 1] = b
-  end
-  refreshers[#refreshers + 1] = refresh
-  return y - 34
-end
-
--- Choix d'un son : « < nom > ». Les flèches passent au son suivant et le font entendre ; un clic sur le
--- nom le rejoue.
+-- Sound picker: "< name >". The arrows move to the next sound and play it; clicking the name replays it.
 local function soundRow(parent, label, key, y)
   local text = UI.Text(parent, 13, C.text)
   text:SetPoint("TOPLEFT", 24, y - 7)
@@ -147,7 +123,7 @@ local function soundRow(parent, label, key, y)
   return y - 34
 end
 
--- ------------------------------------------------------------------ fenêtre
+-- ------------------------------------------------------------------ window
 function Options.Build()
   if frame then return frame end
   local f = CreateFrame("Frame", "ArcanumOptions", UIParent)
@@ -177,7 +153,7 @@ function Options.Build()
   title:SetText("Arcanum")
   local sub = UI.Text(f, 11, C.muted)
   sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
-  sub:SetText(L["HUD du mage Arcanes"] .. "  ·  v" .. ns.VERSION)
+  sub:SetText(L["Arcane Mage HUD"] .. "  ·  v" .. ns.VERSION)
 
   local close = CreateFrame("Button", nil, f)
   close:SetSize(26, 26)
@@ -190,21 +166,20 @@ function Options.Build()
   close:SetScript("OnClick", function() f:Hide() end)
 
   local y = -70
-  y = sectionTitle(f, L["Affichage"], y)
-  y = toggle(f, L["Activer le HUD"], "enabled", y)
-  y = toggle(f, L["Visible aussi hors combat"], "showIdle", y)
-  y = toggle(f, L["Charges de Déflagration (en haut)"], "showCharges", y)
-  y = toggle(f, L["Procs, Présence spirituelle, Eurêka"], "showProcs", y)
-  y = toggle(f, L["Rappels avant le combat (en bas)"], "showReminders", y)
-  y = toggle(f, L["Décor des procs (arcs de runes)"], "decor", y)
-  y = stepper(f, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y)
-  y = stepper(f, L["Écartement"], "spread", 80, 320, 10, function(v) return string.format("%d", v) end, y)
+  y = sectionTitle(f, L["Display"], y)
+  y = toggle(f, L["Enable the HUD"], "enabled", y)
+  y = toggle(f, L["Arcane Blast charges (top)"], "showCharges", y)
+  y = toggle(f, L["Procs, Presence of Mind, Eureka"], "showProcs", y)
+  y = toggle(f, L["Pre-combat reminders (bottom)"], "showReminders", y)
+  y = toggle(f, L["Proc decoration (rune arcs)"], "decor", y)
+  y = stepper(f, L["Size"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y)
+  y = stepper(f, L["Spread"], "spread", 80, 320, 10, function(v) return string.format("%d", v) end, y)
 
-  y = sectionTitle(f, L["Alertes"], y - 8)
-  y = toggle(f, L["Sons à l'arrivée d'un proc"], "sound", y)
-  y = soundRow(f, L["Idées claires"], "clear", y - 2)
+  y = sectionTitle(f, L["Alerts"], y - 8)
+  y = toggle(f, L["Sound when a proc fires"], "sound", y)
+  y = soundRow(f, L["Clearcasting"], "clear", y - 2)
   y = soundRow(f, L["Barrage"], "barrage", y)
-  y = toggle(f, L["Onde lumineuse"], "flash", y)
+  y = toggle(f, L["Light wave"], "flash", y)
 
   local bw = (W - 44 - 16) / 3
   local move = pillButton(f, "", bw, function()
@@ -217,12 +192,12 @@ function Options.Build()
     Options.Refresh()
   end)
   demo:SetPoint("LEFT", move, "RIGHT", 8, 0)
-  local diag = pillButton(f, L["Diagnostic"], bw, function() ns.Diag.Show() end)
+  local diag = pillButton(f, L["Diagnostics"], bw, function() ns.Diag.Show() end)
   diag:SetPoint("LEFT", demo, "RIGHT", 8, 0)
   refreshers[#refreshers + 1] = function()
-    move.label:SetText(ns.db.locked and L["Déplacer"] or L["Verrouiller"])
+    move.label:SetText(ns.db.locked and L["Move"] or L["Lock"])
     move:SetAccent(not ns.db.locked)
-    demo.label:SetText(State.demo and L["Arrêter la démo"] or L["Démonstration"])
+    demo.label:SetText(State.demo and L["Stop demo"] or L["Demo"])
     demo:SetAccent(State.demo)
   end
   y = y - 10 - 28
@@ -248,30 +223,29 @@ function Options.Toggle()
   end
 end
 
--- ------------------------------------------------------------------ macro de burst
--- Crée (ou met à jour) la macro Eureka + Présence spirituelle + Courroux avec les noms exacts que le jeu
--- donne aux sorts. Les taper à la main échoue facilement : en français, « Eurêka ! » contient une
--- espace insécable avant le point d'exclamation.
+-- ------------------------------------------------------------------ burst macro
+-- Creates (or updates) the Eureka + Presence of Mind + Arcane Wrath macro with the exact names the game
+-- gives the spells. Typing them by hand fails easily: in French, "Eurêka !" contains a non-breaking space
+-- before the exclamation mark.
 local MACRO_NAME = "ArcBurst"
 
 local function makeMacro()
   local Spells = ns.Spells
   if InCombatLockdown and InCombatLockdown() then
-    ns.Print(L["les macros ne se modifient pas en combat. Réessaie hors combat."])
+    ns.Print(L["macros cannot be edited in combat. Try again out of combat."])
     return false
   end
   if not (CreateMacro and EditMacro and GetMacroIndexByName) then
-    ns.Print(L["ce client ne permet pas aux addons de créer une macro."])
+    ns.Print(L["this client does not let addons create macros."])
     return false
   end
   local wrath = Spells.Known("wrath") and Spells.Name("wrath")
   if not wrath then
-    ns.Print(L["ton personnage ne connaît pas encore le Courroux des Arcanes."])
+    ns.Print(L["your character does not know Arcane Wrath yet."])
     return false
   end
-  -- Après un sort instantané, le jeu refuse le sort suivant du même appui (« une autre action est en
-  -- cours »). /stopcasting entre deux sorts lève ce blocage : c'est la forme classique de la macro
-  -- Présence spirituelle + sort.
+  -- After an instant spell, the game refuses the next spell of the same key press ("another action is in
+  -- progress"). /stopcasting between two spells lifts that block: the classic Presence of Mind + spell macro.
   local lines, used = { "#showtooltip " .. wrath }, {}
   for _, key in ipairs({ "eureka", "pom" }) do
     local name = Spells.Known(key) and Spells.Name(key)
@@ -294,23 +268,23 @@ local function makeMacro()
     ok = ok and id ~= nil
   end
   if not ok then
-    ns.Print(L["impossible de créer la macro (plus de place dans tes macros de personnage ?)."])
+    ns.Print(L["could not create the macro (no room left in your character macros?)."])
     return false
   end
-  ns.Print(string.format(L["macro « %s » prête : %s. Ouvre /macro, onglet de ton personnage, et glisse-la sur ta barre."],
+  ns.Print(string.format(L["macro \"%s\" ready: %s. Open /macro, your character's tab, and drag it to your bar."],
     MACRO_NAME, table.concat(used, " + ")))
   return true
 end
 Options.MakeMacro = makeMacro
 
--- ------------------------------------------------------------------ sons
--- /arc sons                  : écouter les deux sons
--- /arc son 3071              : écouter un son du jeu, par son identifiant
--- /arc son barrage 3071      : jouer ce son du jeu à l'arrivée d'un Barrage (ou « clear » : Idées claires)
--- /arc son barrage voix      : faire dire « Barrage » par la voix du jeu
--- /arc son barrage           : revenir au son d'origine
-local SOUND_KEYS = { clear = "clear", claires = "clear", barrage = "barrage" }
-local SOUND_LABEL = { clear = "Idées claires", barrage = "Barrage de projectiles" }
+-- ------------------------------------------------------------------ sounds
+-- /arc sounds                : play both sounds
+-- /arc sound 3071            : play a game sound, by its id
+-- /arc sound barrage 3071    : play that game sound when Missile Barrage fires (or "clear": Clearcasting)
+-- /arc sound barrage voice   : have the game voice say the proc's name
+-- /arc sound barrage         : back to the default sound
+local SOUND_KEYS = { clear = "clear", clearcasting = "clear", claires = "clear", barrage = "barrage" }
+local SOUND_LABEL = { clear = "Clearcasting", barrage = "Missile Barrage" }
 
 local function soundCommand(arg)
   local a, b = arg:match("^(%S*)%s*(%S*)")
@@ -320,49 +294,63 @@ local function soundCommand(arg)
   end
   local id = tonumber(a)
   if id then
-    ns.Print(string.format(ns.Hud.PlayKit(id) and L["son du jeu %d."] or L["le jeu ne joue rien pour le son %d."], id))
+    ns.Print(string.format(ns.Hud.PlayKit(id) and L["game sound %d."] or L["the game plays nothing for sound %d."], id))
     return
   end
   local key = SOUND_KEYS[a]
   if not key then
-    ns.Print(L["/arc son 3071 pour écouter un son du jeu ; /arc son barrage 3071 pour le choisir (clear ou barrage) ; /arc son barrage pour revenir au son d'origine."])
+    ns.Print(L["/arc sound 3071 plays a game sound; /arc sound barrage 3071 picks it (clear or barrage); /arc sound barrage goes back to the default."])
     return
   end
   if type(ns.db.soundKit) ~= "table" then ns.db.soundKit = {} end
   id = tonumber(b)
-  if b == "voix" or b == "voice" then
+  if b == "voice" or b == "voix" then
     if ns.Hud.CanSpeak() then
-      ns.db.soundKit[key] = "voix"
+      ns.db.soundKit[key] = "voice"
       ns.Hud.PreviewSound(key)
-      ns.Print(string.format(L["%s : voix du jeu."], L[SOUND_LABEL[key]]))
+      ns.Print(string.format(L["%s: game voice."], L[SOUND_LABEL[key]]))
     else
-      ns.Print(L["ce client n'a aucune voix de synthèse installée : choix inchangé."])
+      ns.Print(L["this client has no text-to-speech voice installed: nothing changed."])
     end
   elseif not id or id <= 0 then
     ns.db.soundKit[key] = nil
-    ns.Print(string.format(L["%s : son d'origine."], L[SOUND_LABEL[key]]))
+    ns.Print(string.format(L["%s: default sound."], L[SOUND_LABEL[key]]))
   elseif ns.Hud.PlayKit(id) then
     ns.db.soundKit[key] = id
-    ns.Print(string.format(L["%s : son du jeu %d."], L[SOUND_LABEL[key]], id))
+    ns.Print(string.format(L["%s: game sound %d."], L[SOUND_LABEL[key]], id))
   else
-    ns.Print(string.format(L["le jeu ne joue rien pour le son %d : choix inchangé."], id))
+    ns.Print(string.format(L["the game plays nothing for sound %d: nothing changed."], id))
   end
 end
 
--- ------------------------------------------------------------------ commandes
+-- ------------------------------------------------------------------ commands
+-- English commands, with their French aliases.
 local HELP = {
-  "/arc : ouvrir les réglages",
-  "/arc demo : voir le HUD jouer un cycle complet",
-  "/arc verrou : déplacer ou fixer le HUD",
-  "/arc taille 120 : taille du HUD en pourcentage",
-  "/arc ecart 150 : distance entre le personnage et les zones (de 80 à 320)",
-  "/arc decor : afficher ou masquer le décor des procs (les arcs de runes)",
-  "/arc sons : écouter les deux sons (Idées claires, Barrage)",
-  "/arc son 3071 : écouter un son du jeu ; /arc son barrage 3071 : le choisir (clear ou barrage)",
-  "/arc son barrage voix : faire dire « Barrage » par la voix du jeu ; les sons se choisissent aussi dans les réglages",
-  "/arc macro : créer la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts",
-  "/arc diag : rapport à copier (sorts reconnus, signaux lus en combat)",
-  "/arc reset : remettre les réglages d'origine",
+  "/arc: open the settings",
+  "/arc demo: watch the HUD play a full cycle",
+  "/arc lock: move the HUD, then lock it in place",
+  "/arc scale 120: HUD size, in percent",
+  "/arc spread 150: distance between your character and the zones (80 to 320)",
+  "/arc decor: show or hide the proc decoration (the rune arcs)",
+  "/arc sounds: play both sounds (Clearcasting, Missile Barrage)",
+  "/arc sound 3071: play a game sound; /arc sound barrage 3071: pick it (clear or barrage)",
+  "/arc sound barrage voice: have the game voice say the proc's name; sounds can also be picked in the settings",
+  "/arc macro: create the burst macro (Eureka + Presence of Mind + Arcane Wrath) with the exact spell names",
+  "/arc diag: a report to copy (spells found, signals read in combat)",
+  "/arc reset: restore the default settings",
+}
+
+local ALIAS = {
+  [""] = "options", options = "options", config = "options",
+  demo = "demo",
+  lock = "lock", unlock = "lock", move = "lock", verrou = "lock", deplacer = "lock",
+  scale = "scale", size = "scale", taille = "scale",
+  spread = "spread", ecart = "spread", ["écart"] = "spread",
+  decor = "decor", ["décor"] = "decor",
+  sounds = "sound", sound = "sound", sons = "sound", son = "sound",
+  macro = "macro",
+  diag = "diag", report = "diag", rapport = "diag",
+  reset = "reset",
 }
 
 SLASH_ARCANUM1 = "/arc"
@@ -370,56 +358,57 @@ SLASH_ARCANUM2 = "/arcanum"
 SlashCmdList.ARCANUM = function(msg)
   if not ns.db then ns.InitDB() end
   msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-  local cmd, arg = msg:match("^(%S*)%s*(.-)$")
+  local word, arg = msg:match("^(%S*)%s*(.-)$")
+  local cmd = ALIAS[word]
   if not ns.started then
     if not ns.isMage and cmd ~= "demo" then
-      ns.Print(L["est fait pour les mages. Tape /arc demo pour voir le HUD quand même."])
+      ns.Print(L["is made for mages. Type /arc demo to see the HUD anyway."])
       return
     end
     ns.Start()
   end
-  if cmd == "" or cmd == "options" or cmd == "config" then
+  if cmd == "options" then
     Options.Toggle()
   elseif cmd == "demo" then
     State.SetDemo(not State.demo)
-    ns.Print(State.demo and L["démonstration lancée (/arc demo pour l'arrêter)."] or L["démonstration arrêtée."])
+    ns.Print(State.demo and L["demo started (/arc demo to stop it)."] or L["demo stopped."])
     Options.Refresh()
-  elseif cmd == "verrou" or cmd == "deplacer" or cmd == "lock" or cmd == "unlock" then
+  elseif cmd == "lock" then
     ns.Set("locked", not ns.db.locked)
-    ns.Print(ns.db.locked and L["HUD verrouillé."] or L["HUD déverrouillé : fais-le glisser, puis /arc verrou."])
+    ns.Print(ns.db.locked and L["HUD locked."] or L["HUD unlocked: drag it, then /arc lock."])
     Options.Refresh()
-  elseif cmd == "taille" or cmd == "scale" then
+  elseif cmd == "scale" then
     local v = tonumber(arg)
     if v and v >= 60 and v <= 180 then
       ns.Set("scale", v / 100)
       Options.Refresh()
     else
-      ns.Print(L["taille entre 60 et 180, par exemple /arc taille 120."])
+      ns.Print(L["size between 60 and 180, for example /arc scale 120."])
     end
-  elseif cmd == "decor" or cmd == "décor" then
+  elseif cmd == "decor" then
     ns.Set("decor", not ns.db.decor)
-    ns.Print(ns.db.decor and L["décor des procs affiché."] or L["décor des procs masqué."])
+    ns.Print(ns.db.decor and L["proc decoration shown."] or L["proc decoration hidden."])
     Options.Refresh()
-  elseif cmd == "ecart" or cmd == "écart" or cmd == "spread" then
+  elseif cmd == "spread" then
     local v = tonumber(arg)
     if v and v >= 80 and v <= 320 then
       ns.Set("spread", v)
       Options.Refresh()
     else
-      ns.Print(L["écartement entre 80 et 320, par exemple /arc ecart 150."])
+      ns.Print(L["spread between 80 and 320, for example /arc spread 150."])
     end
-  elseif cmd == "sons" or cmd == "son" or cmd == "sound" then
+  elseif cmd == "sound" then
     soundCommand(arg)
     Options.Refresh()
   elseif cmd == "macro" then
     makeMacro()
-  elseif cmd == "diag" or cmd == "rapport" then
+  elseif cmd == "diag" then
     ns.Diag.Show()
   elseif cmd == "reset" then
     ns.ResetDB()
     Options.Refresh()
-    ns.Print(L["réglages d'origine rétablis."])
+    ns.Print(L["default settings restored."])
   else
-    for _, line in ipairs(HELP) do ns.Print(line) end
+    for _, line in ipairs(HELP) do ns.Print(L[line]) end
   end
 end

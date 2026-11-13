@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Aperçu du HUD d'Arcanum : compose les vraies textures de l'addon selon la mise en page de UI/Hud.lua.
+"""Preview of Arcanum's HUD: composites the addon's real textures following the layout in UI/Hud.lua.
 
-Trois scènes : en combat (procs de part et d'autre du personnage, charges au-dessus), hors combat (rappels
-sous le personnage), et la Présence spirituelle et Eurêka actifs.
+Three scenes: in combat (procs on either side of the character, charges above), out of combat (reminders
+below the character), and Presence of Mind and Eureka active.
 
-Ce n'est pas une capture du jeu : les icônes de sorts et les textes sont remplacés par des aplats.
-Sert à juger les formes, les couleurs et les halos sans lancer WoW. Aucune dépendance.
-Le décor des procs (l'arc de runes, une image du jeu) n'y figure pas.
-Usage : python tools/preview.py   ->   docs/apercu.png
+This is not a game screenshot: spell icons and text are replaced by flat colour blocks.
+It is for judging shapes, colours and glows without launching WoW. No dependencies.
+The proc backdrop (the rune arc, an image from the game) is not shown.
+Usage: python tools/preview.py   ->   docs/preview.png
 """
 import math
 import os
@@ -16,9 +16,9 @@ import zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MEDIA = os.path.join(ROOT, "Arcanum", "Media")
-OUT = os.path.join(ROOT, "docs", "apercu.png")
+OUT = os.path.join(ROOT, "docs", "preview.png")
 
-K = 2.0                      # échelle du rendu
+K = 2.0                      # render scale
 W, H = int(960 * K), int(400 * K)
 
 C = dict(
@@ -56,7 +56,7 @@ def background():
 
 
 def blit(name, cx, cy, w, h, color, alpha=1.0, add=False, uv=(0, 1, 0, 1), rot=0.0, sweep=None):
-    """Dessine une texture centrée en (cx, cy), taille (w, h) en unités du HUD (y vers le bas)."""
+    """Draws a texture centred on (cx, cy), size (w, h) in HUD units (y points down)."""
     if name is None:
         tw = th = 1
         px = None
@@ -76,7 +76,7 @@ def blit(name, cx, cy, w, h, color, alpha=1.0, add=False, uv=(0, 1, 0, 1), rot=0
             if fx < 0 or fx > 1:
                 continue
             if sweep is not None:
-                # arc restant, comme le voile d'un widget Cooldown : part du haut, dans le sens horaire
+                # remaining arc, like the swipe of a Cooldown widget: starts at the top, clockwise
                 ang = math.atan2(fx - 0.5, 0.5 - fy) % (2 * math.pi)
                 if ang < (1 - sweep) * 2 * math.pi:
                     continue
@@ -123,38 +123,6 @@ def mix(a, b, t):
     return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
 
 
-def pill(cx, cy, w, h, color, alpha):
-    blit("circle", cx - w / 2 + h / 4, cy, h / 2, h, color, alpha, uv=(0, 0.5, 0, 1))
-    blit("circle", cx + w / 2 - h / 4, cy, h / 2, h, color, alpha, uv=(0.5, 1, 0, 1))
-    blit(None, cx, cy, w - h, h, color, alpha)
-
-
-def card(cx, cy, w, color, frac):
-    blit("glow", cx, cy, w * 1.45, 26 * 3.2, color, 0.30, add=True)
-    pill(cx, cy, w + 3, 29, color, 0.55)
-    pill(cx, cy, w, 26, C["ink"], 0.92)
-    blit("circle", cx - w / 2 + 13, cy, 20, 20, mix(color, C["ink"], 0.35), 1)
-    blit(None, cx - w / 2 + 34 + 34, cy, 68, 3, C["text"], 0.80)                 # libellé (aplat)
-    blit(None, cx + w / 2 - 19, cy, 14, 8, color, 0.95)                          # secondes (aplat)
-    lw = (w - 26) * frac
-    blit(None, cx - w / 2 + 13 + lw / 2, cy + 10, lw, 2, color, 0.9)
-
-
-def icon(cx, cy, size, tint, hint=None, active=None, cooldown=0.0):
-    if hint:
-        blit("roundsq-glow", cx, cy, size * 1.78, size * 1.78, hint, 0.85, add=True)
-    if active:
-        blit("roundsq-glow", cx, cy, size * 1.7, size * 1.7, active, 0.45, add=True)
-    blit("roundsq", cx, cy, size + 4, size + 4, C["ink"], 0.94)
-    blit("roundsq", cx, cy, size, size, mix(tint, C["ink"], 0.45 + 0.35 * cooldown), 1)
-    blit("glow", cx - size * 0.12, cy - size * 0.14, size * 0.9, size * 0.9, mix(tint, C["white"], 0.5), 0.5 * (1 - cooldown), add=True)
-    if cooldown > 0:
-        blit("roundsq", cx, cy + size * (1 - cooldown) / 2, size, size * cooldown, (0.02, 0.01, 0.06), 0.72,
-             uv=(0, 1, 1 - cooldown, 1))
-    ring = hint or active or C["edge"]
-    blit("roundsq-edge", cx, cy, size + 2, size + 2, ring, 1.0 if (hint or active) else 0.55)
-
-
 def round_icon(cx, cy, size, tint, ring, glow=0.0, cooldown=0.0):
     if glow:
         blit("glow", cx, cy, size * 2.0, size * 2.0, ring, glow, add=True)
@@ -167,24 +135,24 @@ def round_icon(cx, cy, size, tint, ring, glow=0.0, cooldown=0.0):
 
 
 def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=False, reminders=0, spread=110):
-    """Les quatre zones autour du personnage, telles que les dispose UI/Hud.lua (écartement réduit)."""
-    # le personnage (une silhouette : il n'appartient pas au HUD)
+    """The four zones around the character, as laid out by UI/Hud.lua (with a reduced spread)."""
+    # the character (a silhouette: it is not part of the HUD)
     body = (0.16, 0.15, 0.24)
     blit("circle", cx, cy + 62, 76, 16, (0.08, 0.07, 0.14), 0.9)
     blit("roundsq", cx, cy + 22, 40, 62, body, 0.95)
     blit("circle", cx, cy - 24, 30, 30, body, 0.95)
-    # procs : Idées claires à gauche, Barrage de projectiles à droite (temps restant en voile)
+    # procs: Clearcasting on the left, Missile Barrage on the right (time left shown as a swipe)
     for side, proc, col in ((-1, clear, C["clear"]), (1, barrage, C["barrage"])):
         if proc is not None:
             round_icon(cx + side * spread, cy, 64, col, col, glow=0.40, cooldown=1 - proc)
-    # charges : un cristal par charge visée (un de plus quand le jeu en offre une), et la barre de leur fenêtre
+    # charges: one crystal per target charge (one more when the game grants an extra), and their window bar
     top = cy - spread * 0.9
     full = stacks >= target
     col = C["hot"] if full else C["arcane"]
     full = stacks >= 4
     col = C["hot"] if full else C["arcane"]
-    shown = stacks   # un cristal par charge
-    if stacks > 0:   # (sans charge : aucun cristal)
+    shown = stacks   # one crystal per charge
+    if stacks > 0:   # (no charges: no crystals)
         for i in range(shown):
             x = cx + (i + 1 - (shown + 1) / 2) * 32
             on = i < stacks
@@ -199,12 +167,12 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=
         by = top + 17 + 10
         blit(None, cx, by, 126, 6, C["socket"], 0.90)
         blit(None, cx - 62 + 124 * window / 2, by, 124 * window, 4, col, 1)
-        blit(None, cx + 62 + 16, by, 14, 7, mix(C["text"], C["ink"], 0.35), 0.9)   # secondes (aplat)
-    # Présence spirituelle et Eurêka actifs : leurs icônes côte à côte, au-dessus des charges
+        blit(None, cx + 62 + 16, by, 14, 7, mix(C["text"], C["ink"], 0.35), 0.9)   # seconds (flat block)
+    # Presence of Mind and Eureka active: their icons side by side, above the charges
     if pom:
         round_icon(cx - 28, top - 17 - 23 - 12, 46, C["pom"], C["pom"], glow=0.50)
         round_icon(cx + 28, top - 17 - 23 - 12, 46, C["power"], C["power"], glow=0.50, cooldown=0.35)
-    # rappels avant le combat, sous le personnage
+    # pre-combat reminders, below the character
     amber = (1.000, 0.700, 0.300)
     for i in range(reminders):
         x = cx + (i + 1 - (reminders + 1) / 2) * 38
@@ -213,7 +181,7 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=
 
 def main():
     background()
-    # en combat, deux procs et trois charges sur quatre ; hors combat, trois rappels ; Présence spirituelle et Eurêka actifs
+    # in combat, two procs and three charges out of four; out of combat, three reminders; Presence of Mind and Eureka active
     scene(200, 215, stacks=3, target=4, window=0.62, clear=0.6, barrage=0.85)
     scene(480, 215, reminders=3)
     scene(790, 215, stacks=4, target=4, window=0.45, pom=True)
@@ -240,7 +208,7 @@ def save(out):
     png += chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b"")
     with open(out, "wb") as f:
         f.write(png)
-    print("Aperçu écrit : " + out)
+    print("Preview written: " + out)
 
 
 if __name__ == "__main__":

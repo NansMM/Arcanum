@@ -1,4 +1,4 @@
--- Arcanum — thème : couleurs, polices, textures et petites briques d'affichage.
+-- Arcanum — theme: colors, fonts, textures and small display building blocks.
 local ADDON, ns = ...
 
 local UI = {}
@@ -12,21 +12,19 @@ UI.FONT = {
 }
 
 UI.C = {
-  ink = { 0.030, 0.024, 0.066 },        -- noir indigo : fonds
-  panel = { 0.062, 0.052, 0.118 },      -- cartes
+  ink = { 0.030, 0.024, 0.066 },        -- indigo black: backgrounds
+  panel = { 0.062, 0.052, 0.118 },      -- cards
   panelHi = { 0.110, 0.094, 0.196 },
-  socket = { 0.130, 0.108, 0.240 },     -- cristal vide
-  edge = { 0.470, 0.380, 0.860 },       -- liserés
-  arcane = { 0.690, 0.486, 1.000 },     -- violet des Arcanes
+  socket = { 0.130, 0.108, 0.240 },     -- empty crystal
+  edge = { 0.470, 0.380, 0.860 },       -- thin borders
+  arcane = { 0.690, 0.486, 1.000 },     -- Arcane purple
   arcaneHi = { 0.900, 0.820, 1.000 },
-  hot = { 0.870, 0.790, 1.000 },        -- charges visées atteintes (clair, pour laisser le rose au Barrage)
-  barrage = { 1.000, 0.450, 0.800 },    -- Barrage de projectiles
-  clear = { 0.400, 0.860, 1.000 },      -- Idées claires
-  power = { 1.000, 0.800, 0.400 },      -- Pouvoir des Arcanes
-  pom = { 0.560, 1.000, 0.840 },        -- Présence spirituelle
-  heat = { 1.000, 0.560, 0.240 },       -- Échauffement
-  mana = { 0.340, 0.560, 1.000 },
-  manaLow = { 1.000, 0.700, 0.300 },
+  hot = { 0.870, 0.790, 1.000 },        -- maximum charges reached (light, to leave pink to Missile Barrage)
+  barrage = { 1.000, 0.450, 0.800 },    -- Missile Barrage
+  clear = { 0.400, 0.860, 1.000 },      -- Clearcasting
+  gold = { 1.000, 0.800, 0.400 },       -- Eureka
+  pom = { 0.560, 1.000, 0.840 },        -- Presence of Mind
+  amber = { 1.000, 0.700, 0.300 },      -- pre-combat reminders
   bad = { 0.980, 0.360, 0.420 },
   text = { 0.950, 0.930, 1.000 },
   muted = { 0.660, 0.630, 0.800 },
@@ -39,7 +37,7 @@ function UI.Media(name)
   return MEDIA .. name
 end
 
--- Texture teintée. file : nom dans Media, ou nil pour un aplat.
+-- Tinted texture. file: name in Media, or nil for a flat fill.
 function UI.Tex(parent, layer, file, color, alpha, blend, sub)
   local t = parent:CreateTexture(nil, layer or "ARTWORK", nil, sub)
   t:SetTexture(file and (MEDIA .. file) or UI.WHITE)
@@ -62,26 +60,26 @@ function UI.Text(parent, size, color, font, flags)
   return fs
 end
 
--- Fond en pilule (bords ronds) : deux demi-cercles et un aplat. Retourne les trois textures.
-function UI.Pill(frame, color, alpha, layer, sub)
+-- Pill background (round ends): two half-circles and a flat fill. Returns the three textures.
+function UI.Pill(frame, color, alpha)
   local h = frame:GetHeight()
-  local left = UI.Tex(frame, layer or "BACKGROUND", "circle", color, alpha, nil, sub)
+  local left = UI.Tex(frame, "BACKGROUND", "circle", color, alpha)
   left:SetTexCoord(0, 0.5, 0, 1)
   left:SetPoint("TOPLEFT")
   left:SetPoint("BOTTOMLEFT")
   left:SetWidth(h / 2)
-  local right = UI.Tex(frame, layer or "BACKGROUND", "circle", color, alpha, nil, sub)
+  local right = UI.Tex(frame, "BACKGROUND", "circle", color, alpha)
   right:SetTexCoord(0.5, 1, 0, 1)
   right:SetPoint("TOPRIGHT")
   right:SetPoint("BOTTOMRIGHT")
   right:SetWidth(h / 2)
-  local mid = UI.Tex(frame, layer or "BACKGROUND", nil, color, alpha, nil, sub)
+  local mid = UI.Tex(frame, "BACKGROUND", nil, color, alpha)
   mid:SetPoint("TOPLEFT", left, "TOPRIGHT")
   mid:SetPoint("BOTTOMRIGHT", right, "BOTTOMLEFT")
   return { left, mid, right }
 end
 
--- Fond à coins arrondis pour les panneaux (texture étirée par neuf tranches si le client le permet).
+-- Rounded-corner background for panels (nine-slice stretched texture if the client allows it).
 function UI.Panel(frame, color, alpha, layer, sub, inset)
   local t = UI.Tex(frame, layer or "BACKGROUND", "roundsq", color, alpha, nil, sub)
   inset = inset or 0
@@ -96,9 +94,9 @@ function UI.Panel(frame, color, alpha, layer, sub, inset)
   return t
 end
 
--- Approche douce d'une valeur vers sa cible (indépendante du nombre d'images par seconde).
+-- Eases a value towards its target (independent of the frame rate).
 function UI.Approach(cur, target, dt, speed)
-  local k = dt * (speed or 12)
+  local k = dt * speed
   if k > 1 then k = 1 end
   local v = cur + (target - cur) * k
   if math.abs(target - v) < 0.002 then return target end
@@ -109,7 +107,7 @@ function UI.Mix(a, b, t)
   return a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t
 end
 
--- Le même, vers une couleur donnée par ses trois composantes : aucune table créée (appelé à chaque image).
+-- The same, towards a color given by its three components: no table created (called every frame).
 function UI.MixTo(a, r, g, b, t)
   return a[1] + (r - a[1]) * t, a[2] + (g - a[2]) * t, a[3] + (b - a[3]) * t
 end

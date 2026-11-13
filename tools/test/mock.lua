@@ -1,25 +1,25 @@
--- Jeu simulé pour tester Arcanum (Lua 5.1) : un mage de WoW Forever, avec les règles des valeurs secrètes.
+-- Simulated game for testing Arcanum (Lua 5.1): a WoW Forever mage, with the secret-value rules.
 --
--- En combat (M.combat), comme dans le vrai client :
---   * les auras ne sont plus lisibles (GetPlayerAuraBySpellID ne renvoie rien) ;
---   * les temps de recharge et le mana arrivent en valeurs secrètes : les comparer ou calculer avec
---     lève une erreur, seuls les widgets les acceptent ;
---   * le coût des sorts, les sorts lancés et la surbrillance des boutons restent lisibles.
--- Le simulateur est strict : appeler une méthode de widget qui n'existe pas lève une erreur.
+-- In combat (M.combat), as in the real client:
+--   * auras can no longer be read (GetPlayerAuraBySpellID returns nothing);
+--   * cooldowns and mana come back as secret values: comparing them or doing arithmetic with them
+--     raises an error, only widgets accept them;
+--   * spell costs, spells cast and action-button glows stay readable.
+-- The simulator is strict: calling a widget method that does not exist raises an error.
 local M = {
   now = 1000, combat = false, events = {}, unitEvents = {}, updaters = {}, errors = {},
-  auras = {},        -- [nom] = { spellId, applications, duration, expirationTime }
+  auras = {},        -- [name] = { spellId, applications, duration, expirationTime }
   cooldowns = {},    -- [id] = { start, duration }
   overlays = {},
-  neverSecret = {},  -- [nom d'aura] = true : lisible même en combat
+  neverSecret = {},  -- [aura name] = true: readable even in combat
   class = "MAGE", level = 60,
-  mana = 5000, manaMax = 8000,
-  costAware = true,  -- le coût annoncé suit-il les charges et les procs ?
-  widgetCalls = {},
+  mana = 5000,
+  costAware = true,  -- does the announced cost follow charges and procs?
+  chat = {},         -- every line the addon prints to the chat window
 }
 Mock = M
 
--- ------------------------------------------------------------------ valeurs secrètes
+-- ------------------------------------------------------------------ secret values
 local SECRET = setmetatable({}, { __mode = "k" })
 function M.secret(real)
   local v = newproxy(false)
@@ -28,11 +28,10 @@ function M.secret(real)
 end
 function issecretvalue(v) return SECRET[v] ~= nil end
 function issecrettable(t) return false end
-local function reveal(v) if SECRET[v] ~= nil then return SECRET[v] end return v end
 local function restricted() return M.combat end
 
--- ------------------------------------------------------------------ sorts
--- nom français, comme dans un client frFR : l'addon ne doit dépendre d'aucun nom anglais.
+-- ------------------------------------------------------------------ spells
+-- French names, as in a frFR client: the addon must not depend on any English name.
 M.spells = {
   [400574] = { name = "Déflagration des Arcanes", cost = 100, cast = 1500, known = true },
   [5143] = { name = "Projectiles des Arcanes", cost = 85, cast = 0, rank = 1, known = true },
@@ -76,13 +75,12 @@ M.spells = {
   [430] = { name = "Boisson" },
   [433] = { name = "Nourriture" },
 }
-M.items = { [8008] = 1, [8079] = 20, [8076] = 20 }   -- en sac : une gemme de mana, de l'eau et de la nourriture invoquées
-M.itemSpells = {}   -- [objet] = nom de son effet d'utilisation (« Boisson », « Nourriture »…)
-M.resting = false   -- au repos en ville
+M.items = { [8008] = 1, [8079] = 20, [8076] = 20 }   -- in the bags: a mana gem, conjured water and conjured food
+M.resting = false   -- resting in a city
 
 local function auraOf(name) return M.auras[name] end
 
--- Coût annoncé par le jeu, charges et procs compris (si costAware).
+-- The cost the game announces, charges and procs included (when costAware).
 local function currentCost(id)
   local sp = M.spells[id]
   if not sp or not sp.cost then return nil end
@@ -92,13 +90,12 @@ local function currentCost(id)
   if sp.name == "Projectiles des Arcanes" and auraOf("Barrage de projectiles") then return 0 end
   if sp.name == "Déflagration des Arcanes" then
     local a = auraOf("Déflagration des Arcanes")
-    if a then cost = cost * (1 + a.applications) end   -- +100 % par charge (mesuré en jeu)
+    if a then cost = cost * (1 + a.applications) end   -- +100 % per charge (measured in game)
   end
   if auraOf("Pouvoir des Arcanes") then cost = cost * 0.7 end
   if auraOf("Eurêka !") then cost = cost * 0.9 end
   return cost
 end
-M.currentCost = currentCost
 
 C_Spell = {}
 function C_Spell.GetSpellName(id) local sp = M.spells[id]; return sp and sp.name or nil end
@@ -110,21 +107,10 @@ function C_Spell.GetSpellPowerCost(id)
   if cost == 0 and M.freeMeansNil then return nil end
   return { { type = 0, cost = cost, minCost = cost, name = "MANA" } }
 end
-function C_Spell.IsSpellUsable(id)   -- lisible en combat : utilisable, mana insuffisant
+function C_Spell.IsSpellUsable(id)   -- readable in combat: usable, not enough mana
   local cost = currentCost(id) or 0
   local enough = M.mana >= cost
   return enough, not enough
-end
-function C_Spell.IsSpellInRange(id, unit)   -- lisible en combat ; nil sans cible
-  if M.target ~= true then return nil end
-  return M.inRange ~= false
-end
-function C_Spell.GetSpellInfo(id)
-  local sp = M.spells[id]
-  if not sp then return nil end
-  local cast = sp.cast or 0
-  if sp.name == "Explosion pyrotechnique" and M.pyroInstant then cast = 0 end
-  return { name = sp.name, iconID = 130000, castTime = cast, spellID = id, minRange = 0, maxRange = 30 }
 end
 function C_Spell.GetSpellCooldown(id)
   if not M.spells[id] then return nil end
@@ -134,13 +120,8 @@ function C_Spell.GetSpellCooldown(id)
   end
   return { startTime = cd.start, duration = cd.duration, isEnabled = true, modRate = 1 }
 end
-function C_Spell.GetSpellCooldownDuration(id, ignoreGCD)
-  if not M.spells[id] then return nil end
-  return { _durationObject = true, id = id }
-end
-function GetSpellBaseCooldown(id) local sp = M.spells[id]; return sp and sp.cd and sp.cd * 1000 or 0 end
 
-Enum = { SpellBookSpellBank = { Player = 0, Pet = 1 }, PowerType = { Mana = 0 } }
+Enum = { SpellBookSpellBank = { Player = 0, Pet = 1 } }
 C_SpellBook = {}
 local function book()
   local list = {}
@@ -163,7 +144,7 @@ C_UnitAuras = {}
 local function auraData(name)
   local a = M.auras[name]
   if not a then return nil end
-  if restricted() and not M.neverSecret[name] then return nil end   -- RequiresNonSecretAura : ne renvoie rien
+  if restricted() and not M.neverSecret[name] then return nil end   -- RequiresNonSecretAura: returns nothing
   return { spellId = a.spellId, name = name, applications = a.applications or 0, duration = a.duration or 0,
     expirationTime = a.expirationTime or 0, auraInstanceID = 1 }
 end
@@ -175,70 +156,59 @@ function C_UnitAuras.GetPlayerAuraBySpellID(id)
   return nil
 end
 function C_UnitAuras.GetAuraDataBySpellName(unit, name, filter)
-  if unit ~= "player" then error("unité inattendue", 2) end
+  if unit ~= "player" then error("unexpected unit", 2) end
   return auraData(name)
 end
 
 C_Secrets = {}
 function C_Secrets.ShouldAurasBeSecret() return restricted() end
-function C_Secrets.ShouldSpellAuraBeSecret(id)   -- par sort : une aura « jamais secrète » reste lisible
+function C_Secrets.ShouldSpellAuraBeSecret(id)   -- per spell: a "never secret" aura stays readable
   local sp = M.spells[id]
   if sp and M.neverSecret[sp.name] then return false end
   return restricted()
 end
-function C_Secrets.GetSpellAuraSecrecy(id)   -- 0 : jamais secrète ; 2 : selon le contexte (le cas courant)
+function C_Secrets.GetSpellAuraSecrecy(id)   -- 0: never secret; 2: depends on context (the usual case)
   local sp = M.spells[id]
   if sp and M.neverSecret[sp.name] then return 0 end
   return 2
 end
 
--- ------------------------------------------------------------------ unités
+-- ------------------------------------------------------------------ units
 function UnitClass(unit) return "Mage", M.class end
 function UnitLevel(unit) return M.level end
 function UnitPower(unit, kind) if restricted() then return M.secret(M.mana) end return M.mana end
-function UnitPowerMax(unit, kind) return M.manaMax end
-function UnitPowerPercent(unit, kind, unmodified, curve) error("courbe non simulée") end
-function UnitCastingInfo(unit)   -- le sort en cours du joueur reste lisible en combat
-  local c = M.casting
-  if not c then return nil end
-  return M.spells[c.id].name, M.spells[c.id].name, 130000, c.startMs, c.endMs, false, "Cast-3-0", false, c.id
-end
-function UnitChannelInfo(unit) return nil end
-function M.startCast(id, seconds)
-  M.casting = { id = id, startMs = M.now * 1000, endMs = (M.now + seconds) * 1000 }
-  M.fire("UNIT_SPELLCAST_START", "player", "Cast-3-0", id)
-end
-function M.stopCast()
-  M.casting = nil
-  M.fire("UNIT_SPELLCAST_STOP", "player", "Cast-3-0", 0)
-end
 function UnitExists(unit) return M.target == true end
 function UnitCanAttack(a, b) return M.target == true end
 function UnitIsDead(unit) return false end
 function InCombatLockdown() return M.combat end
 function GetTime() return M.now end
 function GetBuildInfo() return "1.60.1", "70888", "Nov 10 2026", 16001 end
-function GetLocale() return "frFR" end
+function GetLocale() return M.locale or "frFR" end   -- a French client by default; Mock.locale = "enUS" for an English one
+-- The chat window: what the addon prints is kept in M.chat, where the tests read it.
+function print(...)
+  local parts = {}
+  for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+  M.chat[#M.chat + 1] = table.concat(parts, " ")
+end
 function PlaySound(id, channel)
-  M.sounds = (M.sounds or 0) + 1
   M.lastKit = id
-  if id == 999999 then return nil end   -- identifiant inconnu : le jeu ne joue rien
+  if id == 999999 then return nil end   -- unknown id: the game plays nothing
   return true
 end
--- Synthèse vocale : une voix installée d'origine ; Mock.voices = {} pour un client sans voix.
+-- Text-to-speech: one voice installed out of the box; Mock.voices = {} for a client without any.
 M.voices = { { voiceID = 7, name = "Hortense" } }
 M.spoken = {}
 C_VoiceChat = {}
 function C_VoiceChat.GetTtsVoices() return M.voices end
 function C_VoiceChat.SpeakText(voiceID, text, rate, volume, overlap)
   if type(voiceID) ~= "number" or type(text) ~= "string" or type(rate) ~= "number" or type(volume) ~= "number" then
-    error("SpeakText : arguments invalides", 2)
+    error("SpeakText: invalid arguments", 2)
   end
   M.spoken[#M.spoken + 1] = text
 end
 C_TTSSettings = {}
 function C_TTSSettings.GetVoiceOptionID(kind) return 7 end
--- (le fichier « ne joue pas » : l'addon retombe alors sur PlaySound, que les tests comptent)
+-- (the file "does not play": the addon then falls back on PlaySound, which the tests read in M.lastKit)
 function PlaySoundFile(path, channel)
   M.soundFiles = M.soundFiles or {}
   M.soundFiles[#M.soundFiles + 1] = path
@@ -247,23 +217,23 @@ end
 function geterrorhandler() return function(err) M.errors[#M.errors + 1] = tostring(err) end end
 function tinsert(t, v) table.insert(t, v) end
 UISpecialFrames = {}
--- macros du joueur : { name, icon, body, perCharacter }
+-- the player's macros: { name, icon, body, perCharacter }
 M.macros = {}
 function GetMacroIndexByName(name)
   for i, m in ipairs(M.macros) do if m.name == name then return i end end
   return 0
 end
 function CreateMacro(name, icon, body, perCharacter)
-  if M.combat then error("action protégée en combat", 2) end
-  if #name > 16 then error("nom de macro trop long", 2) end
-  if #body > 255 then error("macro trop longue", 2) end
+  if M.combat then error("action protected in combat", 2) end
+  if #name > 16 then error("macro name too long", 2) end
+  if #body > 255 then error("macro too long", 2) end
   M.macros[#M.macros + 1] = { name = name, icon = icon, body = body, perCharacter = perCharacter }
   return #M.macros
 end
 function EditMacro(index, name, icon, body)
-  if M.combat then error("action protégée en combat", 2) end
+  if M.combat then error("action protected in combat", 2) end
   local m = M.macros[index]
-  if not m then error("macro inconnue", 2) end
+  if not m then error("unknown macro", 2) end
   m.name, m.body = name or m.name, body or m.body
   return index
 end
@@ -271,33 +241,17 @@ SlashCmdList = {}
 C_AddOns = { GetAddOnMetadata = function(addon, field) return M.meta and M.meta[field] end }
 C_Item = {
   GetItemCount = function(id) return M.items[id] or 0 end,
-  GetItemIconByID = function(id) return 134000 + id % 100 end,
-  GetItemSpell = function(id) return M.itemSpells[id] end,
-}
--- (les sacs : tous les objets de M.items, rangés dans le sac à dos par identifiant croissant)
-local function bagSlots()
-  local ids = {}
-  for id, n in pairs(M.items) do
-    if n and n > 0 then ids[#ids + 1] = id end
-  end
-  table.sort(ids)
-  return ids
-end
-C_Container = {
-  GetItemCooldown = function(id) return 0, 0, 1 end,
-  GetContainerNumSlots = function(bag) return bag == 0 and #bagSlots() or 0 end,
-  GetContainerItemID = function(bag, slot) return bag == 0 and bagSlots()[slot] or nil end,
 }
 function IsResting() return M.resting == true end
 
--- ------------------------------------------------------------------ widgets (stricts)
+-- ------------------------------------------------------------------ widgets (strict)
 local function num(v, what)
-  if SECRET[v] ~= nil then error("valeur secrète refusée pour " .. what, 3) end
-  if type(v) ~= "number" or v ~= v then error("nombre attendu pour " .. what .. ", reçu " .. tostring(v), 3) end
+  if SECRET[v] ~= nil then error("secret value refused for " .. what, 3) end
+  if type(v) ~= "number" or v ~= v then error("number expected for " .. what .. ", got " .. tostring(v), 3) end
 end
-local function numOrSecret(v, what)   -- les widgets d'affichage acceptent les secrets
+local function numOrSecret(v, what)   -- display widgets accept secrets
   if SECRET[v] ~= nil then return end
-  if type(v) ~= "number" or v ~= v then error("nombre attendu pour " .. what .. ", reçu " .. tostring(v), 3) end
+  if type(v) ~= "number" or v ~= v then error("number expected for " .. what .. ", got " .. tostring(v), 3) end
 end
 local POINTS = { TOPLEFT = 1, TOP = 1, TOPRIGHT = 1, LEFT = 1, CENTER = 1, RIGHT = 1, BOTTOMLEFT = 1, BOTTOM = 1, BOTTOMRIGHT = 1 }
 local LAYERS = { BACKGROUND = 1, BORDER = 1, ARTWORK = 1, OVERLAY = 1, HIGHLIGHT = 1 }
@@ -305,11 +259,11 @@ local STRATA = { BACKGROUND = 1, LOW = 1, MEDIUM = 1, HIGH = 1, DIALOG = 1, FULL
 
 local Region = {}
 function Region:SetPoint(point, a, b, c, d)
-  if not POINTS[point] then error("ancre invalide : " .. tostring(point), 2) end
+  if not POINTS[point] then error("invalid anchor: " .. tostring(point), 2) end
   local rel, relPoint, x, y = a, b, c, d
   if type(a) == "number" then rel, relPoint, x, y = nil, point, a, b end
   if type(rel) == "string" then rel, relPoint, x, y = nil, rel, b, c end
-  if relPoint ~= nil and not POINTS[relPoint] then error("ancre relative invalide : " .. tostring(relPoint), 2) end
+  if relPoint ~= nil and not POINTS[relPoint] then error("invalid relative anchor: " .. tostring(relPoint), 2) end
   if x ~= nil then num(x, "x") end
   if y ~= nil then num(y, "y") end
   self._points = self._points or {}
@@ -318,9 +272,9 @@ end
 function Region:ClearAllPoints() self._points = {} end
 function Region:SetAllPoints(rel) self._points = { { "TOPLEFT", rel, "TOPLEFT", 0, 0 } } end
 function Region:GetPoint(i) local p = self._points and self._points[i or 1]; if p then return p[1], p[2], p[3], p[4], p[5] end end
-function Region:SetSize(w, h) num(w, "largeur"); num(h, "hauteur"); self._w, self._h = w, h end
-function Region:SetWidth(w) num(w, "largeur"); self._w = w end
-function Region:SetHeight(h) num(h, "hauteur"); self._h = h end
+function Region:SetSize(w, h) num(w, "width"); num(h, "height"); self._w, self._h = w, h end
+function Region:SetWidth(w) num(w, "width"); self._w = w end
+function Region:SetHeight(h) num(h, "height"); self._h = h end
 function Region:GetWidth() return self._w or 0 end
 function Region:GetHeight() return self._h or 0 end
 function Region:Show() self._shown = true end
@@ -339,68 +293,47 @@ end
 
 local Texture = class(Region)
 function Texture:SetTexture(t, wrapH, wrapV)
-  if t ~= nil and type(t) ~= "string" and type(t) ~= "number" then error("texture invalide : " .. tostring(t), 2) end
+  if t ~= nil and type(t) ~= "string" and type(t) ~= "number" then error("invalid texture: " .. tostring(t), 2) end
   self._tex = t
 end
-function Texture:SetTexCoord(...) for i = 1, select("#", ...) do num((select(i, ...)), "coordonnée") end end
+function Texture:SetTexCoord(...) for i = 1, select("#", ...) do num((select(i, ...)), "texture coordinate") end end
 function Texture:SetVertexColor(r, g, b, a)
   numOrSecret(r, "r"); numOrSecret(g, "g"); numOrSecret(b, "b"); if a ~= nil then numOrSecret(a, "a") end
   self._color = { r, g, b, a }
-  if a ~= nil then self._alpha = a end   -- comme en jeu : l'opacité donnée ici est celle de SetAlpha
+  if a ~= nil then self._alpha = a end   -- as in game: the opacity given here is the one SetAlpha sets
 end
-function Texture:SetBlendMode(m) if m ~= "ADD" and m ~= "BLEND" then error("fusion invalide", 2) end end
+function Texture:SetBlendMode(m) if m ~= "ADD" and m ~= "BLEND" then error("invalid blend mode", 2) end end
 function Texture:SetDesaturated(v) self._desat = v end
-function Texture:SetRotation(radians) num(radians, "rotation"); self._rotation = radians end
--- groupe d'animation du moteur (rotation continue)
-local Anim = {}
-function Anim:SetDegrees(d) num(d, "degrés") end
-function Anim:SetDuration(s) num(s, "durée"); if s <= 0 then error("durée nulle", 2) end end
-function Anim:SetOrigin(point, x, y) if not POINTS[point] then error("origine invalide", 2) end; num(x, "x"); num(y, "y") end
-local Group = {}
-function Group:CreateAnimation(kind)
-  if kind ~= "Rotation" then error("animation inconnue : " .. tostring(kind), 2) end
-  return setmetatable({}, { __index = Anim })
-end
-function Group:SetLooping(mode) if mode ~= "REPEAT" and mode ~= "NONE" and mode ~= "BOUNCE" then error("boucle invalide", 2) end end
-function Group:Play() self.playing = true end
-function Group:Stop() self.playing = false end
-function Group:IsPlaying() return self.playing == true end
-function Texture:CreateAnimationGroup()
-  local g = setmetatable({}, { __index = Group })
-  M.spinners = M.spinners or {}
-  M.spinners[#M.spinners + 1] = g
-  return g
-end
-function Texture:AddMaskTexture(mask) if not mask or mask._type ~= "MaskTexture" then error("masque invalide", 2) end end
-function Texture:SetTextureSliceMargins(l, t, r, b) num(l, "marge") end
+function Texture:AddMaskTexture(mask) if not mask or mask._type ~= "MaskTexture" then error("invalid mask", 2) end end
+function Texture:SetTextureSliceMargins(l, t, r, b) num(l, "margin") end
 function Texture:SetTextureSliceMode(mode) end
 
 local Font = class(Region)
 function Font:SetFont(path, size, flags)
-  if type(path) ~= "string" then error("police invalide", 2) end
-  num(size, "taille")
-  if flags ~= nil and type(flags) ~= "string" then error("options de police invalides", 2) end
+  if type(path) ~= "string" then error("invalid font", 2) end
+  num(size, "size")
+  if flags ~= nil and type(flags) ~= "string" then error("invalid font flags", 2) end
 end
 function Font:SetText(t)
-  if t ~= nil and type(t) ~= "string" and type(t) ~= "number" then error("texte invalide : " .. tostring(t), 2) end
+  if t ~= nil and type(t) ~= "string" and type(t) ~= "number" then error("invalid text: " .. tostring(t), 2) end
   self._text = t ~= nil and tostring(t) or ""
 end
 function Font:GetText() return self._text end
 function Font:SetTextColor(r, g, b, a) num(r, "r"); num(g, "g"); num(b, "b") end
 function Font:SetShadowOffset(x, y) num(x, "x"); num(y, "y") end
 function Font:SetShadowColor(r, g, b, a) num(r, "r") end
-function Font:SetJustifyH(j) if j ~= "LEFT" and j ~= "CENTER" and j ~= "RIGHT" then error("justification invalide", 2) end end
+function Font:SetJustifyH(j) if j ~= "LEFT" and j ~= "CENTER" and j ~= "RIGHT" then error("invalid justification", 2) end end
 function Font:GetStringWidth() return #(self._text or "") * 6 end
 
 local function region(kind, parent, methods)
   return setmetatable({ _type = kind, _parent = parent }, {
     __index = function(_, k)
       local v = methods[k]
-      -- une méthode du jeu commence par une majuscule : l'appeler sans qu'elle existe est une faute
+      -- a game method starts with a capital letter: calling one that does not exist is a mistake
       if v == nil and type(k) == "string" and k:find("^[A-Z]") then
-        error("méthode inconnue : " .. kind .. ":" .. k, 2)
+        error("unknown method: " .. kind .. ":" .. k, 2)
       end
-      if v ~= nil then M.ops = (M.ops or 0) + 1 end   -- chaque appel de méthode de widget est compté
+      if v ~= nil then M.ops = (M.ops or 0) + 1 end   -- every widget method call is counted
       return v
     end,
   })
@@ -408,30 +341,30 @@ end
 
 local Frame = class(Region)
 function Frame:CreateTexture(name, layer, template, sub)
-  if layer ~= nil and not LAYERS[layer] then error("couche invalide : " .. tostring(layer), 2) end
-  if sub ~= nil then num(sub, "sous-couche"); if sub < -8 or sub > 7 then error("sous-couche hors limites", 2) end end
+  if layer ~= nil and not LAYERS[layer] then error("invalid layer: " .. tostring(layer), 2) end
+  if sub ~= nil then num(sub, "sublayer"); if sub < -8 or sub > 7 then error("sublayer out of range", 2) end end
   return region("Texture", self, Texture)
 end
 function Frame:CreateMaskTexture() return region("MaskTexture", self, Texture) end
 function Frame:CreateFontString(name, layer) return region("FontString", self, Font) end
 function Frame:SetScript(h, fn)
-  if fn ~= nil and type(fn) ~= "function" then error("script invalide pour " .. tostring(h), 2) end
+  if fn ~= nil and type(fn) ~= "function" then error("invalid script for " .. tostring(h), 2) end
   self._scripts[h] = fn
   if h == "OnUpdate" then M.updaters[self] = fn end
 end
 function Frame:GetScript(h) return self._scripts[h] end
 function Frame:RegisterEvent(e)
-  if not M.knownEvents[e] then error("événement inconnu : " .. tostring(e), 2) end
+  if not M.knownEvents[e] then error("unknown event: " .. tostring(e), 2) end
   M.events[e] = M.events[e] or {}
   M.events[e][self] = true
 end
 function Frame:RegisterUnitEvent(e, unit)
-  if not M.knownEvents[e] then error("événement inconnu : " .. tostring(e), 2) end
+  if not M.knownEvents[e] then error("unknown event: " .. tostring(e), 2) end
   M.unitEvents[e] = M.unitEvents[e] or {}
   M.unitEvents[e][self] = unit
 end
-function Frame:SetFrameStrata(s) if not STRATA[s] then error("strate invalide", 2) end end
-function Frame:SetFrameLevel(l) num(l, "niveau"); self._level = l end
+function Frame:SetFrameStrata(s) if not STRATA[s] then error("invalid strata", 2) end end
+function Frame:SetFrameLevel(l) num(l, "level"); self._level = l end
 function Frame:GetFrameLevel() return self._level or 1 end
 function Frame:SetToplevel(v) end
 function Frame:SetClampedToScreen(v) end
@@ -440,20 +373,14 @@ function Frame:SetMovable(v) end
 function Frame:RegisterForDrag(b) end
 function Frame:StartMoving() end
 function Frame:StopMovingOrSizing() end
-function Frame:SetScale(s) num(s, "échelle"); if s <= 0 then error("échelle nulle", 2) end; self._scale = s end
+function Frame:SetScale(s) num(s, "scale"); if s <= 0 then error("scale must be positive", 2) end; self._scale = s end
 function Frame:SetClipsChildren(v) end
 function Frame:Raise() end
 
 local Cooldown = class(Frame)
 function Cooldown:SetCooldown(start, duration, modRate)
-  num(start, "début"); num(duration, "durée")   -- code d'addon : les secrets sont refusés ici
+  num(start, "start"); num(duration, "duration")   -- addon code: secrets are refused here
   self._cd = { start, duration }
-  M.widgetCalls.SetCooldown = (M.widgetCalls.SetCooldown or 0) + 1
-end
-function Cooldown:SetCooldownFromDurationObject(obj, clearIfZero)
-  if type(obj) ~= "table" or not obj._durationObject then error("objet durée attendu", 2) end
-  self._cd = obj
-  M.widgetCalls.DurationObject = (M.widgetCalls.DurationObject or 0) + 1
 end
 function Cooldown:SetSwipeTexture(t, r, g, b, a) end
 function Cooldown:SetSwipeColor(r, g, b, a) num(r, "r") end
@@ -468,12 +395,7 @@ local StatusBar = class(Frame)
 function StatusBar:SetStatusBarTexture(t) self._bar = region("Texture", self, Texture) end
 function StatusBar:GetStatusBarTexture() return self._bar end
 function StatusBar:SetMinMaxValues(lo, hi) numOrSecret(lo, "min"); numOrSecret(hi, "max") end
-function StatusBar:SetValue(v)
-  numOrSecret(v, "valeur")
-  self._value = v
-  M.widgetCalls.SetValue = (M.widgetCalls.SetValue or 0) + 1
-  if SECRET[v] ~= nil then M.widgetCalls.SecretValue = (M.widgetCalls.SecretValue or 0) + 1 end
-end
+function StatusBar:SetValue(v) numOrSecret(v, "value"); self._value = v end
 
 local EditBox = class(Frame, Font)
 function EditBox:SetMultiLine(v) end
@@ -488,8 +410,8 @@ local KINDS = { Frame = Frame, Button = Button, Cooldown = Cooldown, StatusBar =
 UIParent = nil
 function CreateFrame(kind, name, parent, template)
   local methods = KINDS[kind]
-  if not methods then error("type de cadre inconnu : " .. tostring(kind), 2) end
-  if template ~= nil and template ~= "CooldownFrameTemplate" then error("modèle inconnu : " .. tostring(template), 2) end
+  if not methods then error("unknown frame type: " .. tostring(kind), 2) end
+  if template ~= nil and template ~= "CooldownFrameTemplate" then error("unknown template: " .. tostring(template), 2) end
   local f = region(kind, parent, methods)
   rawset(f, "_scripts", {})
   if name then
@@ -510,11 +432,11 @@ for _, e in ipairs({
   "TRAIT_CONFIG_UPDATED", "PLAYER_LEVEL_UP", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER",
   "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
   "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_DELAYED",
-  -- PLAYER_TALENT_UPDATE n'existe pas dans ce client : l'enregistrer lève une erreur, comme en jeu
+  -- PLAYER_TALENT_UPDATE does not exist in this client: registering it raises an error, as in game
 }) do M.knownEvents[e] = true end
 
--- ------------------------------------------------------------------ Gestionnaire de temps de recharge
--- Les icônes de « Buffs suivis » de Blizzard : elles répondent IsActive() en clair, même en combat.
+-- ------------------------------------------------------------------ Cooldown Manager
+-- Blizzard's "Tracked Buffs" icons: they answer IsActive() in plain values, even in combat.
 C_CooldownViewer = {}
 function C_CooldownViewer.GetCooldownViewerCooldownInfo(cooldownID)
   local spell = M.cdmSpells and M.cdmSpells[cooldownID]
@@ -536,7 +458,7 @@ function M.trackBuff(cooldownID, spellID, auraName)
   }
 end
 
--- ------------------------------------------------------------------ pilotage du test
+-- ------------------------------------------------------------------ driving the test
 function M.fire(event, ...)
   local list = M.events[event]
   if list then
@@ -564,13 +486,13 @@ function M.advance(seconds, step)
   end
 end
 
--- Le joueur lance un sort : le jeu applique ses effets, puis prévient l'addon.
+-- The player casts a spell: the game applies its effects, then tells the addon.
 function M.cast(id)
   local sp = M.spells[id]
   local name = sp.name
   if name == "Déflagration des Arcanes" then
-    -- mesuré en jeu : la première Déflagration ouvre une fenêtre de 18 s, les suivantes ajoutent une
-    -- charge sans la prolonger (l'aura annonce alors le temps restant), aucun autre sort ne consomme
+    -- measured in game: the first Arcane Blast opens an 18 s window, the next ones add a charge without
+    -- extending it (the aura then announces the time left), and no other spell consumes the charges
     local a = M.auras[name]
     if a then
       a.applications = math.min(4, a.applications + 1)
@@ -595,7 +517,7 @@ function M.cast(id)
   M.fire("SPELL_UPDATE_COOLDOWN")
 end
 
--- Une canalisation, comme dans le vrai jeu : un UNIT_SPELLCAST_SUCCEEDED par salve.
+-- A channel, as in the real game: one UNIT_SPELLCAST_SUCCEEDED per volley.
 function M.channel(id, ticks, interval)
   M.cast(id)
   for _ = 2, ticks do
@@ -609,7 +531,7 @@ function M.proc(name, id, duration)
   M.fire("UNIT_AURA", "player", {})
 end
 
-function M.expire()   -- le jeu retire les auras arrivées à terme, et le signale
+function M.expire()   -- the game removes the auras that have run out, and says so
   local gone = false
   for name, a in pairs(M.auras) do
     if a.expirationTime and a.expirationTime > 0 and a.expirationTime <= M.now then M.auras[name] = nil; gone = true end
@@ -617,20 +539,14 @@ function M.expire()   -- le jeu retire les auras arrivées à terme, et le signa
   if gone then M.fire("UNIT_AURA", "player", {}) end
 end
 
--- Un temps de recharge démarre : le jeu le signale.
-function M.setCooldown(id, duration)
-  M.cooldowns[id] = { start = M.now, duration = duration }
-  M.fire("SPELL_UPDATE_COOLDOWN")
-end
-
 function M.setCombat(on)
   M.combat = on
   M.fire(on and "PLAYER_REGEN_DISABLED" or "PLAYER_REGEN_ENABLED")
 end
 
--- ------------------------------------------------------------------ compteur d'appels au jeu
--- Chaque fonction du jeu appelée par l'addon est comptée : le banc de test mesure ainsi ce que coûte
--- une seconde de combat, et vérifie que l'addon reste économe.
+-- ------------------------------------------------------------------ game-call counter
+-- Every game function the addon calls is counted: the test bench measures what one second of combat
+-- costs, and checks that the addon stays frugal.
 M.calls = {}
 function M.resetCalls() M.calls = {} end
 function M.totalCalls()
@@ -654,10 +570,8 @@ counted("C_UnitAuras.", C_UnitAuras)
 counted("C_Secrets.", C_Secrets)
 counted("C_SpellBook.", C_SpellBook)
 counted("C_Item.", C_Item)
-counted("C_Container.", C_Container)
 counted("C_SpellActivationOverlay.", C_SpellActivationOverlay)
-for _, name in ipairs({ "UnitPower", "UnitPowerMax", "UnitExists", "UnitCanAttack", "UnitIsDead",
-  "UnitCastingInfo", "UnitChannelInfo", "GetSpellBaseCooldown" }) do
+for _, name in ipairs({ "UnitPower", "UnitExists", "UnitCanAttack", "UnitIsDead" }) do
   local fn = _G[name]
   _G[name] = function(...)
     M.calls[name] = (M.calls[name] or 0) + 1
@@ -665,9 +579,9 @@ for _, name in ipairs({ "UnitPower", "UnitPowerMax", "UnitExists", "UnitCanAttac
   end
 end
 
--- ------------------------------------------------------------------ variables globales
--- Un addon ne doit rien laisser traîner dans l'espace global, à part ce qu'il déclare (réglages
--- enregistrés, commandes, cadres nommés). Toute autre écriture globale est relevée.
+-- ------------------------------------------------------------------ global variables
+-- An addon must leave nothing lying around in the global namespace, apart from what it declares (saved
+-- variables, slash commands, named frames). Any other global write is recorded.
 M.leaks = {}
 local ALLOWED = { ArcanumDB = true, SLASH_ARCANUM1 = true, SLASH_ARCANUM2 = true,
   ArcanumHUD = true, ArcanumOptions = true, ArcanumDiag = true, BuffIconCooldownViewer = true }
@@ -678,7 +592,7 @@ function M.watchGlobals()
   end })
 end
 
--- ------------------------------------------------------------------ chargement de l'addon
+-- ------------------------------------------------------------------ loading the addon
 M.meta = {}
 function M.load(dir, toc, addon)
   M.ns = {}
@@ -691,7 +605,7 @@ function M.load(dir, toc, addon)
   end
   for _, line in ipairs(files) do
     local chunk, err = loadfile(dir .. "/" .. line:gsub("\\", "/"))
-    if not chunk then error("syntaxe : " .. err) end
+    if not chunk then error("syntax: " .. err) end
     chunk(addon, M.ns)
   end
   return M.ns

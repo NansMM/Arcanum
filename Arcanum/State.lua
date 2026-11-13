@@ -1,14 +1,14 @@
--- Arcanum — moteur d'état : charges de Déflagration, procs, temps de recharge.
+-- Arcanum — state engine: Arcane Blast charges, procs, active buffs, pre-combat reminders.
 --
--- Hors combat, les auras sont lisibles : c'est la vérité, et l'addon en profite pour apprendre les durées
--- et les coûts réels. En combat, le jeu cache les auras aux addons. Arcanum s'appuie alors sur ce qui
--- reste lisible :
---   * tes propres sorts lancés (UNIT_SPELLCAST_SUCCEEDED) : chaque Déflagration ajoute une charge ;
---   * le coût en mana annoncé par le jeu : Projectiles gratuits = Barrage de projectiles,
---     tout gratuit = Idées claires, et le coût de la Déflagration donne le nombre exact de charges
---     (+100 % par charge) ;
---   * la surbrillance des boutons d'action (SPELL_ACTIVATION_OVERLAY_GLOW_SHOW).
--- Arcanum conseille et affiche ; il ne lance rien.
+-- Out of combat, auras are readable: that is the truth, and the addon uses it to learn the real durations
+-- and costs. In combat, the game hides auras from addons. Arcanum then relies on what
+-- remains readable:
+--   * your own spell casts (UNIT_SPELLCAST_SUCCEEDED): each Arcane Blast adds a charge;
+--   * the mana cost announced by the game: free Arcane Missiles = Missile Barrage,
+--     everything free = Clearcasting, and the cost of Arcane Blast gives the exact number of charges
+--     (the extra cost per charge is learned out of combat);
+--   * the action button glow (SPELL_ACTIVATION_OVERLAY_GLOW_SHOW).
+-- Arcanum only displays; it advises nothing and casts nothing.
 local ADDON, ns = ...
 local S = ns.Secret
 local Spells = ns.Spells
@@ -16,82 +16,62 @@ local Spells = ns.Spells
 local State = {
   combat = false,
   restricted = false,
-  stacks = 0,           -- charges de Déflagration des Arcanes (0 à 4)
-  stacksExpire = nil,   -- GetTime() de fin, ou nil si inconnue
+  stacks = 0,           -- Arcane Blast charges (0 to 4)
+  stacksExpire = nil,   -- GetTime() at expiry, or nil if unknown
   stacksDur = nil,
   stacksSource = "aura",
   barrage = { active = false },
   clear = { active = false },
-  power = { active = false },
-  eureka = { active = false },   -- racial gnome : +10 % de dégâts, -10 % de coût sur les sorts suivants
-  next = nil,                    -- clé du prochain sort conseillé
-  nextReason = nil,
-  nextId = nil,                  -- identifiant du sort conseillé (le rang à lancer)
-  interrupt = false,             -- le conseil demande d'interrompre l'incantation en cours
-  cast = nil,                    -- sort en cours : { key, start, finish }
-  aoe = false,                   -- mode multi-cibles
-  aoeForced = false,             -- mode multi-cibles demandé par /arc aoe
-  reminders = {},                -- améliorations à refaire avant le combat : { clé, … }
+  power = { active = false },    -- Arcane Power: it changes spell costs, and therefore how charges are read
+  eureka = { active = false },   -- gnome racial: +10% damage, -10% cost on the following spells
   pom = { active = false },
-  burst = { on = false },        -- le moment du burst (mode suivi seul) : on, et [clé] = true par recharge à claquer
-  heat = { stacks = nil, ready = false },
+  reminders = {},                -- what is missing before combat: { key, … }
   demo = false,
 }
 ns.State = State
 
 local MAX_STACKS = 4
-local GCD_MAX = 1.6
-local GRACE = 0.7   -- délai avant de croire un coût qui contredit un sort tout juste lancé
+local GRACE = 0.7   -- delay before trusting a cost that contradicts a spell just cast
 
--- Durées par défaut, remplacées par celles lues en jeu dès qu'une aura est lisible.
-local DEFAULT_DUR = { barrage = 15, clear = 15, power = 15, heat = 20, eureka = 8 }
--- Charges de Déflagration (mesuré en jeu, 1.60.1) : la première Déflagration ouvre une fenêtre de 18 s ;
--- les suivantes ajoutent une charge sans la prolonger, et aucun autre sort ne consomme les charges.
+-- Default durations, replaced by those read in game as soon as an aura is readable.
+local DEFAULT_DUR = { barrage = 15, clear = 15, power = 15, eureka = 8 }
+-- Arcane Blast charges (measured in game, 1.60.1): the first Arcane Blast opens an 18 s window;
+-- later ones add a charge without extending it, and no other spell consumes the charges.
 local BLAST_WINDOW = 18
-local DEFAULT_CD = {
-  wrath = 6, power = 180, pom = 180, evoc = 480, fireblast = 8, berserking = 180, bloodfury = 120, eureka = 120,
-}
-
--- Sorts à incantation : ils consomment la Présence spirituelle.
+-- Spells with a cast time: they consume Presence of Mind.
 local CAST_TIME = {
   blast = true, wrath = true, pyro = true, fireball = true, frostbolt = true, frostfire = true,
   scorch = true, flamestrike = true, poly = true,
 }
--- Sorts dont le coût sert de témoin pour les Idées claires (tous gratuits = proc).
+-- Spells whose cost serves as the reference for Clearcasting (all free = proc).
 local COST_REFS = { "blast", "frostbolt", "fireball", "explosion" }
 
-local lastCast = {}      -- [clé] = GetTime() du dernier lancer réussi
-local cost = {}          -- [clé] = coût actuel (nombre) ou nil
-local seenCost = {}      -- [clé] = true si un coût > 0 a déjà été lu
-local overlay = {}       -- [identifiant de sort] = true si le bouton est en surbrillance
-local loadedAt = 0        -- GetTime() de la dernière entrée dans le monde (écran de chargement)
+local lastCast = {}      -- [key] = GetTime() of the last successful cast
+local cost = {}          -- [key] = current cost (number) or nil
+local seenCost = {}      -- [key] = true if a cost > 0 has already been read
+local overlay = {}       -- [spell ID] = true if the button is glowing
+local loadedAt = 0        -- GetTime() of the last world entry (loading screen)
 
--- Ce que le jeu annonce ne change que lorsqu'il envoie un événement. Chaque famille de lectures est donc
--- gardée en mémoire tant que rien ne l'a périmée ; une relecture de sécurité a lieu de temps en temps,
--- au cas où un événement manquerait.
-local auraEpoch = 0       -- avance quand les auras du joueur ont pu changer
-local cdEpoch = 0         -- avance quand un temps de recharge a pu changer
+-- What the game announces only changes when it sends an event. Each family of readings is therefore
+-- kept in memory as long as nothing has made it stale; a safety re-read happens from time to time,
+-- in case an event is missed.
+local auraEpoch = 0       -- advances when the player's auras may have changed
 local costsStale, costsAt = true, -10
-local castStale, castAt = true, -10
 local targetStale, targetAt = true, -10
 
--- Délai de la relecture de sécurité : court quand le HUD suit quelque chose, long quand il est masqué.
+-- Delay of the safety re-read: short when the HUD is tracking something, long when it is hidden.
 local function slack()
   return State.live and 1 or 3
 end
 
 local function staleAll()
-  auraEpoch, cdEpoch = auraEpoch + 1, cdEpoch + 1
-  costsStale, castStale, targetStale = true, true, true
+  auraEpoch = auraEpoch + 1
+  costsStale, targetStale = true, true
   State.dirty = true
 end
 ns:On("SPELLS", staleAll)
-local aoeOnCast           -- (défini plus bas, avec le mode multi-cibles)
-local pomCheck            -- { at } : Projectiles lancés sous Présence spirituelle, on regarde si elle est restée
-local stacksEnded = 0     -- GetTime() de la dernière fin de fenêtre constatée au minuteur
+local stacksEnded = 0     -- GetTime() of the last window end observed by the timer
 
-State.lastCast = lastCast
-State.cost = cost
 State.overlay = overlay
 
 local function learn()
@@ -105,7 +85,7 @@ local function dur(key)
 end
 State.Duration = dur
 
--- ------------------------------------------------------------------ lecture des auras
+-- ------------------------------------------------------------------ aura reading
 local function aurasRestricted()
   if not S.RESTRICTED then return false end
   local CS = C_Secrets
@@ -120,8 +100,8 @@ local function usableAura(a)
   return type(a) == "table" and not S.IsTable(a) and not S.Is(a.spellId)
 end
 
--- "up" + aura, "down" (absente, c'est sûr) ou "unknown" (le jeu la cache).
-local auraCache = {}   -- [clé] = { epoch, at, restricted, status, aura, expire }
+-- "up" + aura, "down" (absent, for sure) or "unknown" (the game hides it).
+local auraCache = {}   -- [key] = { epoch, at, restricted, status, aura, expire }
 
 local function queryAura(def)
   local found
@@ -136,9 +116,9 @@ local function queryAura(def)
     if usableAura(a) then found = a end
   end
   if found then return "up", found end
-  -- Absente ? Seulement si le jeu ne cache rien en ce moment, ou s'il classe cette aura « jamais
-  -- secrète ». (Ne pas s'en souvenir d'une lecture à l'autre : une aura lue une fois pendant une
-  -- transition ne prouve rien pour la suite du combat.)
+  -- Absent? Only if the game is hiding nothing right now, or if it classifies this aura as "never
+  -- secret". (Do not remember this from one read to the next: an aura read once during a
+  -- transition proves nothing for the rest of the fight.)
   if not State.restricted or def.auraPlain == true then return "down" end
   local CS = C_Secrets
   if CS and CS.ShouldSpellAuraBeSecret then
@@ -155,13 +135,19 @@ end
 local function readAura(key)
   local def = Spells.Get(key)
   if not def or not C_UnitAuras then return "unknown" end
-  -- En combat, une aura que le jeu ne classe pas « jamais secrète » est illisible : inutile de la demander.
+  -- In combat, an aura the game does not classify as "never secret" is unreadable: no point asking for it.
   if State.restricted and def.auraPlain == false then return "unknown" end
   local now = GetTime()
   local c = auraCache[key]
-  if c and c.epoch == auraEpoch and c.restricted == State.restricted and now - c.at < slack()
-    and not (c.expire and now >= c.expire) then
-    return c.status, c.aura   -- rien n'a pu changer depuis la dernière lecture
+  if c and c.restricted == State.restricted and not (c.expire and now >= c.expire) then
+    if c.epoch == auraEpoch and now - c.at < slack() then
+      return c.status, c.aura   -- nothing can have changed since the last read
+    end
+    if now - c.at < 0.1 then
+      -- read less than a tenth of a second ago and aura events keep raining (a raid): the next pass will ask
+      State.dirty = true
+      return c.status, c.aura
+    end
   end
   if not c then c = {}; auraCache[key] = c end
   local status, aura = queryAura(def)
@@ -182,9 +168,9 @@ local function auraTimes(key, a)
   return expire, (duration and duration > 0) and duration or dur(key)
 end
 
--- ------------------------------------------------------------------ signaux lisibles en combat
--- Seuls les coûts qui servent sont lus : les Projectiles (Barrage) et les sorts témoins (Idées claires,
--- charges). La liste est refaite quand le grimoire change.
+-- ------------------------------------------------------------------ signals readable in combat
+-- Only the costs that are used are read: Arcane Missiles (Missile Barrage) and the reference spells
+-- (Clearcasting, charges). The list is rebuilt when the spellbook changes.
 local costKeys = {}
 ns:On("SPELLS", function()
   for i = #costKeys, 1, -1 do costKeys[i] = nil end
@@ -196,18 +182,23 @@ ns:On("SPELLS", function()
 end)
 
 local function readCosts(now)
-  if not costsStale and now - costsAt < (State.live and 0.5 or 3) then return end
+  local age = now - costsAt
+  if age < 0.1 then   -- at most ten reads per second, even when events rain
+    if costsStale then State.dirty = true end   -- (the next pass will read)
+    return
+  end
+  if not costsStale and age < (State.live and 0.5 or 3) then return end
   costsStale, costsAt = false, now
   for i = 1, #costKeys do
     local key = costKeys[i]
     local c, why = Spells.Cost(key)
     if c and c > 0 then seenCost[key] = true end
-    if c == nil and why == "aucun" and seenCost[key] then c = 0 end   -- le jeu n'annonce plus de coût : gratuit
+    if c == nil and why == "none" and seenCost[key] then c = 0 end   -- the game no longer announces a cost: free
     cost[key] = c
   end
 end
 
--- true : tous les sorts témoins sont gratuits ; false : au moins un coûte ; nil : on ne sait pas.
+-- true: all reference spells are free; false: at least one has a cost; nil: unknown.
 local function refsFree()
   local any = false
   for _, key in ipairs(COST_REFS) do
@@ -216,18 +207,18 @@ local function refsFree()
       any = true
     end
   end
-  -- « tout est gratuit » n'est pas cru juste après un écran de chargement : le jeu n'annonce pas encore les coûts
+  -- "everything is free" is not trusted right after a loading screen: the game does not announce costs yet
   if any and GetTime() - loadedAt >= 3 then return true end
   return nil
 end
 
--- Le bouton d'un des rangs du sort est-il en surbrillance ? true, false ou nil (inconnu).
-local overlayPoll = {}   -- [clé] = { at, value } : dernière interrogation directe
+-- Is the button of one of the spell's ranks glowing? true, false or nil (unknown).
+local overlayPoll = {}   -- [key] = { at, value }: last direct query
 local function overlayed(key)
   local def = Spells.Get(key)
   if not def or not def.ids then return nil end
   for _, id in ipairs(def.ids) do
-    if overlay[id] then return true end   -- signalé par SPELL_ACTIVATION_OVERLAY_GLOW_SHOW
+    if overlay[id] then return true end   -- reported by SPELL_ACTIVATION_OVERLAY_GLOW_SHOW
   end
   local now = GetTime()
   local p = overlayPoll[key]
@@ -248,20 +239,23 @@ local function overlayed(key)
   return p.value
 end
 
--- ------------------------------------------------------------------ Gestionnaire de temps de recharge
--- Le Gestionnaire de Blizzard (Options > Améliorations de jeu) voit tes buffs en combat. Si un proc est
--- dans ses « Buffs suivis », son icône répond IsActive() en clair : Arcanum la lit, sans rien modifier.
+-- ------------------------------------------------------------------ Cooldown Manager
+-- Blizzard's Cooldown Manager (Options > Gameplay Enhancements) sees your buffs in combat. If a proc is
+-- in its "Tracked Buffs", its icon answers IsActive() in plain: Arcanum reads it, without modifying anything.
 local CDM_VIEWERS = { "BuffIconCooldownViewer", "BuffBarCooldownViewer" }
-local CDM_KEYS = { "barrage", "clear", "heat", "power", "pom" }
-local cdmKey = {}      -- [cooldownID] = clé, ou false
-local cdm = {}         -- [clé] = true / false, relu à chaque passe
-local cdmGone = {}     -- [clé] = depuis quand l'icône dit « inactif »
-local cdmSeen = {}     -- [clé] = true si l'icône s'est déjà montrée active (preuve qu'elle est tenue à jour)
+local CDM_KEYS = { "barrage", "clear", "power", "pom" }
+local cdmKey = {}      -- [cooldownID] = key, or false
+local cdm = {}         -- [key] = true / false, re-read on every scan (five per second at most)
+local cdmMiss = {}     -- [cooldownID] = when the icon last gave no spell id (asked again a few seconds later)
+local cdmGone = {}     -- [key] = since when the icon has said "inactive"
+local cdmSeen = {}     -- [key] = true if the icon has already shown as active (proof that it is kept up to date)
 State.cdm = cdm
 
 local function cdmKeyFor(cooldownID, f)
   local cached = cdmKey[cooldownID]
   if cached ~= nil then return cached or nil end
+  local miss = cdmMiss[cooldownID]
+  if miss and GetTime() - miss < 5 then return nil end
   local ids = {}
   local function add(v)
     v = S.Num(v)
@@ -290,7 +284,11 @@ local function cdmKeyFor(cooldownID, f)
     end
     if found then break end
   end
-  if #ids > 0 then cdmKey[cooldownID] = found or false end
+  if #ids > 0 then
+    cdmKey[cooldownID] = found or false
+  else
+    cdmMiss[cooldownID] = GetTime()
+  end
   return found
 end
 
@@ -334,7 +332,7 @@ local function scanCDM(now)
   end
 end
 
--- true : l'icône est active ; false : inactive depuis une demi-seconde (et digne de foi) ; nil : rien à en tirer.
+-- true: the icon is active; false: inactive for half a second (and trustworthy); nil: nothing to learn from it.
 local function cdmSays(key, now)
   if cdm[key] == true then return true end
   if cdm[key] == false and cdmSeen[key] and cdmGone[key] and now - cdmGone[key] >= 0.5 then return false end
@@ -361,28 +359,39 @@ local function setProc(p, key, active, source, expire, duration, now)
   end
 end
 
+-- A proc kept past its learned duration because its signal still said "active" has no timer left. If that
+-- signal then turns unreadable (neither yes nor no) for a few seconds, the proc ends: it must not stay lit
+-- until the end of combat.
+local function unconfirmed(p, now)
+  return p.active and not p.expire and p.seen ~= nil and now - p.seen > 3
+end
+
 local function updateClear(now)
   local p = State.clear
   local l = learn()
   local st, a = readAura("clear")
   local free = refsFree()
-  if free == true then l.ccCost = true end   -- preuve : le coût annoncé suit bien les Idées claires
+  if free == true then l.ccCost = true end   -- proof: the announced cost does follow Clearcasting
   if st == "up" then
     local expire, duration = auraTimes("clear", a)
     setProc(p, "clear", true, "aura", expire, duration, now)
   elseif st == "down" then
     setProc(p, "clear", false)
   elseif cdmSays("clear", now) == true then
-    setProc(p, "clear", true, "gestionnaire", nil, nil, now)
+    setProc(p, "clear", true, "manager", nil, nil, now)
     if p.expire and now >= p.expire then p.expire = nil end
+    p.seen = now
   elseif free == true then
-    setProc(p, "clear", true, "coût", nil, nil, now)
+    setProc(p, "clear", true, "cost", nil, nil, now)
     if p.expire and now >= p.expire then p.expire = nil end
+    p.seen = now
   elseif cdmSays("clear", now) == false then
     setProc(p, "clear", false)
   elseif free == false and l.ccCost then
     setProc(p, "clear", false)
   elseif p.active and p.expire and now >= p.expire then
+    setProc(p, "clear", false)
+  elseif unconfirmed(p, now) then
     setProc(p, "clear", false)
   end
 end
@@ -391,12 +400,12 @@ local function updateBarrage(now)
   local p = State.barrage
   local l = learn()
   local st, a = readAura("barrage")
-  local settled = now - (lastCast.missiles or 0) > GRACE   -- le coût met un instant à revenir après le lancer
+  local settled = now - (lastCast.missiles or 0) > GRACE   -- the cost takes a moment to come back after the cast
   local glow = overlayed("missiles")
   local cm, free = cost.missiles, refsFree()
   local byGlow = glow == true
   local byCost = cm == 0 and free == false
-  if byGlow then l.mbGlow = true end   -- preuves : ces signaux existent bien dans ce client
+  if byGlow then l.mbGlow = true end   -- proofs: these signals do exist in this client
   if byCost then l.mbCost = true end
   if st == "up" then
     local expire, duration = auraTimes("barrage", a)
@@ -408,22 +417,26 @@ local function updateBarrage(now)
   end
   local icon = cdmSays("barrage", now)
   if icon == true then
-    setProc(p, "barrage", true, "gestionnaire", nil, nil, now)
-  elseif byGlow then
-    setProc(p, "barrage", true, "surbrillance", nil, nil, now)
-  elseif byCost then
-    if settled then setProc(p, "barrage", true, "coût", nil, nil, now) end
+    setProc(p, "barrage", true, "manager", nil, nil, now)
+    p.seen = now
+  elseif byGlow or byCost then
+    -- right after Arcane Missiles, the glow and the cost still show the proc that was just spent
+    if settled then
+      setProc(p, "barrage", true, byGlow and "glow" or "cost", nil, nil, now)
+      p.seen = now
+    end
   elseif icon == false then
     setProc(p, "barrage", false)
   elseif l.mbGlow and glow == false then
     setProc(p, "barrage", false)
   elseif l.mbCost and cm ~= nil and cm > 0 then
-    setProc(p, "barrage", false)          -- les Projectiles coûtent du mana : pas de Barrage
+    setProc(p, "barrage", false)          -- Arcane Missiles cost mana: no Missile Barrage
   elseif p.active and p.expire and now >= p.expire then
-    setProc(p, "barrage", false)          -- signal masqué (Idées claires) : on s'en remet à la durée
+    setProc(p, "barrage", false)          -- signal masked (Clearcasting): fall back on the duration
   end
-  -- Le signal dit encore « actif » après la durée apprise : on garde le proc, sans minuteur.
+  -- The signal still says "active" after the learned duration: keep the proc, without a timer.
   if p.active and p.expire and now >= p.expire then p.expire = nil end
+  if unconfirmed(p, now) then setProc(p, "barrage", false) end
 end
 
 local function updatePower(now)
@@ -436,7 +449,7 @@ local function updatePower(now)
   elseif st == "down" then
     setProc(p, "power", false)
   elseif cdmSays("power", now) ~= nil then
-    setProc(p, "power", cdmSays("power", now), "gestionnaire", nil, nil, now)
+    setProc(p, "power", cdmSays("power", now), "manager", nil, nil, now)
   elseif p.active and p.expire and now >= p.expire then
     setProc(p, "power", false)
   end
@@ -466,43 +479,14 @@ local function updatePom(now)
   elseif st == "down" then
     setProc(p, "pom", false)
   elseif cdmSays("pom", now) ~= nil then
-    setProc(p, "pom", cdmSays("pom", now), "gestionnaire", nil, nil, now)
+    setProc(p, "pom", cdmSays("pom", now), "manager", nil, nil, now)
   elseif p.active and p.since and now - p.since > 60 then
     setProc(p, "pom", false)
   end
   if p.active then p.expire = nil end
 end
 
-local function updateHeat(now)
-  local h = State.heat
-  if not Spells.Known("pyro") then
-    h.stacks, h.ready, h.expire = nil, false, nil
-    return
-  end
-  local st, a = readAura("heat")
-  local was = h.ready
-  if st == "up" then
-    h.stacks = S.Num(a.applications) or 1
-    if h.stacks < 1 then h.stacks = 1 end
-    h.expire = auraTimes("heat", a)
-    h.ready = h.stacks >= 3
-  elseif st == "down" then
-    h.stacks, h.expire, h.ready = 0, nil, false
-  else
-    h.expire = nil
-    local glow = overlayed("pyro")
-    local instant = Spells.CastTime("pyro") == 0 and not State.pom.active
-    h.ready = glow == true or instant
-    if cdmSays("heat", now) == false and not h.ready then
-      h.stacks = 0      -- l'icône du Gestionnaire est éteinte : plus d'Échauffement
-    else
-      h.stacks = nil    -- le nombre de charges reste caché en combat
-    end
-  end
-  if h.ready and not was then ns:Fire("PROC", "heat") end
-end
-
--- ------------------------------------------------------------------ charges de Déflagration
+-- ------------------------------------------------------------------ Arcane Blast charges
 local function setStacks(n, expire, source)
   local old = State.stacks
   State.stacks = n
@@ -521,12 +505,12 @@ local function updateBlast(now)
     if n > MAX_STACKS then n = MAX_STACKS end
     local expire, duration = S.Num(a.expirationTime), S.Num(a.duration)
     if expire and expire <= 0 then expire = nil end
-    -- La durée de l'aura n'est celle de la fenêtre entière qu'à la première charge : ensuite le jeu
-    -- annonce le temps qu'il restait à l'arrivée de la dernière charge.
+    -- The aura's duration is that of the whole window only at the first charge: after that the game
+    -- announces the time that was left when the last charge arrived.
     if n == 1 and duration and duration > 0 then l.abWindow = duration end
     State.stacksDur = dur("blast")
     setStacks(n, expire, "aura")
-    -- Le coût suit-il les charges ? On l'apprend ici, quand la vérité est connue.
+    -- Does the cost follow the charges? We learn it here, when the truth is known.
     if l.abBase and c and c > 0 and not State.power.active and not State.eureka.active then
       local ratio = c / l.abBase
       if ratio >= 1.35 then
@@ -540,340 +524,75 @@ local function updateBlast(now)
       l.abBase = c
     end
   else
-    -- En combat : les charges viennent des Déflagrations lancées (voir onCast) ; on vérifie ici la fin
-    -- de la fenêtre et, quand il est fiable, le coût annoncé, qui donne le nombre exact de charges.
+    -- In combat: charges come from the Arcane Blasts cast (see onCast); here we check the end
+    -- of the window and, when it is reliable, the announced cost, which gives the exact number of charges.
     State.stacksDur = dur("blast")
     local cast = lastCast.blast
     if State.stacksSource == "aura" and State.stacks == 0 and cast and now - cast < 1.5 then
-      setStacks(1, cast + State.stacksDur, "sorts")   -- Déflagration finie à l'instant où le combat commence
+      setStacks(1, cast + State.stacksDur, "casts")   -- Arcane Blast finished at the very moment combat starts
     end
     if State.stacks > 0 and State.stacksExpire and now >= State.stacksExpire then
-      setStacks(0, nil, "durée")
+      setStacks(0, nil, "timer")
       stacksEnded = now
     end
-    -- Pas pendant le Pouvoir des Arcanes ni Eureka (ils changent le coût), ni juste après une
-    -- Déflagration (le coût met un instant à suivre). Un coût nul (Idées claires) ne dit rien.
+    -- Not during Arcane Power or Eureka (they change the cost), nor right after an
+    -- Arcane Blast (the cost takes a moment to follow). A zero cost (Clearcasting) says nothing.
     if l.costTracks and l.abBase and l.abStep and l.abStep > 0 and c and c > 0
       and not State.power.active and not State.eureka.active and now - (cast or 0) > GRACE
       and now - stacksEnded > GRACE then
       local x = (c / l.abBase - 1) / l.abStep
       local n = math.floor(x + 0.5)
       if math.abs(x - n) < 0.2 and n >= 0 and n <= MAX_STACKS and n ~= State.stacks then
-        setStacks(n, State.stacksExpire, "coût")   -- fin de fenêtre gardée si on la connaît
+        setStacks(n, State.stacksExpire, "cost")   -- window end kept if we know it
       end
     end
   end
 end
 
--- ------------------------------------------------------------------ sorts lancés
+-- ------------------------------------------------------------------ spell casts
+-- Can the spell just cast end this proc? Yes when the proc is inferred. A proc read from its aura before
+-- combat can no longer be verified once auras are hidden: the cast ends it too. Not when Blizzard's
+-- Cooldown Manager shows it: its icon is the truth.
+local function inferred(p)
+  return p.source ~= "manager" and (State.restricted or p.source ~= "aura")
+end
+
 local function onCast(spellID)
   spellID = S.Num(spellID)
   if not spellID then return end
   local key = Spells.KeyOf(spellID)
   if not key then return end
   local now = GetTime()
-  if lastCast[key] and now - lastCast[key] < 0.25 then return end   -- même lancer vu par deux événements
+  if lastCast[key] and now - lastCast[key] < 0.25 then return end   -- same cast seen by two events
   lastCast[key] = now
 
   if key == "blast" and State.restricted then
     if State.stacks > 0 and (not State.stacksExpire or State.stacksExpire > now) then
-      -- une charge de plus ; la fenêtre ouverte par la première Déflagration n'est pas prolongée
+      -- one more charge; the window opened by the first Arcane Blast is not extended
       local n = State.stacks + 1
       if n > MAX_STACKS then n = MAX_STACKS end
-      setStacks(n, State.stacksExpire, "sorts")
+      setStacks(n, State.stacksExpire, "casts")
     else
-      setStacks(1, now + dur("blast"), "sorts")   -- première charge : la fenêtre s'ouvre
+      setStacks(1, now + dur("blast"), "casts")   -- first charge: the window opens
     end
   end
 
-  aoeOnCast(key, now)
-  if key == "missiles" and State.pom.active and not pomCheck then pomCheck = { at = now } end
-  -- (un proc lu sur son aura avant le combat n'est plus vérifiable une fois les auras cachées : le sort
-  -- lancé le termine alors, comme pour un proc déduit)
-  local function inferred(p)
-    return p.source ~= "gestionnaire" and (State.restricted or p.source ~= "aura")
-  end
   if key == "missiles" and State.barrage.active and inferred(State.barrage) then
     setProc(State.barrage, "barrage", false)
   end
   if key == "eureka" then
-    setProc(State.eureka, "eureka", true, "sorts", now + dur("eureka"), dur("eureka"), now)
-  end
-  -- pour le diagnostic : délai entre Présence spirituelle et le Courroux qui suit (la macro de burst
-  -- les lance-t-elle au même appui ?)
-  if key == "wrath" and lastCast.pom and now - lastCast.pom < 15 then
-    local l = learn()
-    if type(l.checks) ~= "table" then l.checks = {} end
-    l.checks.burstGap = now - lastCast.pom
+    setProc(State.eureka, "eureka", true, "casts", now + dur("eureka"), dur("eureka"), now)
   end
   if key == "power" then
-    setProc(State.power, "power", true, "sorts", now + dur("power"), dur("power"), now)
+    setProc(State.power, "power", true, "casts", now + dur("power"), dur("power"), now)
   elseif key == "pom" then
-    setProc(State.pom, "pom", true, "sorts", nil, nil, now)
+    setProc(State.pom, "pom", true, "casts", nil, nil, now)
     State.pom.expire = nil
   elseif CAST_TIME[key] and State.pom.active and inferred(State.pom) then
     setProc(State.pom, "pom", false)
   end
   State.dirty = true
   ns:Fire("CAST", key)
-end
-State.OnCast = onCast
-
--- ------------------------------------------------------------------ temps de recharge
--- Retourne une table réutilisable : start/duration lisibles, ou secret = true (le widget dessinera la
--- durée à partir de State.CooldownObject). onCD : true ou false.
--- Le résultat est gardé pour toute la passe en cours : le conseil et l'affichage demandent les mêmes sorts.
-local cdInfo = {}
-local readyMemo = {}   -- [clé] = fin de recharge lue quand elle était lisible
-local tick = 0         -- numéro de la passe en cours (State.Update)
-function State.Cooldown(key)
-  local r = cdInfo[key]
-  if not r then r = {}; cdInfo[key] = r end
-  if r.tick == tick and not State.demo then return r end
-  r.tick = tick
-  local now = GetTime()
-  if not State.demo and r.epoch == cdEpoch and now - r.at < slack() then
-    -- le jeu n'a signalé aucun changement : seul le temps a passé
-    if r.readyAt and r.readyAt <= now then r.readyAt, r.onCD = nil, false end
-    return r
-  end
-  r.epoch, r.at = cdEpoch, now
-  r.start, r.duration, r.modRate, r.secret, r.onCD, r.readyAt = nil, nil, nil, nil, nil, nil
-  if State.demo then
-    local d = State.demoCD and State.demoCD[key]
-    if d and d.start + d.duration > now then
-      r.start, r.duration, r.modRate, r.onCD, r.readyAt = d.start, d.duration, 1, true, d.start + d.duration
-    else
-      r.start, r.duration, r.onCD = 0, 0, false
-    end
-    return r
-  end
-  local id = Spells.Best(key)
-  if not id or not (C_Spell and C_Spell.GetSpellCooldown) then return r end
-  local info = S.Call(C_Spell.GetSpellCooldown, id)
-  if type(info) == "table" and not S.IsTable(info) then
-    local start, duration = S.Num(info.startTime), S.Num(info.duration)
-    if start and duration then
-      r.start, r.duration, r.modRate = start, duration, S.Num(info.modRate) or 1
-      local enabled = info.isEnabled
-      if S.Is(enabled) then enabled = true end
-      r.onCD = duration > GCD_MAX and enabled ~= false and enabled ~= 0 and start + duration > now
-      if r.onCD then
-        r.readyAt = start + duration
-        readyMemo[key] = r.readyAt
-        local l = learn()
-        if l.cd then l.cd[key] = duration end
-      else
-        readyMemo[key] = nil
-      end
-      return r
-    end
-  end
-  -- Valeurs secrètes : pour « prêt ou non », on part du dernier lancer et de la recharge apprise.
-  r.secret = true
-  local cast = lastCast[key]
-  local l = learn()
-  local cd = (l.cd and l.cd[key]) or Spells.BaseCooldown(key) or DEFAULT_CD[key]
-  local readyAt = cast and cd and cast + cd or nil
-  local memo = readyMemo[key]
-  if memo and (not readyAt or memo > readyAt) then readyAt = memo end
-  if readyAt and readyAt > now then
-    r.readyAt, r.onCD = readyAt, true
-  else
-    r.onCD = false   -- ni lancé ni en recharge à notre connaissance : considéré prêt
-  end
-  return r
-end
-
--- Objet « durée » du jeu pour ce sort : le seul moyen de dessiner une recharge secrète. Demandé par
--- l'affichage, et seulement quand il doit réalimenter son widget.
-function State.CooldownObject(key)
-  local id = Spells.Best(key)
-  if id and C_Spell and C_Spell.GetSpellCooldownDuration then
-    return S.Call(C_Spell.GetSpellCooldownDuration, id, true)
-  end
-  return nil
-end
-
--- Gemme de mana : objet, quantité, temps de recharge lisible.
-local gemInfo = {}
-function State.Gem()
-  local r = gemInfo
-  r.itemID, r.count, r.start, r.duration, r.onCD = nil, 0, nil, nil, nil
-  if State.demo then return r end
-  local itemID, count = Spells.Gem()
-  if not itemID then return r end
-  r.itemID, r.count = itemID, count
-  local get = C_Container and C_Container.GetItemCooldown or GetItemCooldown
-  if get then
-    local start, duration = S.Call(get, itemID)
-    start, duration = S.Num(start), S.Num(duration)
-    if start and duration then
-      r.start, r.duration = start, duration
-      r.onCD = duration > GCD_MAX and start + duration > GetTime()
-    end
-  end
-  return r
-end
-
--- ------------------------------------------------------------------ prochain sort
--- Le sort à lancer ensuite. La priorité part du cycle Arcanes du guide Method (patch 1.60.1), adaptée à
--- ce qui a été mesuré en jeu : chaque charge double le coût de la Déflagration suivante, et rien ne les
--- consomme. On vise donc un nombre de charges (« charges visées », 2 par défaut), puis on en profite
--- avec des sorts qui ne coûtent pas plus cher :
---   1. Pouvoir des Arcanes dès qu'il est prêt ;
---   2. Projectiles des Arcanes sur un Barrage de projectiles ;
---   3. Déflagration sur des Idées claires (elle est gratuite, et la charge en plus aussi) ;
---   4. hors combat, sans charge : Courroux en ouverture (réglable) ;
---      charges visées atteintes, Courroux prêt : Eureka, puis Présence spirituelle, puis Courroux ;
---   5. gemme de mana, puis Évocation, sous 15 % de mana ;
---   6. sous les charges visées : Déflagration ;
---   7. charges visées atteintes : Éclair de givre ou Boule de feu (le moins cher), qui profitent des
---      charges et peuvent déclencher un Barrage ;
---   8. si le mana ne suit plus : Courroux, gemme de mana, Évocation, le sort le moins cher, la baguette.
--- Le réglage « conseiller les gros temps de recharge » retire Pouvoir des Arcanes, Eureka et Présence
--- spirituelle du conseil, pour les garder sous la main.
--- La variante Feu ajoute l'Explosion pyrotechnique sur 3 charges d'Échauffement et le Trait de feu.
--- En mode multi-cibles, c'est computeAoe qui conseille (Choc de flammes, Explosion des Arcanes).
--- Pendant une incantation ou une canalisation, le conseil ne bouge pas : il change quand le sort est
--- parti. Une exception : des Idées claires pendant un sort bon marché (voir worthInterrupting). Avec l'option « anticiper », il montre au contraire le sort d'après dès le début de
--- l'incantation, en tenant compte de ce que le sort en cours va changer (une charge de plus…).
-local DEMO_KNOWN = { blast = true, wrath = true, missiles = true, pom = true, eureka = true, evoc = true }
-
-local function known(key)
-  if State.demo then return DEMO_KNOWN[key] == true end
-  return Spells.Known(key)
-end
-
-local function ready(key)
-  if not known(key) then return false end
-  return State.Cooldown(key).onCD ~= true
-end
-
--- false seulement si le jeu dit que le mana manque pour ce sort (cette réponse reste lisible en combat).
-local function affordable(key, id)
-  if State.demo then return true end
-  id = id or Spells.Best(key)
-  if not (id and C_Spell and C_Spell.IsSpellUsable) then return true end
-  local ok, usable, noMana = pcall(C_Spell.IsSpellUsable, id)
-  if not ok or S.Is(usable) or S.Is(noMana) then return true end
-  return noMana ~= true
-end
-
--- Le jeu cache le mana en combat, mais il dit, pour chaque sort, si le mana manque pour le lancer. Avec
--- le coût de quelques sorts (relevé hors combat), on sait donc si le mana est passé sous un seuil :
--- « je ne peux plus lancer un sort qui coûte moins de 15 % de mon mana » veut dire « je suis sous 15 % ».
-local LADDER_KEYS = { "blizzard", "flamestrike", "intellect", "icearmor", "frostarmor", "magearmor", "cone",
-  "explosion", "fireblast", "wrath", "fireball", "frostbolt", "poly", "scorch" }
-local ladder, ladderAt = {}, -100   -- { id, cost }, du moins cher au plus cher
-ns:On("SPELLS", function() ladderAt = -100 end)
-
-local function buildLadder(now)
-  if now - ladderAt < 30 and #ladder > 0 then return end
-  -- seulement quand les coûts annoncés sont ceux de base : hors combat, sans proc ni bonus de coût
-  if State.restricted or State.clear.active or State.eureka.active or State.power.active then return end
-  ladderAt = now
-  for i = #ladder, 1, -1 do ladder[i] = nil end
-  local seen = {}
-  for _, key in ipairs(LADDER_KEYS) do
-    if Spells.Known(key) then
-      for _, id in ipairs({ Spells.Best(key), Spells.Lowest(key) }) do
-        local c = not seen[id] and Spells.CostOf(id)
-        if c and c > 0 then
-          seen[id] = true
-          ladder[#ladder + 1] = { id = id, cost = c }
-        end
-      end
-    end
-  end
-  table.sort(ladder, function(a, b) return a.cost < b.cost end)
-end
-
--- true sous 15 % de mana, false au-dessus, nil si on ne peut pas le savoir.
-local function manaLow()
-  if State.demo or not UnitPowerMax then return nil end
-  local top = S.Num((S.Call(UnitPowerMax, "player", 0)))
-  if not top or top <= 0 then return nil end
-  local cur = UnitPower and S.Num((S.Call(UnitPower, "player", 0)))
-  if cur then return cur / top < 0.15 end
-  -- mana secret : on interroge le sort le plus cher qui coûte moins de 15 % du mana maximum
-  if State.clear.active or not (C_Spell and C_Spell.IsSpellUsable) then return nil end   -- (tout est gratuit)
-  local limit, probe = 0.15 * top, nil
-  for i = 1, #ladder do
-    if ladder[i].cost <= limit then probe = ladder[i] else break end
-  end
-  State.manaProbe = probe
-  if not probe then return nil end
-  local ok, usable, noMana = pcall(C_Spell.IsSpellUsable, probe.id)
-  if not ok or S.Is(usable) or S.Is(noMana) then return nil end
-  return noMana == true
-end
-
--- Le sort en cours d'incantation ou de canalisation : clé, début, fin (secondes). nil si aucun.
-local castInfo = {}
-local function readCast(now)
-  if State.demo then State.cast = nil; return end
-  if not castStale and now - castAt < 1 then
-    local c = State.cast
-    if c and now > c.finish + 0.3 then State.cast = nil end   -- finie sans que le jeu l'ait signalé
-    return
-  end
-  castStale, castAt = false, now
-  State.cast = nil
-  local key, startMs, endMs
-  if UnitCastingInfo then
-    local ok, _, _, _, s, e, _, _, _, spellID = pcall(UnitCastingInfo, "player")
-    spellID = ok and S.Num(spellID) or nil
-    if spellID then key, startMs, endMs = Spells.KeyOf(spellID) or "?", S.Num(s), S.Num(e) end
-  end
-  if not key and UnitChannelInfo then
-    local ok, _, _, _, s, e, _, _, spellID = pcall(UnitChannelInfo, "player")
-    spellID = ok and S.Num(spellID) or nil
-    if spellID then key, startMs, endMs = Spells.KeyOf(spellID) or "?", S.Num(s), S.Num(e) end
-  end
-  -- (une incantation dont la fin est passée depuis un moment n'est plus en cours : on ne reste pas figé)
-  if key and startMs and endMs and endMs > startMs and endMs / 1000 > GetTime() - 0.3 then
-    castInfo.key, castInfo.start, castInfo.finish = key, startMs / 1000, endMs / 1000
-    State.cast = castInfo
-  end
-end
-
--- Une gemme de mana en sac, prête à l'emploi ?
-local function gemReady()
-  if State.demo then return false end
-  local gem = State.Gem()
-  return gem.itemID ~= nil and gem.onCD ~= true
-end
-
--- Le moins cher des deux sorts, parmi ceux qui sont connus et que le mana permet. nil si aucun.
--- Rang à lancer pour un sort de remplissage : le rang 1 (deux fois plus de lancers, donc de chances de
--- Barrage, pour beaucoup moins de mana) ou le dernier rang (plus de dégâts), selon le réglage.
-local function fillerId(key)
-  local db = ns.db or ns.DEFAULTS
-  if db.fillerRank == 1 then return Spells.Lowest(key) end
-  return Spells.Best(key)
-end
-
--- Retourne la clé et l'identifiant du rang à lancer.
-local function cheapest(a, b)
-  local idA, idB = fillerId(a), fillerId(b)
-  local okA = known(a) and affordable(a, idA)
-  local okB = known(b) and affordable(b, idB)
-  if okA and okB then
-    local cA, cB = Spells.CostOf(idA) or math.huge, Spells.CostOf(idB) or math.huge
-    if cB < cA then return b, idB end
-    return a, idA
-  end
-  if okA then return a, idA end
-  if okB then return b, idB end
-  return nil
-end
-
--- Nombre de charges visées (la démonstration joue le cycle complet, à 4 charges).
-function State.Target()
-  if State.demo then return MAX_STACKS end
-  local db = ns.db or ns.DEFAULTS
-  return db.targetStacks or 2
 end
 
 local function hostileTarget()
@@ -885,238 +604,8 @@ local function hostileTarget()
   return (hostile and not dead) and true or false
 end
 
--- Conseil en mode multi-cibles (Explosion des Arcanes) :
---   Pouvoir des Arcanes ; Choc de flammes en ouverture (hors combat) ou instantané sous Présence
---   spirituelle ; Eureka ; Présence spirituelle pour un Choc de flammes ; puis Explosion des Arcanes.
--- Pas de montée de charges : l'Explosion ne reçoit que 14 % des dégâts des sorts, les charges ne se
--- remboursent pas.
-local function computeAoe(db, burst, fighting)
-  if burst and fighting and not State.power.active and ready("power") then return "power", "burst" end
-  local strike = known("flamestrike") and affordable("flamestrike")
-  if strike and State.pom.active then return "flamestrike", "burst" end
-  if strike and not State.combat then return "flamestrike", "aoe" end
-  if burst and State.combat and not State.eureka.active and ready("eureka") then return "eureka", "burst" end
-  if burst and State.combat and strike and ready("pom") then return "pom", "burst" end
-  if known("explosion") and affordable("explosion") then
-    return "explosion", State.clear.active and "clear" or "aoe"
-  end
-  if State.combat and gemReady() then return "gem", "mana" end
-  if State.combat and ready("evoc") then return "evoc", "mana" end
-  if known("shoot") then return "shoot", "mana" end
-  if known("explosion") then return "explosion", "aoe" end
-  return nil
-end
-
--- Retourne la clé du sort conseillé, la raison ("burst", "arcane", "barrage", "clear", "heat", "mana",
--- "aoe") et, pour un sort de remplissage, l'identifiant du rang à lancer.
-local function computeNext()
-  local need = State.Target()
-  local stacks = State.stacks
-  local barrage, clear, pomActive = State.barrage.active, State.clear.active, State.pom.active
-  local wrathReady = ready("wrath")
-  local cast = State.cast
-  if cast then
-    if cast.key == "blast" then
-      stacks = stacks > 0 and math.min(MAX_STACKS, stacks + 1) or 1
-      clear = false
-    elseif cast.key == "wrath" then
-      wrathReady = false
-    elseif cast.key == "missiles" then
-      barrage = false
-    end
-    if CAST_TIME[cast.key] then
-      pomActive = false
-      -- un sort de dégâts en cours dépensera les Idées claires en partant (pas la Métamorphose)
-      if cast.key ~= "poly" then clear = false end
-    end
-  end
-  local fighting = State.demo or State.combat or State.hostile
-  local db = ns.db or ns.DEFAULTS
-  local burst = State.demo or db.adviseBurst ~= false   -- conseiller les gros temps de recharge ?
-  -- Fenêtre des charges presque finie : une charge de plus ne servirait que quelques secondes. On
-  -- arrête de monter et on profite de celles qu'on a, comme si la cible était atteinte.
-  local expire = State.stacksExpire
-  local closing = stacks > 0 and stacks < need and expire ~= nil and expire - GetTime() < 4
-  local topped = stacks >= need or closing
-
-  if State.aoe and not State.demo then
-    local key, reason = computeAoe(db, burst, fighting)
-    if key then return key, reason end
-  end
-
-  if burst and fighting and not State.power.active and ready("power") then return "power", "burst" end
-  -- Le Barrage d'abord : les Projectiles sont gratuits, et une Déflagration lancée pendant qu'il est
-  -- actif peut en déclencher un autre, qui serait perdu. (La Présence spirituelle, si elle est déjà
-  -- active, n'est pas dépensée par une canalisation : elle attend le Courroux. Vérifié en jeu, 1.60.1.)
-  if barrage and known("missiles") then return "missiles", "barrage" end
-  if known("pyro") then
-    if State.heat.ready then return "pyro", "heat" end
-    if ready("fireblast") and affordable("fireblast") then return "fireblast", "heat" end
-  end
-  local wrathNow = wrathReady and affordable("wrath")
-  -- Présence spirituelle déjà lancée : elle va au Courroux, même sous des Idées claires
-  if wrathNow and pomActive then return "wrath", "burst" end
-  -- Les Idées claires vont à la Déflagration, le sort le plus cher : le Courroux les dépenserait aussi,
-  -- pour deux fois moins de mana économisé, et la charge offerte serait perdue
-  if clear and known("blast") then return "blast", "clear" end
-  -- Ouverture : hors combat, le premier sort ne coûte pas de temps de combat. Autant y mettre la plus
-  -- longue incantation, le Courroux (3,5 s, coût fixe), puis monter les charges une fois le combat lancé.
-  if db.openWrath ~= false and wrathNow and stacks == 0 and not State.combat and not State.demo then
-    return "wrath", "arcane"
-  end
-  if wrathNow and topped then
-    if burst and not closing then
-      local eureka = not State.eureka.active and ready("eureka")
-      local pom = ready("pom")
-      if eureka or pom then
-        -- « burst en une icône » : avec la macro (Eureka + Présence spirituelle + Courroux), une seule
-        -- touche fait tout ; on montre donc directement le Courroux, en or
-        if db.burstOne ~= false and not State.demo then return "wrath", "burst" end
-        if eureka then return "eureka", "burst" end
-        return "pom", "burst"
-      end
-    end
-    return "wrath", "arcane"
-  end
-  if State.combat and manaLow() == true then
-    if gemReady() then return "gem", "mana" end
-    if ready("evoc") then return "evoc", "mana" end
-  end
-  if topped then
-    -- charges visées atteintes (ou fenêtre presque finie) : une Déflagration de plus coûterait encore
-    -- plus cher, un sort bon marché profite autant des charges
-    local filler, id = cheapest("frostbolt", "fireball")
-    if filler then return filler, "arcane", id end
-  end
-  if known("blast") and affordable("blast") then return "blast", "arcane" end
-  -- le mana ne suit plus
-  if wrathNow then return "wrath", "arcane" end
-  if State.combat and gemReady() then return "gem", "mana" end
-  if State.combat and ready("evoc") then return "evoc", "mana" end
-  local cheap, id = cheapest("frostbolt", "fireball")   -- du moins cher au plus cher
-  if cheap then return cheap, "mana", id end
-  if known("missiles") and affordable("missiles") then return "missiles", "mana" end
-  if known("shoot") then return "shoot", "mana" end
-  for _, key in ipairs({ "blast", "frostbolt", "fireball" }) do
-    if known(key) then return key, "arcane" end
-  end
-  return nil
-end
-
--- Des Idées claires arrivent pendant l'incantation d'un sort bon marché : c'est ce sort qui dépenserait
--- le proc en se terminant (25 de mana économisés par un Éclair de givre de rang 1, contre plusieurs
--- centaines par une Déflagration chargée). Mieux vaut l'interrompre, s'il reste assez d'incantation
--- pour que ça vaille le coup. Un Barrage de projectiles, lui, attend sagement : on n'interrompt pas.
-local CHEAP_CAST = { frostbolt = true, fireball = true, frostfire = true, scorch = true }
-local function worthInterrupting(db, now)
-  local cast = State.cast
-  if not cast or db.cutForClear == false or State.demo or State.aoe then return false end
-  if not State.clear.active or not CHEAP_CAST[cast.key] then return false end
-  if cast.finish - now < 0.5 then return false end   -- presque fini : autant le laisser partir
-  return Spells.Known("blast")
-end
-
--- Le moment du burst. Le HUD dit quand claquer les gros temps de recharge, sinon on les oublie : il
--- montre l'icône du sort à lancer. Le moment
--- est celui où le conseil dirait « burst » (charges visées atteintes, Colère prête, pas de Barrage ni
--- d'Idées claires à dépenser d'abord) ; les gemmes désignées sont celles qui sont prêtes. Le Pouvoir des
--- Arcanes, lui, se lance dès qu'il est prêt : il se signale seul, Eurêka et la Présence spirituelle
--- attendent les charges.
-local BURST_CDS = { "eureka", "pom", "power", "berserking", "bloodfury" }
-local WAITS_FOR_CHARGES = { eureka = true, pom = true }
-local function setBurst(on, advised)
-  local b = State.burst
-  if not on and not b.on then return end
-  for i = 1, #BURST_CDS do
-    local key = BURST_CDS[i]
-    local p = State[key]
-    local lit = on and known(key) and ready(key) and not (type(p) == "table" and p.active)
-    if lit and advised == "power" and WAITS_FOR_CHARGES[key] then lit = false end
-    b[key] = lit or false
-  end
-  if on ~= b.on then
-    b.on = on
-    ns:Fire("BURST", on)
-  end
-end
-
--- Hors combat les temps de recharge sont lisibles : on les lit à chaque passe, pour savoir en combat (où
--- ils sont secrets) si un gros temps de recharge lancé avant le combat est encore en recharge.
-local function rememberCooldowns()
-  if State.restricted then return end
-  for i = 1, #BURST_CDS do
-    local key = BURST_CDS[i]
-    if Spells.Known(key) then State.Cooldown(key) end
-  end
-end
-
-local function updateNext()
-  local db = ns.db or ns.DEFAULTS
-  -- Le moment du burst, que le HUD signale : celui où le calcul du prochain sort dit « burst ». Il est
-  -- recalculé à chaque passe, incantation en cours comprise : le signal s'allume pendant la Déflagration
-  -- qui donne la dernière charge visée.
-  local advised, why = computeNext()
-  setBurst(why == "burst" and (State.demo or db.adviseBurst ~= false)
-    and (State.demo or State.combat or State.hostile) and true or false, advised)
-  -- Le prochain sort lui-même n'est plus affiché ; il reste calculé pour le rapport /arc diag.
-  local key, reason, id
-  local cut = worthInterrupting(db, GetTime())
-  if cut then
-    key, reason = "blast", "clear"
-  elseif State.cast and State.next and not db.anticipate then
-    -- on attend la fin du sort en cours ; si on venait de conseiller d'interrompre, le signal s'arrête
-    if State.interrupt then
-      State.interrupt = false
-      ns:Fire("NEXT", State.next, State.nextReason, State.next)
-    end
-    return
-  else
-    key, reason, id = computeNext()
-  end
-  if key and key ~= "gem" then id = id or Spells.Best(key) end
-  if key ~= State.next or reason ~= State.nextReason or id ~= State.nextId or cut ~= State.interrupt then
-    local old = State.next
-    State.next, State.nextReason, State.nextId, State.interrupt = key, reason, id, cut
-    ns:Fire("NEXT", key, reason, old)
-  end
-end
-
--- ------------------------------------------------------------------ mode multi-cibles
--- Arcanum ne peut pas compter les ennemis autour de toi. Il suit donc ton intention : le mode s'active
--- quand tu lances un sort de zone, et retombe quand tu relances un sort mono-cible, après 8 secondes
--- sans sort de zone, ou à la fin du combat. /arc aoe le force avant le pull.
-local AOE_SPELL = { explosion = true, flamestrike = true, blizzard = true, cone = true }
-local SINGLE_SPELL = { blast = true, wrath = true, missiles = true, frostbolt = true, fireball = true,
-  pyro = true, scorch = true, frostfire = true }
-local aoeAt = 0
-
-function State.SetAoe(on)
-  State.aoeForced = on and true or false
-  State.aoe = State.aoeForced
-  aoeAt = GetTime()
-  State.dirty = true
-  ns:Fire("AOE", State.aoe)
-end
-
-aoeOnCast = function(key, now)
-  if AOE_SPELL[key] then
-    aoeAt = now
-    if not State.aoe then State.aoe = true; ns:Fire("AOE", true) end
-  elseif SINGLE_SPELL[key] and State.aoe and not State.aoeForced then
-    State.aoe = false
-    ns:Fire("AOE", false)
-  end
-end
-
-local function updateAoe(now)
-  if State.aoe and not State.aoeForced and now - aoeAt > 8 then
-    State.aoe = false
-    ns:Fire("AOE", false)
-  end
-end
-
--- ------------------------------------------------------------------ rappels avant le combat
--- Hors combat les améliorations sont lisibles : on signale ce qui manque avant d'engager.
+-- ------------------------------------------------------------------ pre-combat reminders
+-- Out of combat, buffs are readable: we flag what is missing before engaging.
 local ARMORS = { "magearmor", "icearmor", "frostarmor" }
 local remindedAt = -10
 local function updateReminders(now)
@@ -1127,7 +616,7 @@ local function updateReminders(now)
     remindedAt = -10
     return
   end
-  if now - remindedAt < 1 then return end   -- hors combat, une lecture par seconde suffit
+  if now - remindedAt < 1 then return end   -- out of combat, one read per second is enough
   remindedAt = now
   for i = #list, 1, -1 do list[i] = nil end
   if Spells.Known("intellect") and readAura("intellect") == "down" and readAura("brilliance") ~= "up" then
@@ -1141,19 +630,19 @@ local function updateReminders(now)
     end
   end
   if armor and not worn then list[#list + 1] = armor end
-  -- eau, nourriture et gemme de mana : à invoquer quand les sacs n'en ont plus
+  -- water, food and mana gem: to conjure when the bags have run out
   if Spells.Known("water") or Spells.Known("food") then
     local water, food = Spells.Supplies()
     if Spells.Known("water") and not water then list[#list + 1] = "water" end
     if Spells.Known("food") and not food then list[#list + 1] = "food" end
   end
-  local gemSpell = Spells.GemSpell()   -- la meilleure gemme que le personnage sait invoquer
+  local gemSpell = Spells.GemSpell()   -- the best gem the character can conjure
   if gemSpell and not Spells.HasGemOf(gemSpell) then list[#list + 1] = "gemspell" end
 end
 
--- ------------------------------------------------------------------ vérifications en jeu
--- Ce que le jeu laisse lire en combat n'est écrit nulle part : Arcanum le constate et le note, pour
--- le rapport /arc diag.
+-- ------------------------------------------------------------------ in-game checks
+-- What the game lets addons read in combat is written nowhere: Arcanum observes it and records it, for
+-- the /arc diag report.
 local function updateChecks(now)
   local l = learn()
   if type(l.checks) ~= "table" then l.checks = {} end
@@ -1161,55 +650,39 @@ local function updateChecks(now)
   if State.restricted and not (c.mana and c.usable and c.cooldown) then
     if UnitPower then
       local ok, v = pcall(UnitPower, "player", 0)
-      if ok then c.mana = S.Is(v) and "secret" or "lisible" end
+      if ok then c.mana = S.Is(v) and "secret" or "readable" end
     end
     local id = Spells.Best("blast")
     if id and C_Spell and C_Spell.IsSpellUsable then
       local ok, usable, noMana = pcall(C_Spell.IsSpellUsable, id)
-      if ok then c.usable = (S.Is(usable) or S.Is(noMana)) and "secret" or "lisible" end
+      if ok then c.usable = (S.Is(usable) or S.Is(noMana)) and "secret" or "readable" end
     end
     if id and C_Spell and C_Spell.GetSpellCooldown then
       local info = S.Call(C_Spell.GetSpellCooldown, id)
       if type(info) == "table" and not S.IsTable(info) then
-        c.cooldown = S.Is(info.startTime) and "secret" or "lisible"
+        c.cooldown = S.Is(info.startTime) and "secret" or "readable"
       end
     end
   end
-  if pomCheck and now - pomCheck.at > 0.4 then
-    local st = readAura("pom")
-    local verdict
-    if st == "up" or State.cdm.pom == true then verdict = "conservée"
-    elseif st == "down" then verdict = "consommée" end
-    if verdict then
-      c.pomChannel = verdict
-      pomCheck = nil
-    elseif now - pomCheck.at > 3 then
-      pomCheck = nil
-    end
-  end
 end
 
--- L'affichage a-t-il quelque chose à montrer ? Calculé une fois par passe (State.live), lu à chaque image.
+-- Does the display have something to show? Computed once per pass (State.live), read every frame.
 local function refreshLive()
   State.live = State.demo or State.combat or State.hostile or State.stacks > 0 or State.barrage.active
-    or State.clear.active or State.power.active or State.pom.active
+    or State.clear.active or State.pom.active or State.eureka.active
 end
 
-function State.Live()
-  return State.live == true
-end
-
--- ------------------------------------------------------------------ boucle
+-- ------------------------------------------------------------------ loop
 function State.Update()
   local now = GetTime()
   State.dirty = false
-  tick = tick + 1
   if targetStale or now - targetAt >= 0.5 then
     targetStale, targetAt = false, now
     State.hostile = hostileTarget()
   end
   if State.demo then
     State.DemoTick(now)
+    updateReminders(now)   -- (clears them: the demo shows no reminder)
   else
     State.restricted = aurasRestricted()
     readCosts(now)
@@ -1219,16 +692,10 @@ function State.Update()
     updateClear(now)
     updateBarrage(now)
     updatePom(now)
-    updateHeat(now)
     updateBlast(now)
-    updateAoe(now)
-    buildLadder(now)
     updateReminders(now)
-    rememberCooldowns()
     updateChecks(now)
   end
-  readCast(now)
-  updateNext()
   refreshLive()
   ns:Fire("STATE")
 end
@@ -1238,13 +705,14 @@ function State.Reset()
   for _, p in ipairs({ State.barrage, State.clear, State.power, State.pom, State.eureka }) do
     p.active, p.since, p.expire, p.source = false, nil, nil, nil
   end
-  State.heat.stacks, State.heat.ready = nil, false
   for k in pairs(overlay) do overlay[k] = nil end
+  -- procs found again after a reset are not announced twice (costs are trusted 3 s after a loading screen)
+  State.quietUntil = GetTime() + 4
   State.dirty = true
 end
 
--- ------------------------------------------------------------------ démonstration
--- Un cycle scénarisé, pour voir le HUD sans combattre : /arc demo
+-- ------------------------------------------------------------------ demo
+-- A scripted cycle, to see the HUD without fighting: /arc demo
 local DEMO_LEN = 11
 local DEMO_STEPS = { 0.6, 1.6, 2.6, 3.6, 4.4, 5.2, 6.0, 7.0, 9.5 }
 function State.SetDemo(on)
@@ -1254,7 +722,6 @@ function State.SetDemo(on)
   State.Reset()
   State.demoStart = GetTime()
   State.demoStep = -1
-  State.demoCD = {}
   ns:Fire("DEMO", on)
   State.Update()
 end
@@ -1267,38 +734,33 @@ function State.DemoTick(now)
   end
   if step == State.demoStep then return end
   State.demoStep = step
-  if step == 0 then                 -- repos
-    State.demoCD = {}
-    setStacks(0, nil, "démo")
+  if step == 0 then                 -- idle
+    setStacks(0, nil, "demo")
     for _, key in ipairs({ "barrage", "clear", "power", "pom", "eureka" }) do setProc(State[key], key, false) end
-  elseif step >= 1 and step <= 4 then   -- quatre Déflagrations
+  elseif step >= 1 and step <= 4 then   -- four Arcane Blasts
     State.stacksDur = 9
-    setStacks(step, step == 1 and now + 9 or State.stacksExpire, "démo")
+    setStacks(step, step == 1 and now + 9 or State.stacksExpire, "demo")
     if step == 2 then
-      setProc(State.clear, "clear", true, "démo", now + 15, 15, now)       -- Idées claires
+      setProc(State.clear, "clear", true, "demo", now + 15, 15, now)       -- Clearcasting
     elseif step == 3 then
-      setProc(State.barrage, "barrage", true, "démo", now + 15, 15, now)   -- Barrage de projectiles, en plus
+      setProc(State.barrage, "barrage", true, "demo", now + 15, 15, now)   -- Missile Barrage, as well
     elseif step == 4 then
-      setProc(State.barrage, "barrage", false)                             -- dépensé par les Projectiles
-      setProc(State.clear, "clear", false)                                 -- dépensées par la Déflagration
+      setProc(State.barrage, "barrage", false)                             -- spent by Arcane Missiles
+      setProc(State.clear, "clear", false)                                 -- spent by Arcane Blast
     end
   elseif step == 5 then             -- Eureka
-    setProc(State.eureka, "eureka", true, "démo", now + 8, 8, now)
-    State.demoCD.eureka = { start = now, duration = 120 }
-  elseif step == 6 then             -- Présence spirituelle
-    setProc(State.pom, "pom", true, "démo", nil, nil, now)
-    State.demoCD.pom = { start = now, duration = 180 }
-  elseif step == 7 then             -- Courroux instantané
+    setProc(State.eureka, "eureka", true, "demo", now + 8, 8, now)
+  elseif step == 6 then             -- Presence of Mind
+    setProc(State.pom, "pom", true, "demo", nil, nil, now)
+  elseif step == 7 then             -- instant Arcane Wrath
     setProc(State.pom, "pom", false)
-    State.demoCD.wrath = { start = now, duration = 6 }
-  elseif step == 8 then             -- Courroux en recharge : on patiente
-  elseif step == 9 then             -- fin de la fenêtre des charges
-    setStacks(0, nil, "démo")
+  elseif step == 9 then             -- end of the charge window
+    setStacks(0, nil, "demo")
     setProc(State.eureka, "eureka", false)
   end
 end
 
--- ------------------------------------------------------------------ événements
+-- ------------------------------------------------------------------ events
 local function playerOnly(unit)
   return not S.Is(unit) and unit == "player"
 end
@@ -1310,8 +772,8 @@ ns:On("START", function()
   local acc = 0
   ticker:SetScript("OnUpdate", function(_, elapsed)
     acc = acc + elapsed
-    -- 10 passes par seconde quand il y a quelque chose à suivre, 1 quand le HUD est masqué ; un événement
-    -- du jeu avance la passe suivante, sans jamais dépasser 20 par seconde (les événements pleuvent en combat)
+    -- 10 passes per second when there is something to track, 1 when the HUD is hidden; a game
+    -- event brings the next pass forward, never exceeding 20 per second (events pour in during combat)
     local interval = State.live and 0.1 or 1
     if acc >= interval or (State.dirty and acc >= 0.05) then
       acc = 0
@@ -1323,7 +785,6 @@ ns:On("START", function()
   ns:RegisterEvent("PLAYER_REGEN_DISABLED", function() State.combat = true; staleAll() end)
   ns:RegisterEvent("PLAYER_REGEN_ENABLED", function()
     State.combat = false
-    if State.aoe then State.SetAoe(false) end   -- fin du combat : retour au cycle mono-cible
     staleAll()
   end)
   ns:RegisterEvent("PLAYER_ENTERING_WORLD", function()
@@ -1336,38 +797,26 @@ ns:On("START", function()
   ns:RegisterUnitEvent("UNIT_AURA", "player", function(_, unit)
     if playerOnly(unit) then
       auraEpoch = auraEpoch + 1
-      costsStale = true      -- un proc change le coût des sorts
+      costsStale = true      -- a proc changes spell costs
       State.dirty = true
     end
   end)
   ns:RegisterEvent("PLAYER_TARGET_CHANGED", function() targetStale = true; State.dirty = true end)
 
-  -- un sort lancé peut tout changer d'un coup : auras, coûts, recharges, incantation en cours
+  -- a spell cast can change everything at once: auras and costs
   local function cast(_, unit, _, spellID)
     if not playerOnly(unit) then return end
-    auraEpoch, cdEpoch = auraEpoch + 1, cdEpoch + 1
-    costsStale, castStale = true, true
+    auraEpoch = auraEpoch + 1
+    costsStale = true
     State.dirty = true
     if not State.demo then onCast(spellID) end
   end
   ns:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", cast)
   ns:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player", cast)
 
-  -- début, fin ou interruption d'une incantation : le conseil porte sur le sort d'après
-  local function casting(_, unit)
-    if playerOnly(unit) then castStale = true; State.dirty = true end
-  end
-  for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED",
-    "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_DELAYED" }) do
-    ns:RegisterUnitEvent(event, "player", casting)
-  end
-
-  local function cooldowns() cdEpoch = cdEpoch + 1; State.dirty = true; ns:Fire("COOLDOWNS") end
-  ns:RegisterEvent("SPELL_UPDATE_COOLDOWN", cooldowns)
-  ns:RegisterEvent("SPELL_UPDATE_CHARGES", cooldowns)
   ns:RegisterEvent("SPELL_UPDATE_USABLE", function() costsStale = true; State.dirty = true end)
-  ns:RegisterEvent("BAG_UPDATE_COOLDOWN", cooldowns)
-  ns:RegisterEvent("BAG_UPDATE_DELAYED", cooldowns)
+  -- the bags changed (something conjured or used up): read the reminders again right away
+  ns:RegisterEvent("BAG_UPDATE_DELAYED", function() remindedAt = -10; State.dirty = true end)
 
   ns:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW", function(_, spellID)
     spellID = S.Num(spellID)

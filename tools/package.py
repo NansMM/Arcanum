@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Fabrique les fichiers d'une release d'Arcanum dans dist/ :
+"""Builds the files of an Arcanum release in dist/:
 
-- Arcanum-<version>-forever.zip : le dossier Arcanum à la racine, prêt à copier dans Interface\\AddOns ;
-- release.json : la carte d'identité lue par WowUp pour choisir le bon fichier (variante « forever ») ;
-- notes.md : les notes de version, tirées de CHANGELOG.md.
+- Arcanum-<version>-forever.zip: the Arcanum folder at the root, ready to copy into Interface\\AddOns;
+- release.json: the manifest WowUp reads to pick the right file ("forever" flavor);
+- notes.md: the release notes, taken from CHANGELOG.md.
 
-Usage : python tools/package.py 1.7.2
+Usage: python tools/package.py 1.7.2
 """
 import io
 import json
@@ -21,7 +21,7 @@ DIST = os.path.join(ROOT, "dist")
 
 
 def repo_url():
-    """Adresse du dépôt GitHub, lue dans la configuration git (None s'il n'y en a pas)."""
+    """URL of the GitHub repository, read from the git configuration (None if there is none)."""
     try:
         url = subprocess.run(["git", "remote", "get-url", "origin"], cwd=ROOT, capture_output=True,
                              text=True).stdout.strip()
@@ -35,7 +35,7 @@ def repo_url():
 
 
 def fail(msg):
-    print("ERREUR : " + msg)
+    print("ERROR: " + msg)
     sys.exit(1)
 
 
@@ -59,13 +59,13 @@ def changelog_section(version):
 
 def main():
     if len(sys.argv) != 2 or not re.match(r"^\d+\.\d+\.\d+$", sys.argv[1]):
-        fail("usage : python tools/package.py X.Y.Z")
+        fail("usage: python tools/package.py X.Y.Z")
     version = sys.argv[1]
     if toc_field("Version") != version:
-        fail("Arcanum.toc annonce la version %s, pas %s" % (toc_field("Version"), version))
+        fail("Arcanum.toc declares version %s, not %s" % (toc_field("Version"), version))
     interfaces = [int(n) for n in re.findall(r"\d+", toc_field("Interface") or "")]
     if 16001 not in interfaces:
-        fail("Arcanum.toc doit déclarer l'interface 16001 (WoW Forever)")
+        fail("Arcanum.toc must declare interface 16001 (WoW Forever)")
 
     os.makedirs(DIST, exist_ok=True)
     zip_name = "Arcanum-%s-forever.zip" % version
@@ -88,17 +88,17 @@ def main():
     with io.open(os.path.join(DIST, "release.json"), "w", encoding="utf-8") as f:
         json.dump(release, f, ensure_ascii=False, indent=2)
 
-    notes = changelog_section(version) or "Corrections et améliorations."
+    notes = changelog_section(version) or "Fixes and improvements."
     notes += "\n\n---\n"
     repo = repo_url()
     if repo:
-        notes += ("**Installer avec WowUp** : client « World of Warcraft: Forever », Get Addons → "
+        notes += ("**Install with WowUp**: \"World of Warcraft: Forever\" client, Get Addons → "
                   "Install from URL → `%s`.\n" % repo)
-    notes += ("**À la main** : télécharge `%s` ci-dessous et décompresse-le dans "
+    notes += ("**Manually**: download `%s` below and unzip it into "
               "`World of Warcraft\\_forever_\\Interface\\AddOns`." % zip_name)
     with io.open(os.path.join(DIST, "notes.md"), "w", encoding="utf-8") as f:
         f.write(notes + "\n")
-    print("%s (%d fichiers), release.json, notes.md -> dist/" % (zip_name, count))
+    print("%s (%d files), release.json, notes.md -> dist/" % (zip_name, count))
 
 
 if __name__ == "__main__":

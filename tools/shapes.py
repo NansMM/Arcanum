@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Primitives de dessin pour les textures d'Arcanum (TGA 32 bits, origine en haut à gauche).
+"""Drawing primitives for Arcanum's textures (32-bit TGA, top-left origin).
 
-Aucune dépendance : formes vectorielles rastérisées avec suréchantillonnage 4x4.
+No dependencies: vector shapes rasterised with 4x4 supersampling.
 """
 import math
 import os
@@ -12,7 +12,7 @@ OUT = os.path.join(ROOT, "Arcanum", "Media")
 SS = 4
 
 
-# ---------------------------------------------------------------- écriture TGA
+# ---------------------------------------------------------------- TGA writing
 def write_tga(name, w, h, rgba):
     path = os.path.join(OUT, name + ".tga")
     os.makedirs(os.path.dirname(path), exist_ok=True)

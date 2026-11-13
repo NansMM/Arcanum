@@ -1,17 +1,17 @@
--- Arcanum — le HUD : quatre zones autour du personnage.
+-- Arcanum — the HUD: four zones around the character.
 --
--- Le HUD est centré sur le personnage, et chaque information a son côté :
---   * à gauche : les Idées claires ; à droite : le Barrage de projectiles. Une grande icône (celle du
---     proc), cerclée de sa couleur, avec le temps restant, bordée d'un arc de runes (le décor). Pas de proc : rien.
---   * en haut, seulement quand il y a des charges de Déflagration des Arcanes : un cristal par charge,
---     et dessous la barre des 18 secondes de leur fenêtre ;
---   * au-dessus des charges, tant qu'elles sont actives : la Présence spirituelle et Eurêka ;
---   * en bas, hors combat : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, eau,
---     nourriture et gemme de mana à invoquer).
--- Les zones s'écartent du personnage avec le réglage « écartement ».
+-- The HUD is centered on the character, and each piece of information has its own side:
+--   * left: Clearcasting; right: Missile Barrage. A large icon (the proc's own), ringed in its color,
+--     with the time left, flanked by a rune arc (the decoration). No proc: nothing.
+--   * top, only while there are Arcane Blast charges: one crystal per charge, and below them the
+--     bar of the 18 seconds of their window;
+--   * above the charges, while active: Presence of Mind and Eureka;
+--   * bottom, out of combat: what is missing before pulling (Arcane Intellect, armor, water, food
+--     and a mana gem to conjure).
+-- The zones move away from the character with the "spread" setting.
 --
--- Tout est animé à la main dans un seul OnUpdate (approche douce vers une cible) : pas de groupes
--- d'animation à synchroniser, et le rendu reste fluide quel que soit le nombre d'images par seconde.
+-- Everything is animated by hand in a single OnUpdate (easing towards a target): no animation
+-- groups to keep in sync, and rendering stays smooth whatever the frame rate.
 local ADDON, ns = ...
 local UI, State, Spells = ns.UI, ns.State, ns.Spells
 local C = UI.C
@@ -22,68 +22,70 @@ ns.Hud = Hud
 
 local sin, min, max, ceil = math.sin, math.min, math.max, math.ceil
 
-local PROC = 64                       -- icônes de proc, à gauche et à droite
-local CR_W, CR_H, CR_GAP = 26, 34, 32 -- cristaux de charge, et l'écart entre deux cristaux
-local BAR_W, BAR_H = 124, 4           -- barre de la fenêtre des charges
-local POM, POM_GAP = 46, 10           -- icônes des améliorations actives (Présence spirituelle, Eurêka), et leur écart
-local REMIND, REMIND_GAP = 30, 38     -- rappels avant le combat
+local MAX_CHARGES = 4                 -- maximum Arcane Blast charges
+local PROC = 64                       -- proc icons, left and right
+local CR_W, CR_H, CR_GAP = 26, 34, 32 -- charge crystals, and the gap between two crystals
+local BAR_W, BAR_H = 124, 4           -- charge window bar
+local POM, POM_GAP = 46, 10           -- active buff icons (Presence of Mind, Eureka), and their gap
+local REMIND, REMIND_GAP = 30, 38     -- pre-combat reminders
 
--- Procs affichés, avec leur propre icône ; side : -1 à gauche du personnage, 1 à droite ; spell : le sort
--- que le proc améliore, dont l'icône sert si le jeu ne donne pas celle du proc.
+-- Procs shown, each with its own icon; side: -1 left of the character, 1 right; spell: the spell the
+-- proc improves, whose icon is used if the game does not provide the proc's.
 local PROCS = {
   { key = "clear", color = C.clear, spell = "blast", side = -1 },
   { key = "barrage", color = C.barrage, spell = "missiles", side = 1 },
 }
--- Améliorations montrées au-dessus des charges tant qu'elles sont actives ; timed : avec le temps restant.
+-- Buffs shown above the charges while they are active; timed: with the time left.
 local BUFFS = {
   { key = "pom", color = C.pom },
-  { key = "eureka", color = C.power, timed = true },
+  { key = "eureka", color = C.gold, timed = true },
 }
--- Le décor des procs : l'illustration d'alerte de proc peinte par Blizzard pour les Projectiles des
--- Arcanes, lue dans les fichiers du jeu (file : son identifiant). C'est un grand arc gravé de runes, deux
--- fois plus haut que large (w, h, en nombre de fois la taille de l'icône), posé du côté extérieur de
--- l'icône (offset) et retourné du côté droit. Il garde son violet pour le Barrage ; pour les Idées
--- claires il est passé en gris puis teinté à la couleur du proc (grey). burst : son bond à l'arrivée.
+-- The proc decoration: the proc alert artwork painted by Blizzard for Arcane Missiles, read from the
+-- game files (file: its id). It is a large arc engraved with runes, twice as tall as it is wide (w, h,
+-- in multiples of the icon size), placed on the outer side of the icon (offset) and flipped on the
+-- right side. It keeps its purple for Missile Barrage; for Clearcasting it is turned grey then tinted
+-- with the proc's color (grey). burst: its pop when it arrives.
 local DECOR = { file = 449486, grey = { clear = true }, w = 2.0, h = 4.0, offset = 0.75, burst = 0.08 }
 
--- Les sons sont des sons du jeu (« kit » : leur identifiant ; « alt » : celui joué si ce client ne connaît
--- pas le premier). Le joueur peut en choisir d'autres (réglages, ou /arc son barrage 888), ou déposer ses
--- propres fichiers dans Sounds (« file »). « say » : le mot prononcé quand il a choisi la voix du jeu.
+-- The sounds are game sounds ("kit": their id; "alt": the one played if this client does not know the
+-- first). The player can pick others (settings, or /arc sound barrage 888), or drop their own files
+-- into Sounds ("file"). "say": the word spoken when they chose the game voice.
 local PROC_SOUND = {
-  barrage = { kit = 3333, alt = 3175, file = "barrage", say = "Barrage" },      -- Projectiles des Arcanes, sinon le ping de la mini-carte
-  clear = { kit = 4874, alt = 18019, file = "clear", say = "Idées claires" },   -- Idées claires (le sort), sinon la notification Battle.net
+  barrage = { kit = 3333, alt = 3175, file = "barrage", say = "Missile Barrage" },      -- Arcane Missiles, else the minimap ping
+  clear = { kit = 4874, alt = 18019, file = "clear", say = "Clearcasting" },   -- Clearcasting (the spell), else the Battle.net notification
 }
-local SOUND_DEF = PROC_SOUND
--- Sons du jeu proposés par leur nom dans les réglages. Un identifiant que ce client ne joue pas est sauté.
+-- Game sounds offered by name in the settings. An id this client does not play is skipped.
 local SOUNDS = {
-  { 18019, "Notification Battle.net" },
-  { 3175, "Ping de la mini-carte" },
-  { 3081, "Message privé" },
-  { 878, "Quête terminée" },
-  { 888, "Montée de niveau" },
-  { 8960, "Appel de préparation" },
-  { 8959, "Alerte de raid" },
-  { 8459, "File JcJ prête" },
-  { 12889, "Réveil" },
-  { 3071, "Témérité" },
-  { 4874, "Idées claires (le sort)" },
-  { 3333, "Projectiles des Arcanes" },
-  { 3227, "Contresort" },
-  { 1642, "Intelligence des Arcanes" },
+  { 18019, "Battle.net notification" },
+  { 3175, "Minimap ping" },
+  { 3081, "Whisper" },
+  { 878, "Quest complete" },
+  { 888, "Level up" },
+  { 8960, "Ready check" },
+  { 8959, "Raid warning" },
+  { 8459, "PvP queue ready" },
+  { 12889, "Alarm clock" },
+  { 3071, "Recklessness" },
+  { 4874, "Clearcasting (the spell)" },
+  { 3333, "Arcane Missiles" },
+  { 3227, "Counterspell" },
+  { 1642, "Arcane Intellect" },
 }
 
 local root, mover, fight, prep, bar, barText
 local procs, buffs, crystals, reminders, halos, ghosts = {}, {}, {}, {}, {}, {}
 local fightAlpha, prepAlpha = 0, 0
-local shownFight, shownPrep = -1, -1                   -- dernières opacités données aux deux groupes
+local fightHidden = true                               -- the combat group is fully transparent
+local resting = false                                  -- resting in a city (read on each state pass, not each frame)
+local shownFight, shownPrep = -1, -1                   -- last opacities given to the two groups
 local hotBlend = 0
-local crystalsFor, crystalsAim, crystalsStill = -1, -1, false   -- état des cristaux au dernier dessin
-local crystalsShown = -1                               -- nombre de cristaux affichés
+local crystalsFor, crystalsStill = -1, false           -- crystal state at the last draw
+local crystalsShown = -1                               -- number of crystals shown
 local barOn, barSeconds = false, nil
-local previewUntil = -1                                -- aperçu du décor demandé depuis les réglages, jusqu'à cette date
+local previewUntil = -1                                -- decoration preview from the settings, until this time
 
--- ------------------------------------------------------------------ géométrie
--- Tout se place depuis le centre du HUD, qui est le personnage.
+-- ------------------------------------------------------------------ geometry
+-- Everything is placed from the center of the HUD, which is the character.
 local function spread()
   return ns.db.spread or 150
 end
@@ -96,7 +98,7 @@ local function bottomY()
   return -spread()
 end
 
--- ------------------------------------------------------------------ halos (onde à l'arrivée d'un signal)
+-- ------------------------------------------------------------------ halos (wave when a signal arrives)
 local function spawnHalo(anchor, color, from, to, life)
   if not root or not anchor then return end
   local h
@@ -111,7 +113,7 @@ local function spawnHalo(anchor, color, from, to, life)
   end
   h.tex:ClearAllPoints()
   h.tex:SetPoint("CENTER", anchor, "CENTER", 0, 0)
-  h.t0, h.life, h.from, h.to, h.color = GetTime(), life or 0.5, from, to, color
+  h.t0, h.life, h.from, h.to, h.color = GetTime(), life, from, to, color
 end
 
 local function animateHalos(now)
@@ -122,17 +124,17 @@ local function animateHalos(now)
         h.t0 = nil
         h.tex:SetAlpha(0)
       else
-        local e = 1 - (1 - t) * (1 - t)   -- ralentit en fin de course
+        local e = 1 - (1 - t) * (1 - t)   -- slows down at the end of its course
         local size = h.from + (h.to - h.from) * e
         h.tex:SetSize(size, size)
         h.tex:SetVertexColor(h.color[1], h.color[2], h.color[3])
-        h.tex:SetAlpha((1 - t) * 0.75)   -- l'onde s'efface en s'élargissant
+        h.tex:SetAlpha((1 - t) * 0.75)   -- the wave fades as it widens
       end
     end
   end
 end
 
--- ------------------------------------------------------------------ cristaux de charge
+-- ------------------------------------------------------------------ charge crystals
 local function makeCrystal(parent)
   local f = CreateFrame("Frame", nil, parent)
   f:SetSize(CR_W, CR_H)
@@ -154,12 +156,12 @@ local function makeCrystal(parent)
   return f
 end
 
--- Nombre de cristaux à montrer : un par charge, aucun sans charge.
+-- Number of crystals to show: one per charge, none without a charge.
 local function crystalCount()
-  return min(4, max(0, State.stacks))
+  return min(MAX_CHARGES, max(0, State.stacks))
 end
 
--- Aligne `shown` cristaux, centrés au-dessus du personnage ; les autres sont cachés.
+-- Lines up `shown` crystals, centered above the character; the others are hidden.
 local function layoutCrystals(shown)
   crystalsShown = shown
   for i, f in ipairs(crystals) do
@@ -175,14 +177,13 @@ end
 
 local function animateCrystals(dt)
   local n = State.stacks
-  local target = 4   -- au maximum de charges, les cristaux s'éclaircissent
-  local full = n >= target
+  local full = n >= MAX_CHARGES   -- at maximum charges, the crystals brighten
   local shown = crystalCount()
   if shown ~= crystalsShown then layoutCrystals(shown) end
   local blend = UI.Approach(hotBlend, full and 1 or 0, dt, 6)
-  -- au repos (rien ne bouge, rien ne change) : on ne touche à aucune texture
-  if blend == hotBlend and n == crystalsFor and target == crystalsAim and crystalsStill then return end
-  hotBlend, crystalsFor, crystalsAim = blend, n, target
+  -- at rest (nothing moves, nothing changes): no texture is touched
+  if blend == hotBlend and n == crystalsFor and crystalsStill then return end
+  hotBlend, crystalsFor = blend, n
   local still = true
   local r, g, b = UI.Mix(C.arcane, C.hot, hotBlend)
   for i, f in ipairs(crystals) do
@@ -191,8 +192,8 @@ local function animateCrystals(dt)
     f.pop = UI.Approach(f.pop, 0, dt, 7)
     local settled = f.pop == 0 and f.level == (on and 1 or 0)
     if not settled then still = false end
-    -- un cristal éteint et au repos est déjà dessiné. Cible atteinte : les cristaux s'éclaircissent et
-    -- restent fixes ; ce qui bat en continu est réservé à ce qui demande une action (les procs).
+    -- a crystal that is off and at rest is already drawn. Target reached: the crystals brighten and
+    -- stay still; continuous pulsing is reserved for what calls for an action (the procs).
     if not (settled and not on and f.drawnOff) then
       local scale = 1 + f.pop * 0.6
       f.fill:SetSize(CR_W * scale, CR_H * scale)
@@ -209,8 +210,8 @@ local function animateCrystals(dt)
   crystalsStill = still
 end
 
--- ------------------------------------------------------------------ fenêtre des charges
--- Sous les cristaux, une barre qui se vide pendant les 18 secondes de la fenêtre, et les secondes restantes.
+-- ------------------------------------------------------------------ charge window
+-- Under the crystals, a bar that drains over the 18 seconds of the window, and the seconds left.
 local function makeBar(parent)
   local b = CreateFrame("StatusBar", nil, parent)
   b:SetSize(BAR_W, BAR_H)
@@ -248,18 +249,21 @@ end
 local function animateBar(now)
   if not barOn then return end
   local r, g, b = UI.Mix(C.arcane, C.hot, hotBlend)
-  local frac = 1   -- fin inconnue : barre pleine
+  local frac = 1   -- end unknown: full bar
   local expire, total = State.stacksExpire, State.stacksDur or State.Duration("blast")
   if expire and total and total > 0 then
     frac = min(1, max(0, (expire - now) / total))
-    if frac < 0.25 then r, g, b = UI.MixTo(C.bad, r, g, b, frac / 0.25) end   -- la fenêtre va se fermer
+    if frac < 0.25 then r, g, b = UI.MixTo(C.bad, r, g, b, frac / 0.25) end   -- the window is about to close
   end
-  bar:SetValue(frac)
+  if frac ~= bar.frac then
+    bar.frac = frac
+    bar:SetValue(frac)
+  end
   if bar.fill then bar.fill:SetVertexColor(r, g, b, 1) end
 end
 
--- ------------------------------------------------------------------ icônes rondes
--- Une icône ronde : fond, icône masquée en cercle, voile de recharge, bord coloré, halo.
+-- ------------------------------------------------------------------ round icons
+-- A round icon: background, icon masked to a circle, cooldown swipe, colored edge, halo.
 local function makeRound(parent, size, numbers, reverse)
   local b = CreateFrame("Frame", nil, parent)
   b:SetSize(size, size)
@@ -308,10 +312,10 @@ local function setCooldown(b, start, duration)
   pcall(b.cd.SetCooldown, b.cd, start, duration, 1)
 end
 
--- ------------------------------------------------------------------ procs, à gauche et à droite
+-- ------------------------------------------------------------------ procs, left and right
 local function refreshProcs()
   local show = ns.db.showProcs
-  local preview = GetTime() < previewUntil   -- aperçu du décor : les deux icônes s'affichent sans proc
+  local preview = GetTime() < previewUntil   -- decoration preview: both icons show without a proc
   for _, f in ipairs(procs) do
     local p = State[f.def.key]
     local active = show and (p.active or preview) and true or false
@@ -320,7 +324,7 @@ local function refreshProcs()
       if active then
         f.icon:SetTexture(Spells.Icon(f.def.key) or Spells.Icon(f.def.spell) or 134400)
         f.pop = 1
-        if ns.db.flash and f.decorDef then f.echoT0 = GetTime() end   -- l'onde lumineuse : un écho du décor
+        if ns.db.flash and f.decorDef then f.echoT0 = GetTime() end   -- the light wave: an echo of the decoration
         f:Show()
       end
     end
@@ -328,7 +332,7 @@ local function refreshProcs()
       if p.active and p.expire and p.duration and p.duration > 0 then
         setCooldown(f, p.expire - p.duration, p.duration)
       else
-        setCooldown(f, 0, 0)   -- durée inconnue : icône pleine
+        setCooldown(f, 0, 0)   -- duration unknown: full icon
       end
     end
   end
@@ -339,28 +343,36 @@ local function animateProcs(dt, now)
     if f.on or f.vis > 0 then
       f.vis = UI.Approach(f.vis, f.on and 1 or 0, dt, f.on and 14 or 10)
       f.pop = UI.Approach(f.pop, 0, dt, 7)
-      f:SetAlpha(f.vis)
+      if f.vis ~= f.shown then
+        f.shown = f.vis
+        f:SetAlpha(f.vis)
+      end
       if f.vis <= 0 and not f.on then
         f:Hide()
       else
         local c = f.def.color
         local pulse = 0.5 + 0.5 * sin(now * 4.4)
         f.glow:SetVertexColor(c[1], c[2], c[3], min(1, 0.30 + 0.16 * pulse + f.pop * 0.5))
-        local s = PROC * (1.9 + f.pop * 0.7)   -- (pas de SetScale : il déplacerait l'icône)
-        f.glow:SetSize(s, s)
+        if f.pop ~= f.popDrawn then   -- sizes only move while the icon pops
+          f.popDrawn = f.pop
+          local s = PROC * (1.9 + f.pop * 0.7)   -- (no SetScale: it would move the icon)
+          f.glow:SetSize(s, s)
+          if f.decorDef then
+            local k = 1 + f.pop * f.decorDef.burst   -- the decoration pops with the proc
+            f.decor:SetSize(f.decorW * k, f.decorH * k)
+          end
+        end
         local d = f.decorDef
         if d then
-          local k = 1 + f.pop * d.burst   -- le décor bondit avec le proc
-          f.decor:SetSize(f.decorW * k, f.decorH * k)
-          f.decor:SetAlpha(0.60 + 0.40 * pulse)   -- et bat doucement
-          -- l'onde lumineuse : un écho du décor, qui s'élargit et s'efface
+          f.decor:SetAlpha(0.60 + 0.40 * pulse)   -- and pulses gently
+          -- the light wave: an echo of the decoration, which expands and fades
           if f.echoT0 then
             local t = (now - f.echoT0) / 0.6
             if t >= 1 then
               f.echoT0 = nil
               f.echo:SetAlpha(0)
             else
-              local e = 1 + 0.45 * (1 - (1 - t) * (1 - t))   -- ralentit en fin de course
+              local e = 1 + 0.45 * (1 - (1 - t) * (1 - t))   -- slows down at the end of its course
               f.echo:SetSize(f.decorW * e, f.decorH * e)
               f.echo:SetAlpha((1 - t) * 0.8)
             end
@@ -371,9 +383,9 @@ local function animateProcs(dt, now)
   end
 end
 
--- ------------------------------------------------------------------ améliorations actives, au-dessus des charges
--- La Présence spirituelle (le prochain sort sera instantané) et Eurêka (avec son temps restant) : leur
--- icône reste affichée tant que l'amélioration est active. Une seule : centrée ; les deux : côte à côte.
+-- ------------------------------------------------------------------ active buffs, above the charges
+-- Presence of Mind (the next spell will be instant) and Eureka (with its time left): their icon
+-- stays shown while the buff is active. Only one: centered; both: side by side.
 local function layoutBuffs()
   local n, i = 0, 0
   for _, f in ipairs(buffs) do
@@ -405,7 +417,7 @@ local function refreshBuffs()
       if p.expire and p.duration and p.duration > 0 then
         setCooldown(f, p.expire - p.duration, p.duration)
       else
-        setCooldown(f, 0, 0)   -- pas de durée (Présence spirituelle) : icône pleine
+        setCooldown(f, 0, 0)   -- no duration (Presence of Mind): full icon
       end
     end
   end
@@ -413,7 +425,7 @@ local function refreshBuffs()
   layoutBuffs()
   if ns.db.flash then
     for _, f in ipairs(buffs) do
-      if f.on and f.pop == 1 then spawnHalo(f, f.def.color, POM, POM + 80, 0.45) end   -- celle qui vient d'arriver
+      if f.on and f.pop == 1 then spawnHalo(f, f.def.color, POM, POM + 80, 0.45) end   -- the one that just arrived
     end
   end
 end
@@ -431,14 +443,17 @@ local function animateBuffs(dt, now)
       if f.vis > 0 then
         local c = f.def.color
         f.glow:SetVertexColor(c[1], c[2], c[3], min(1, 0.32 + 0.18 * pulse + f.pop * 0.4))
-        local s = POM * (2.0 + f.pop * 0.8)
-        f.glow:SetSize(s, s)
+        if f.pop ~= f.popDrawn then
+          f.popDrawn = f.pop
+          local s = POM * (2.0 + f.pop * 0.8)
+          f.glow:SetSize(s, s)
+        end
       end
     end
   end
 end
 
--- ------------------------------------------------------------------ rappels avant le combat, en bas
+-- ------------------------------------------------------------------ pre-combat reminders, at the bottom
 local remindersShown = 0
 local function refreshReminders(force)
   local list = State.reminders
@@ -447,7 +462,7 @@ local function refreshReminders(force)
   for i, f in ipairs(reminders) do
     if f.key ~= list[i] then changed = true end
   end
-  if not changed then return end   -- la liste n'a pas bougé : rien à replacer
+  if not changed then return end   -- the list has not changed: nothing to reposition
   remindersShown = n
   for i, f in ipairs(reminders) do
     local key = list[i]
@@ -466,12 +481,12 @@ end
 local function animateReminders(now)
   local pulse = 0.5 + 0.5 * sin(now * 3.0)
   for _, f in ipairs(reminders) do
-    if f.key then f.glow:SetVertexColor(C.manaLow[1], C.manaLow[2], C.manaLow[3], 0.30 + 0.30 * pulse) end
+    if f.key then f.glow:SetVertexColor(C.amber[1], C.amber[2], C.amber[3], 0.30 + 0.30 * pulse) end
   end
 end
 
--- ------------------------------------------------------------------ décor des procs
--- Donne à chaque proc le décor choisi dans les réglages (ou aucun).
+-- ------------------------------------------------------------------ proc decoration
+-- Gives each proc its decoration, or none when the setting is off.
 local function applyDecor()
   local d = ns.db.decor and DECOR or nil
   for _, f in ipairs(procs) do
@@ -479,9 +494,9 @@ local function applyDecor()
     f.echoT0 = nil
     if d then
       local grey = d.grey[f.def.key] == true
-      local c = grey and f.def.color or C.text   -- (l'arc d'origine garde ses couleurs ; grisé, il prend celle du proc)
+      local c = grey and f.def.color or C.text   -- (the original arc keeps its colors; grey, it takes the proc's)
       f.decorW, f.decorH = PROC * d.w, PROC * d.h
-      -- le décor, et son écho : la même image, pour l'onde lumineuse à l'arrivée du proc
+      -- the decoration, and its echo: the same image, for the light wave when the proc arrives
       for _, tex in ipairs({ f.decor, f.echo }) do
         tex:SetTexture(d.file)
         tex:SetDesaturated(grey)
@@ -490,7 +505,7 @@ local function applyDecor()
         tex:SetPoint("CENTER", f, "CENTER", f.def.side * PROC * d.offset, 0)
         tex:SetVertexColor(c[1], c[2], c[3], 1)
         if f.def.side > 0 then
-          tex:SetTexCoord(1, 0, 0, 1)   -- miroir : l'arc se place du côté extérieur
+          tex:SetTexCoord(1, 0, 0, 1)   -- mirror: the arc sits on the outer side
         else
           tex:SetTexCoord(0, 1, 0, 1)
         end
@@ -501,16 +516,16 @@ local function applyDecor()
       f.decor:Hide()
       f.echo:Hide()
     end
-    f.echo:SetAlpha(0)   -- (l'écho ne se montre qu'à l'arrivée d'un proc)
+    f.echo:SetAlpha(0)   -- (the echo only shows when a proc arrives)
   end
 end
 
--- Aperçu du décor, depuis les réglages : les deux icônes de proc s'affichent quelques secondes.
+-- Decoration preview, from the settings: both proc icons show for a few seconds.
 function Hud.PreviewDecor()
   if not root then return end
   previewUntil = GetTime() + 4
   Hud.Refresh()
-  -- (les icônes sont peut-être déjà affichées par l'aperçu précédent : l'onde repart quand même)
+  -- (the icons may already be shown by the previous preview: the wave restarts anyway)
   for _, f in ipairs(procs) do
     if f.on then
       f.pop = 1
@@ -519,7 +534,7 @@ function Hud.PreviewDecor()
   end
 end
 
--- ------------------------------------------------------------------ mise en page
+-- ------------------------------------------------------------------ layout
 function Hud.Layout()
   if not root then return end
   local sp = spread()
@@ -534,7 +549,7 @@ function Hud.Layout()
   bar:SetPoint("CENTER", root, "CENTER", 0, topY() - CR_H / 2 - 10)
   layoutBuffs()
   refreshReminders(true)
-  -- repères montrés quand le HUD est déverrouillé : où tombera chaque zone
+  -- markers shown when the HUD is unlocked: where each zone will land
   local spots = { { -sp, 0, PROC }, { sp, 0, PROC }, { 0, topY(), CR_H }, { 0, bottomY(), REMIND } }
   for i, g in ipairs(ghosts) do
     g:ClearAllPoints()
@@ -543,12 +558,14 @@ function Hud.Layout()
   end
 end
 
--- ------------------------------------------------------------------ position, verrouillage
+-- ------------------------------------------------------------------ position, locking
+-- The position is saved in screen units. A frame's anchor offsets are in its own scaled units, hence the
+-- division: without it, changing the size would move a HUD that has been dragged.
 local function applyPosition()
-  local p = ns.db.point
+  local p, scale = ns.db.point, ns.db.scale or 1
+  root:SetScale(scale)
   root:ClearAllPoints()
-  root:SetPoint(p[1], UIParent, p[2], p[3], p[4])
-  root:SetScale(ns.db.scale or 1)
+  root:SetPoint(p[1], UIParent, p[2], p[3] / scale, p[4] / scale)
 end
 
 local function applyLock()
@@ -564,8 +581,8 @@ local function makeMover()
   UI.Panel(mover, C.arcane, 0.10, "BACKGROUND", 0)
   local text = UI.Text(mover, 11, C.arcaneHi, UI.FONT.title)
   text:SetPoint("CENTER", 0, 0)
-  text:SetText(L["Glisse-moi · /arc verrou"])
-  local tints = { C.clear, C.barrage, C.arcane, C.manaLow }
+  text:SetText(L["Drag me · /arc lock"])
+  local tints = { C.clear, C.barrage, C.arcane, C.amber }
   for i = 1, 4 do
     ghosts[i] = UI.Tex(mover, "ARTWORK", "circle", tints[i], 0.35)
   end
@@ -579,20 +596,21 @@ local function makeMover()
   root:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
     local point, _, rel, x, y = self:GetPoint(1)
-    if point and x and y then ns.db.point = { point, rel or point, x, y } end
+    local scale = ns.db.scale or 1
+    if point and x and y then ns.db.point = { point, rel or point, x * scale, y * scale } end
   end)
 end
 
--- ------------------------------------------------------------------ sons
--- Joue un son du jeu par son identifiant ; false si le jeu ne joue rien (identifiant inconnu de ce client).
+-- ------------------------------------------------------------------ sounds
+-- Plays a game sound by its id; false if the game plays nothing (id unknown to this client).
 local function playKit(id)
   local ok, played = pcall(PlaySound, id, "Master")
   return ok and played and true or false
 end
 Hud.PlayKit = playKit
 
--- La voix du jeu (synthèse vocale) : elle dit le mot au lieu de jouer un son. Retourne l'identifiant de la
--- voix réglée dans le jeu, sinon de la première installée ; nil si ce client n'en a aucune.
+-- The game voice (text-to-speech): it says the word instead of playing a sound. Returns the id of the
+-- voice set in the game, else of the first one installed; nil if this client has none.
 local function voiceID()
   if not (C_VoiceChat and C_VoiceChat.SpeakText and C_VoiceChat.GetTtsVoices) then return nil end
   local ok, voices = pcall(C_VoiceChat.GetTtsVoices)
@@ -622,50 +640,50 @@ function Hud.CanSpeak()
   return voiceID() ~= nil
 end
 
--- Dans l'ordre : le choix du joueur (un son du jeu, ou la voix) ; sinon son fichier déposé dans Sounds ;
--- sinon le son d'origine, puis son remplaçant. Retourne l'identifiant joué, "voix", "fichier", ou nil.
+-- In order: the player's choice (a game sound, or the voice); else their file dropped into Sounds;
+-- else the original sound, then its fallback. Returns the id played, "voice", "file", or nil.
 local function playSound(def, always)
   if not (always or ns.db.sound) then return nil end
   local chosen = type(ns.db.soundKit) == "table" and ns.db.soundKit[def.file]
-  if chosen == "voix" then
-    if speak(L[def.say]) then return "voix" end
+  if chosen == "voice" then
+    if speak(L[def.say]) then return "voice" end
   elseif chosen and playKit(chosen) then
     return chosen
   end
   local ok, played = pcall(PlaySoundFile, "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\" .. def.file .. ".ogg", "Master")
-  if ok and played then return "fichier" end
+  if ok and played then return "file" end
   if playKit(def.kit) then return def.kit end
   if def.alt and playKit(def.alt) then return def.alt end
   return nil
 end
 
--- Le nom du son choisi pour un proc ("clear" ou "barrage"), pour les réglages.
+-- The name of the sound chosen for a proc ("clear" or "barrage"), for the settings.
 function Hud.SoundName(key)
   local v = type(ns.db.soundKit) == "table" and ns.db.soundKit[key]
-  if not v then return L["Par défaut"] end
-  if v == "voix" then return L["Voix du jeu"] end
+  if not v then return L["Default"] end
+  if v == "voice" then return L["Game voice"] end
   for _, s in ipairs(SOUNDS) do
     if s[1] == v then return L[s[2]] end
   end
-  return string.format(L["Son n° %d"], v)
+  return string.format(L["Sound #%d"], v)
 end
 
 function Hud.PreviewSound(key)
-  local def = SOUND_DEF[key]
+  local def = PROC_SOUND[key]
   return def and playSound(def, true) or nil
 end
 
--- Passe au choix suivant (dir = 1) ou précédent (-1) et le fait entendre. Les choix : le son par défaut,
--- les sons nommés, la voix du jeu si ce client en a une, et le numéro tapé avec /arc son s'il n'est pas
--- dans la liste. Un son que le jeu ne joue pas est sauté.
+-- Moves to the next choice (dir = 1) or the previous one (-1) and plays it. The choices: the default
+-- sound, the named sounds, the game voice if this client has one, and the number typed with
+-- /arc sound if it is not in the list. A sound the game does not play is skipped.
 function Hud.CycleSound(key, dir)
-  local def = SOUND_DEF[key]
+  local def = PROC_SOUND[key]
   if not def then return end
   if type(ns.db.soundKit) ~= "table" then ns.db.soundKit = {} end
   local cur = ns.db.soundKit[key] or false
   local list, at, listed = { false }, 1, cur == false
   for _, s in ipairs(SOUNDS) do list[#list + 1] = s[1] end
-  if Hud.CanSpeak() then list[#list + 1] = "voix" end
+  if Hud.CanSpeak() then list[#list + 1] = "voice" end
   for i, v in ipairs(list) do
     if v == cur then at, listed = i, true end
   end
@@ -679,7 +697,7 @@ function Hud.CycleSound(key, dir)
       ns.db.soundKit[key] = nil
       playSound(def, true)
       return
-    elseif v == "voix" then
+    elseif v == "voice" then
       if speak(L[def.say]) then
         ns.db.soundKit[key] = v
         return
@@ -691,40 +709,64 @@ function Hud.CycleSound(key, dir)
   end
 end
 
--- /arc sons : fait entendre les deux sons, l'un après l'autre, et dit lequel est joué.
+-- /arc sounds: plays both sounds, one after the other, and says which one is played.
 function Hud.TestSounds()
   local list = {
-    { PROC_SOUND.clear, L["Idées claires"] },
-    { PROC_SOUND.barrage, L["Barrage de projectiles"] },
+    { PROC_SOUND.clear, L["Clearcasting"] },
+    { PROC_SOUND.barrage, L["Missile Barrage"] },
   }
   for i, item in ipairs(list) do
     local function play()
       local what = playSound(item[1], true)
-      local text = what == "fichier" and L["ton fichier"] or what == "voix" and L["voix du jeu"]
-        or what and string.format(L["son du jeu %d"], what) or L["aucun son"]
-      ns.Print(item[2] .. " : " .. text .. ".")
+      local text = what == "file" and L["your file"] or what == "voice" and L["game voice"]
+        or what and string.format(L["game sound %d"], what) or L["no sound"]
+      ns.Print(string.format(L["%s: %s."], item[2], text))
     end
     if i > 1 and C_Timer and C_Timer.After then C_Timer.After((i - 1) * 1.5, play) else play() end
   end
 end
 
--- ------------------------------------------------------------------ boucle d'affichage
--- Les procs, les charges et les améliorations actives : visibles dès qu'il y a quelque chose à suivre.
+-- ------------------------------------------------------------------ display loop
+-- The procs, the charges and the active buffs: visible as soon as there is something to track, while the
+-- HUD is unlocked, and during a decoration preview.
 local function wantedFight()
   local db = ns.db
   if not db.enabled then return 0 end
-  if not db.locked or State.live or GetTime() < previewUntil then return 1 end
-  return db.showIdle and db.idleAlpha or 0
+  return (not db.locked or State.live or GetTime() < previewUntil) and 1 or 0
 end
 
--- Les rappels : visibles hors combat dès qu'il manque quelque chose, sauf au repos en ville (ils y
--- reviennent quand une cible hostile est choisie).
+-- The group has just become invisible, or something ended while it was: icons that are no longer wanted go
+-- straight to their hidden state. Their fade only runs while the group is visible, so without this they
+-- would flash at the start of the next fight.
+local function settleHidden()
+  for _, f in ipairs(procs) do
+    if not f.on and f.vis > 0 then
+      f.vis, f.shown, f.echoT0 = 0, 0, nil
+      f:SetAlpha(0)
+      f.echo:SetAlpha(0)
+      f:Hide()
+    end
+  end
+  for _, f in ipairs(buffs) do
+    if not f.on and f.vis > 0 then
+      f.vis, f.shown = 0, 0
+      f:SetAlpha(0)
+    end
+  end
+  for _, h in ipairs(halos) do
+    if h.t0 then
+      h.t0 = nil
+      h.tex:SetAlpha(0)
+    end
+  end
+end
+
+-- The reminders: visible out of combat as soon as something is missing, except when resting in town
+-- (there they come back when a hostile target is selected).
 local function wantedPrep()
   local db = ns.db
   if not db.enabled or db.showReminders == false or #State.reminders == 0 then return 0 end
-  if State.live then return 1 end
-  local resting = IsResting and IsResting()
-  return resting and 0 or 1
+  return (State.live or not resting) and 1 or 0
 end
 
 local function onUpdate(_, dt)
@@ -740,7 +782,14 @@ local function onUpdate(_, dt)
     prep:SetAlpha(prepAlpha)
   end
   if prepAlpha > 0 then animateReminders(now) end
-  if fightAlpha <= 0 then return end   -- rien à suivre : rien d'autre à faire pour cette image
+  if fightAlpha <= 0 then   -- nothing to track: nothing else to do this frame
+    if not fightHidden then
+      fightHidden = true
+      settleHidden()
+    end
+    return
+  end
+  fightHidden = false
   if ns.db.showCharges then
     animateCrystals(dt)
     animateBar(now)
@@ -757,6 +806,8 @@ function Hud.Refresh()
   refreshProcs()
   refreshBuffs()
   refreshReminders()
+  if #State.reminders > 0 then resting = IsResting and IsResting() and true or false end
+  if fightHidden then settleHidden() end
 end
 
 function Hud.Build()
@@ -765,8 +816,8 @@ function Hud.Build()
   root:SetSize(400, 400)
   root:SetFrameStrata("MEDIUM")
 
-  -- Deux groupes, chacun avec son opacité : le combat (procs, charges, améliorations actives) et la
-  -- préparation (rappels).
+  -- Two groups, each with its own opacity: combat (procs, charges, active buffs) and preparation
+  -- (reminders).
   fight = CreateFrame("Frame", nil, root)
   fight:SetAllPoints()
   fight:SetAlpha(0)
@@ -776,7 +827,7 @@ function Hud.Build()
   local level = root:GetFrameLevel()
 
   for i, def in ipairs(PROCS) do
-    local f = makeRound(fight, PROC, true, true)   -- voile inversé : il grandit à mesure que le proc s'épuise
+    local f = makeRound(fight, PROC, true, true)   -- reversed swipe: it grows as the proc runs out
     f.def, f.vis, f.on = def, 0, false
     f.decor = UI.Tex(f, "BACKGROUND", nil, def.color, 1, nil, -1)
     f.decor:SetPoint("CENTER")
@@ -790,7 +841,7 @@ function Hud.Build()
     procs[i] = f
   end
 
-  for i = 1, 4 do
+  for i = 1, MAX_CHARGES do
     crystals[i] = makeCrystal(fight)
     crystals[i]:SetFrameLevel(level + 5)
   end
@@ -799,7 +850,7 @@ function Hud.Build()
   barText:SetPoint("LEFT", bar, "RIGHT", 8, 0)
 
   for i, def in ipairs(BUFFS) do
-    local f = makeRound(fight, POM, def.timed, def.timed)   -- (Eurêka : temps restant en chiffres, voile qui grandit)
+    local f = makeRound(fight, POM, def.timed, def.timed)   -- (Eureka: time left in digits, growing swipe)
     f.def, f.vis, f.on = def, 0, false
     f:SetFrameLevel(level + 5)
     f.icon:SetTexture(134400)
@@ -815,7 +866,7 @@ function Hud.Build()
 
   for i = 1, 5 do
     local f = makeRound(prep, REMIND, false)
-    f.ring:SetVertexColor(C.manaLow[1], C.manaLow[2], C.manaLow[3], 1)
+    f.ring:SetVertexColor(C.amber[1], C.amber[2], C.amber[3], 1)
     f:Hide()
     reminders[i] = f
   end
@@ -836,7 +887,7 @@ function Hud.Build()
   return root
 end
 
--- ------------------------------------------------------------------ branchements
+-- ------------------------------------------------------------------ wiring
 ns:On("START", function() Hud.Build() end)
 
 ns:On("STATE", Hud.Refresh)
@@ -849,22 +900,23 @@ ns:On("SETTINGS", function(key)
   applyLock()
   Hud.Layout()
   Hud.Refresh()
-  if key == "decor" and ns.db.decor then Hud.PreviewDecor() end   -- le décor vient d'être activé : on le montre
+  if key == "decor" and ns.db.decor then Hud.PreviewDecor() end   -- the decoration was just turned on: show it
 end)
 
 ns:On("STACKS", function(n, old)
   if not root then return end
   for i = (old or 0) + 1, n do
-    if crystals[i] then crystals[i].pop = 1 end   -- le cristal bondit : pas besoin d'onde en plus
+    if crystals[i] then crystals[i].pop = 1 end   -- the crystal pops: no need for a wave on top
   end
 end)
 
--- Un proc arrive : son son retentit. Sans décor, une onde ronde part de son icône ; avec le décor, l'onde
--- est un écho de l'arc (voir refreshProcs).
+-- A proc arrives: its sound plays. Without the decoration, a round wave leaves its icon; with the
+-- decoration, the wave is an echo of the arc (see refreshProcs).
 ns:On("PROC", function(key)
   if not root then return end
   local def = PROC_SOUND[key]
-  if not def then return end
+  if not def or not ns.db.enabled then return end
+  if GetTime() < (State.quietUntil or 0) then return end   -- found again after a loading screen: already announced
   if ns.db.flash and ns.db.showProcs then
     for _, f in ipairs(procs) do
       if f.def.key == key and not f.decorDef then spawnHalo(f, f.def.color, PROC, PROC + 80, 0.45) end

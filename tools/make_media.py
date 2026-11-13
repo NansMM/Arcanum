@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Génère les textures d'Arcanum (TGA 32 bits) dans Arcanum/Media.
+"""Generates Arcanum's textures (32-bit TGA) in Arcanum/Media.
 
-Aucune dépendance : formes rastérisées avec les primitives de shapes.py (suréchantillonnage 4x4).
-Les textures sont blanches (teintées en jeu), sauf le logo.
-Usage : python tools/make_media.py
+No dependencies: shapes are rasterised with the primitives in shapes.py (4x4 supersampling).
+The textures are white (tinted in game), except the logo.
+Usage: python tools/make_media.py
 """
 import math
 import os
@@ -28,15 +28,15 @@ def grey(cov, level=1.0):
 
 
 def make_diamond():
-    """Cristal de charge : quatre facettes d'éclat différent, pour le relief une fois teinté."""
+    """Charge crystal: four facets of different brightness, for depth once tinted."""
     S = 64
     top, right, bottom, left = DIAMOND
     mid = (0.5, 0.5)
     facets = [
-        (mm.poly([top, mid, left]), 1.00),     # haut gauche : la plus claire
+        (mm.poly([top, mid, left]), 1.00),     # top left: the brightest
         (mm.poly([top, right, mid]), 0.80),
         (mm.poly([left, mid, bottom]), 0.66),
-        (mm.poly([mid, right, bottom]), 0.50),  # bas droite : la plus sombre
+        (mm.poly([mid, right, bottom]), 0.50),  # bottom right: the darkest
     ]
     covs = [(mm.coverage(S, S, f), lvl) for f, lvl in facets]
     px = []
@@ -54,7 +54,7 @@ def make_diamond():
 
 
 def make_glow():
-    S = 64   # dégradé doux : agrandi par le jeu sans perte visible
+    S = 64   # soft gradient: the game scales it up with no visible loss
     px = []
     for y in range(S):
         for x in range(S):
@@ -65,7 +65,7 @@ def make_glow():
 
 
 def make_halo():
-    """Anneau diffus : onde qui s'élargit quand un proc arrive."""
+    """Diffuse ring: a wave that expands when a proc fires."""
     S = 64
     px = []
     for y in range(S):
@@ -88,14 +88,14 @@ def make_circle():
 
 
 def make_fade():
-    """Dégradé horizontal transparent → plein (filets des réglages)."""
+    """Horizontal gradient, transparent → opaque (divider lines in the settings)."""
     w, h = 128, 8
     px = [(255, 255, 255, int(round(255 * ((x + 0.5) / w) ** 1.4))) for y in range(h) for x in range(w)]
     mm.write_tga("grad-h", w, h, px)
 
 
 def make_spark():
-    """Étincelle à quatre branches."""
+    """Four-pointed spark."""
     S = 64
     px = []
     for y in range(S):
@@ -131,8 +131,8 @@ def make_logo():
     mm.write_tga("logo", S, S, px)
 
 
-def polar_tex(name, size, inside, ss=3, soft=False):
-    """Texture blanche définie en coordonnées polaires : inside(r, angle, u, v) -> bool, r dans [0, 0.5]."""
+def polar_tex(name, size, inside, ss=3):
+    """White texture defined in polar coordinates: inside(r, angle, u, v) -> bool, r in [0, 0.5]."""
     px = []
     inv = 1.0 / (ss * ss)
     for y in range(size):
@@ -145,45 +145,16 @@ def polar_tex(name, size, inside, ss=3, soft=False):
                     if inside(math.hypot(u, v), math.atan2(v, u), u, v):
                         c += 1
             px.append(c * inv)
-    if soft:
-        # bords doux (moyenne 3x3) : un trait net scintille quand la texture tourne, un trait doux non
-        blurred = []
-        for y in range(size):
-            for x in range(size):
-                total, n = 0.0, 0
-                for dy in (-1, 0, 1):
-                    for dx in (-1, 0, 1):
-                        xx, yy = x + dx, y + dy
-                        if 0 <= xx < size and 0 <= yy < size:
-                            total += px[yy * size + xx]
-                            n += 1
-                blurred.append(total / n)
-        peak = max(blurred) or 1.0
-        px = [min(1.0, v / peak) for v in blurred]
     mm.write_tga(name, size, size, [(255, 255, 255, int(round(v * 255))) for v in px])
 
 
-def near(angle, count, half_width):
-    """L'angle est-il à moins de half_width (radians) d'une des `count` graduations régulières ?"""
-    step = 2 * math.pi / count
-    d = (angle + math.pi) % step
-    return min(d, step - d) <= half_width
-
-
-def make_runic():
-    """Cercle : anneau, bande du minuteur (découpée en arc par un widget Cooldown), bord des icônes rondes.
-
-    Ces textures tournent en jeu. Elles sont donc dessinées à leur taille d'affichage (128 px pour
-    133 px à l'écran) et aucun trait ne fait moins de 2 px : une texture plus grande, réduite par le jeu,
-    ou un trait plus fin, scintille quand il tourne."""
-    S = 128
-    polar_tex("ring", S, lambda r, a, u, v: 0.456 <= r <= 0.474, ss=4)
-    polar_tex("arc", S, lambda r, a, u, v: 0.451 <= r <= 0.479, ss=4)
+def make_edge():
+    """Border of the round icons."""
     polar_tex("circle-edge", 64, lambda r, a, u, v: 0.43 <= r <= 0.5, ss=4)
 
 
 def main():
-    make_runic()
+    make_edge()
     make_diamond()
     make_glow()
     make_halo()
@@ -192,7 +163,7 @@ def main():
     make_fade()
     make_spark()
     make_logo()
-    print("Textures écrites dans " + mm.OUT)
+    print("Textures written to " + mm.OUT)
 
 
 if __name__ == "__main__":

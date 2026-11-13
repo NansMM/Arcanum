@@ -1,8 +1,8 @@
--- Arcanum — diagnostic : un rapport à copier-coller qui dit ce que le jeu laisse lire.
+-- Arcanum — diagnostics: a report to copy and paste, saying what the game lets addons read.
 --
--- Les règles de WoW Forever changent d'une version à l'autre. Ce rapport montre, pour chaque sort et
--- chaque proc, d'où Arcanum tire son information (aura, coût, surbrillance, sorts lancés), et garde le
--- fil des derniers changements d'état : de quoi corriger vite si un proc n'apparaît pas.
+-- WoW Forever's rules change from one version to the next. The report shows, for each spell and each proc,
+-- where Arcanum gets its information (aura, cost, button glow, spells cast), and keeps a log of the latest
+-- state changes: enough to fix things quickly when a proc does not show up.
 local ADDON, ns = ...
 local UI, State, Spells, S = ns.UI, ns.State, ns.Spells, ns.Secret
 local C = UI.C
@@ -28,10 +28,10 @@ ns:On("PROC", function(key)
   local p = State[key]
   record("proc " .. key .. " (" .. tostring(type(p) == "table" and p.source or "?") .. ")")
 end)
-ns:On("PROC_END", function(key) if not State.demo then record("fin " .. key) end end)
--- Une canalisation envoie un événement par salve (six pour des Projectiles) : on les regroupe sur une
--- ligne, sinon elles chassent du journal ce qu'on cherche à y lire.
-local lastCast = {}   -- key, at, line (rang dans le journal), prefix, count
+ns:On("PROC_END", function(key) if not State.demo then record("end " .. key) end end)
+-- A channel fires one event per volley (six for Arcane Missiles): they are merged on one line, otherwise
+-- they push what we are looking for out of the log.
+local lastCast = {}   -- key, at, line (the log entry), prefix, count
 ns:On("CAST", function(key)
   local now = GetTime()
   local line = log[#log]
@@ -41,15 +41,9 @@ ns:On("CAST", function(key)
     log[#log] = lastCast.line
     return
   end
-  record("sort " .. key)
+  record("cast " .. key)
   lastCast.key, lastCast.at, lastCast.count = key, now, 1
   lastCast.prefix, lastCast.line = log[#log], log[#log]
-end)
-ns:On("AOE", function(on) record(on and "mode multi-cibles" or "fin du mode multi-cibles") end)
-ns:On("NEXT", function(key, reason)
-  if not State.demo then
-    record("conseil " .. tostring(key) .. " (" .. tostring(reason) .. ")" .. (State.interrupt and " : interrompre" or ""))
-  end
 end)
 
 local function show(v)
@@ -59,6 +53,19 @@ local function show(v)
   return tostring(v)
 end
 
+local function yesno(v)
+  return v and L["yes"] or L["no"]
+end
+
+-- Values the engine stores or returns as plain English words, shown in the client's language.
+local WORD = {
+  secret = L["secret"], readable = L["readable"], none = L["none"], unreadable = L["unreadable"],
+  up = L["up"], down = L["down"], unknown = L["unknown"],
+}
+local function word(v)
+  return WORD[v] or tostring(v)
+end
+
 local function secrecy(id)
   local CS = C_Secrets
   if not CS then return "-" end
@@ -66,14 +73,14 @@ local function secrecy(id)
   if CS.GetSpellAuraSecrecy then
     local ok, lvl = pcall(CS.GetSpellAuraSecrecy, id)
     if ok and not S.Is(lvl) and lvl ~= nil then
-      base = ({ [0] = "jamais", [1] = "toujours", [2] = "selon contexte" })[lvl] or tostring(lvl)
+      base = ({ [0] = L["never"], [1] = L["always"], [2] = L["depends on context"] })[lvl] or tostring(lvl)
     end
   end
   if CS.ShouldSpellAuraBeSecret then
     local ok, r = pcall(CS.ShouldSpellAuraBeSecret, id)
-    if ok and not S.Is(r) and r ~= nil then now = r and "secrète" or "lisible" end
+    if ok and not S.Is(r) and r ~= nil then now = r and L["secret"] or L["readable"] end
   end
-  return base .. ", maintenant " .. now
+  return string.format(L["%s, right now %s"], base, now)
 end
 
 function Diag.Report()
@@ -82,103 +89,86 @@ function Diag.Report()
   local version, build, _, interface = "?", "?", nil, "?"
   if GetBuildInfo then version, build, _, interface = GetBuildInfo() end
   local _, class = UnitClass("player")
-  add("Arcanum %s — diagnostic", ns.VERSION)
-  add("Client %s (%s), interface %s, langue %s", show(version), show(build), show(interface), show(GetLocale and GetLocale()))
-  add("Classe %s, niveau %s", show(class), show(UnitLevel and UnitLevel("player")))
-  add("Valeurs secrètes : %s · auras cachées maintenant : %s · combat : %s",
-    S.RESTRICTED and "oui" or "non", State.restricted and "oui" or "non", State.combat and "oui" or "non")
-  add("Erreurs Lua : %d%s", ns.errorCount or 0, ns.lastError and (" · dernière : " .. ns.lastError) or "")
+  add(L["Arcanum %s — diagnostics"], ns.VERSION)
+  add(L["Client %s (%s), interface %s, language %s"], show(version), show(build), show(interface), show(GetLocale and GetLocale()))
+  add(L["Class %s, level %s"], show(class), show(UnitLevel and UnitLevel("player")))
+  add(L["Secret values: %s · auras hidden right now: %s · in combat: %s"],
+    yesno(S.RESTRICTED), yesno(State.restricted), yesno(State.combat))
+  add(L["Lua errors: %d%s"], ns.errorCount or 0, ns.lastError and (" · " .. ns.lastError) or "")
 
   add("")
-  add("SORTS (clé, nom, rang le plus haut, connu, coût annoncé)")
+  add(L["SPELLS (key, name, highest rank, known, announced cost)"])
   local keys = {}
   for key in pairs(Spells.DEF) do keys[#keys + 1] = key end
   table.sort(keys)
   for _, key in ipairs(keys) do
     local def = Spells.DEF[key]
     local cost, why = Spells.Cost(key)
-    add("  %-11s %-28s id %-8s %-5s coût %s", key, show(def.name), show(def.best or def.id),
-      def.known and "connu" or "-", cost and show(cost) or ("(" .. tostring(why) .. ")"))
+    add("  %-11s %-28s id %-8s %-6s %s", key, show(def.name), show(def.best or def.id),
+      def.known and L["known"] or "-", cost and show(cost) or ("(" .. word(why) .. ")"))
   end
 
   add("")
-  add("NOMS POUR LES MACROS (les espaces spéciales sont écrites en clair)")
+  add(L["NAMES FOR MACROS (special spaces are spelled out)"])
   for _, key in ipairs({ "eureka", "pom", "wrath" }) do
     local name = Spells.Name(key)
     if name then
-      local visible = name:gsub("\194\160", "[espace insécable]"):gsub("\226\128\175", "[espace fine insécable]")
+      local visible = name:gsub("\194\160", "[nbsp]"):gsub("\226\128\175", "[narrow nbsp]")
       add("  %-8s %s", key, visible)
     end
   end
 
   add("")
-  add("AURAS (lecture maintenant · secret par identifiant)")
-  for _, key in ipairs({ "blast", "barrage", "clear", "power", "pom", "heat" }) do
+  add(L["AURAS (read right now · secrecy per spell id)"])
+  for _, key in ipairs({ "blast", "barrage", "clear", "power", "pom", "eureka" }) do
     local def = Spells.DEF[key]
     local st, a = State.ReadAura(key)
     local detail = ""
     if st == "up" then
-      detail = string.format(" charges %s, durée %s, fin %s", show(a.applications), show(a.duration), show(a.expirationTime))
+      detail = string.format(L[" stacks %s, duration %s, expires %s"], show(a.applications), show(a.duration), show(a.expirationTime))
     end
-    add("  %-8s %s%s", key, st, detail)
-    for _, id in ipairs(def.auras or { def.id }) do add("             %d : %s", id, secrecy(id)) end
+    add("  %-8s %s%s", key, word(st), detail)
+    for _, id in ipairs(def.auras or { def.id }) do add("             %d: %s", id, secrecy(id)) end
   end
 
   add("")
-  add("ÉTAT")
-  add("  prochain sort : %s (%s), identifiant %s%s", tostring(State.next), tostring(State.nextReason),
-    tostring(State.nextId), State.cast and (" · en cours : " .. tostring(State.cast.key)) or "")
-  add("  mode multi-cibles : %s%s", State.aoe and "oui" or "non", State.aoeForced and " (forcé)" or "")
-  add("  rappels : %s", #State.reminders > 0 and table.concat(State.reminders, ", ") or "aucun")
-  add("  charges %d (source %s), fin dans %s s", State.stacks, tostring(State.stacksSource),
+  add(L["STATE"])
+  add(L["  reminders: %s"], #State.reminders > 0 and table.concat(State.reminders, ", ") or L["none"])
+  add(L["  charges %d (source %s), window ends in %s s"], State.stacks, tostring(State.stacksSource),
     State.stacksExpire and show(State.stacksExpire - GetTime()) or "?")
   for _, key in ipairs({ "barrage", "clear", "power", "pom", "eureka" }) do
     local p = State[key]
-    add("  %-8s %s%s", key, p.active and "actif" or "-", p.active and (" (source " .. tostring(p.source) .. ")") or "")
+    add("  %-8s %s", key, p.active and string.format(L["active (source %s)"], tostring(p.source)) or "-")
   end
-  add("  heat     charges %s, prêt %s", show(State.heat.stacks), tostring(State.heat.ready))
   local glow = {}
   for id in pairs(State.overlay) do glow[#glow + 1] = tostring(id) end
-  add("  surbrillances actives : %s", #glow > 0 and table.concat(glow, ", ") or "aucune")
+  add(L["  glowing buttons: %s"], #glow > 0 and table.concat(glow, ", ") or L["no button"])
   local icons = {}
-  for _, key in ipairs({ "barrage", "clear", "heat", "power", "pom" }) do
-    if State.cdm[key] ~= nil then icons[#icons + 1] = key .. "=" .. (State.cdm[key] and "actif" or "éteint") end
+  for _, key in ipairs({ "barrage", "clear", "power", "pom" }) do
+    if State.cdm[key] ~= nil then icons[#icons + 1] = key .. "=" .. (State.cdm[key] and L["active"] or L["off"]) end
   end
-  add("  Gestionnaire de temps de recharge (buffs suivis) : %s",
-    #icons > 0 and table.concat(icons, ", ") or "aucune icône de proc trouvée")
+  add(L["  Cooldown Manager (tracked buffs): %s"], #icons > 0 and table.concat(icons, ", ") or L["no proc icon found"])
 
   add("")
-  add("APPRIS EN JEU")
+  add(L["LEARNED IN GAME"])
   local l = ns.db and ns.db.learn or {}
   local parts = {}
   for k, v in pairs(l.dur or {}) do parts[#parts + 1] = k .. "=" .. show(v) end
-  add("  durées : %s", #parts > 0 and table.concat(parts, ", ") or "aucune (valeurs par défaut)")
-  parts = {}
-  for k, v in pairs(l.cd or {}) do parts[#parts + 1] = k .. "=" .. show(v) end
-  add("  recharges : %s", #parts > 0 and table.concat(parts, ", ") or "aucune")
-  add("  Déflagration : fenêtre des charges %s s, coût de base %s, surcoût par charge %s, le coût suit les charges : %s",
-    show(l.abWindow or State.Duration("blast")), show(l.abBase), show(l.abStep), tostring(l.costTracks))
-  add("  Barrage vu par surbrillance : %s · par coût : %s · Idées claires vues par coût : %s",
-    tostring(l.mbGlow or false), tostring(l.mbCost or false), tostring(l.ccCost or false))
+  add(L["  durations: %s"], #parts > 0 and table.concat(parts, ", ") or L["none (default values)"])
+  add(L["  Arcane Blast: charge window %s s, base cost %s, extra cost per charge %s, cost follows charges: %s"],
+    show(l.abWindow or State.Duration("blast")), show(l.abBase), show(l.abStep), yesno(l.costTracks))
+  add(L["  Barrage seen by glow: %s · by cost: %s · Clearcasting seen by cost: %s"],
+    yesno(l.mbGlow), yesno(l.mbCost), yesno(l.ccCost))
 
   add("")
-  add("VÉRIFICATIONS EN JEU (ce que le jeu laisse lire en combat)")
+  add(L["CHECKED IN GAME (what the game lets addons read in combat)"])
   local checks = l.checks or {}
-  add("  mana du joueur : %s", checks.mana or "pas encore observé")
-  local probe = State.manaProbe
-  add("  seuil des 15 %% de mana quand il est secret : %s", probe
-    and string.format("estimé avec le sort %d (coût %s) : s'il devient impayable, le mana est bas", probe.id, show(probe.cost))
-    or "pas encore de sort témoin (relevé hors combat)")
-  add("  « sort utilisable / mana insuffisant » : %s", checks.usable or "pas encore observé")
-  add("  temps de recharge des sorts : %s", checks.cooldown or "pas encore observé")
-  add("  Présence spirituelle après des Projectiles : %s", checks.pomChannel or "pas encore observé")
-  add("  macro de burst, Colère après Présence spirituelle : %s", checks.burstGap
-    and string.format("%.1f s (%s)", checks.burstGap, checks.burstGap < 0.6 and "même appui" or "il a fallu réappuyer")
-    or "pas encore observé")
-  add("  Éclair de givre : rang 1 = %s, dernier rang = %s", tostring(Spells.Lowest("frostbolt")), tostring(Spells.Best("frostbolt")))
+  add(L["  player mana: %s"], checks.mana and word(checks.mana) or L["not seen yet"])
+  add(L["  \"spell usable / not enough mana\": %s"], checks.usable and word(checks.usable) or L["not seen yet"])
+  add(L["  spell cooldowns: %s"], checks.cooldown and word(checks.cooldown) or L["not seen yet"])
 
   add("")
-  add("JOURNAL (%d derniers changements)", #log)
+  add(L["LOG (last %d changes)"], #log)
   for _, line in ipairs(log) do add("  " .. line) end
   return table.concat(out, "\n")
 end
@@ -202,10 +192,10 @@ local function build()
 
   local title = UI.Text(f, 16, C.text, UI.FONT.title)
   title:SetPoint("TOPLEFT", 20, -18)
-  title:SetText(L["Diagnostic d'Arcanum"])
+  title:SetText(L["Arcanum diagnostics"])
   local hint = UI.Text(f, 11, C.muted)
   hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-  hint:SetText(L["Le texte est sélectionné : Ctrl+C pour le copier. Échap pour fermer."])
+  hint:SetText(L["The text is selected: Ctrl+C to copy it. Escape to close."])
 
   local box = CreateFrame("Frame", nil, f)
   box:SetPoint("TOPLEFT", 16, -62)
@@ -220,7 +210,7 @@ local function build()
   eb:SetPoint("TOPLEFT", 12, -10)
   eb:SetPoint("BOTTOMRIGHT", -12, 10)
   eb:SetMaxLetters(0)
-  -- lecture seule : toute frappe remet le rapport
+  -- read-only: any keystroke puts the report back
   eb:SetScript("OnTextChanged", function(self, user)
     if user and f.text then self:SetText(f.text); self:HighlightText() end
   end)
@@ -235,7 +225,7 @@ end
 function Diag.Show()
   local f = frame or build()
   local ok, text = pcall(Diag.Report)
-  f.text = ok and text or ("Rapport impossible : " .. tostring(text))
+  f.text = ok and text or (L["Could not build the report: "] .. tostring(text))
   f.eb:SetText(f.text)
   f:Show()
   f:Raise()

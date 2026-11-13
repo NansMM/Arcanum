@@ -1,55 +1,76 @@
 # Arcanum
 
-Le HUD du mage Arcanes pour World of Warcraft: Forever : tes procs, tes charges et tes rappels, autour de ton personnage.
+An Arcane Mage HUD for World of Warcraft: Forever. It shows your procs, your Arcane Blast charges, your active buffs and your pre-combat reminders around your character, so you can read them without looking away from the fight.
 
-Arcanum place chaque information d'un côté de ton personnage, pour que tu la lises sans quitter le combat des yeux :
+![Preview of the Arcanum HUD](docs/preview.png)
 
-![Aperçu du HUD d'Arcanum](docs/apercu.png)
+*Preview built from the addon's own textures (the character is a silhouette, icons are flat colors, the zones sit closer together than in game, and the proc decoration, which is a game image, is not drawn). Left to right: in combat with two procs and charges, out of combat with three reminders, and Presence of Mind and Eureka active. In game: `/arc demo`.*
 
-*Aperçu composé avec les textures de l'addon (le personnage est une silhouette, les icônes sont remplacées par des aplats, les zones sont plus rapprochées qu'en jeu, et le décor des procs, une image du jeu, n'y figure pas). De gauche à droite : en combat avec deux procs et des charges, hors combat avec trois rappels, et la Présence spirituelle et Eurêka actifs. En jeu : `/arc demo`.*
+## What it shows
 
-- **À gauche : les Idées claires. À droite : le Barrage de projectiles.** Une grande icône, celle du proc, cerclée de sa couleur (bleu clair ou rose), avec le temps restant en chiffres et un voile qui grandit à mesure que le proc s'épuise. Pas de proc : le côté reste vide. Un **décor** borde l'icône tant que le proc est là : le grand arc gravé de runes peint par Blizzard pour l'alerte des Projectiles des Arcanes, du côté extérieur, violet pour le Barrage et teinté en bleu pour les Idées claires. À l'arrivée du proc, l'onde lumineuse est un écho de cet arc, qui s'élargit et s'efface. Le réglage « Décor des procs » (ou `/arc decor`) le masque ; l'onde redevient alors un simple anneau.
-- **En haut : les charges de Déflagration des Arcanes**, seulement quand tu en as. Un cristal par charge ; à quatre charges, le maximum, ils s'éclaircissent. Dessous, une barre se vide pendant les 18 secondes de la fenêtre des charges, avec les secondes restantes ; elle rougit quand la fenêtre va se fermer.
-- **Au-dessus des charges : la Présence spirituelle et Eurêka**, tant qu'ils sont actifs. L'icône de la Présence spirituelle, cerclée de vert, te rappelle que ton prochain sort sera instantané ; celle d'Eurêka, cerclée d'or, montre son temps restant. Une seule active : elle est centrée ; les deux : côte à côte.
-- **En bas, hors combat : les rappels.** L'icône de ce qu'il manque avant d'engager : Intelligence des Arcanes, armure, et ce qui reste à invoquer : eau, nourriture, gemme de mana. Seuls les objets invoqués comptent (une eau achetée ne dispense pas d'en invoquer), et pour la gemme c'est la meilleure que tu sais invoquer qui est attendue. Rien ne manque : rien ne s'affiche. Au repos en ville, les rappels attendent que tu sortes ou que tu cibles un ennemi.
+- **Left: Clearcasting. Right: Missile Barrage.** A large icon of the proc, ringed in its color (light blue or pink), with the time left as a number and a swipe that grows as the proc runs out. No proc, nothing on that side. While the proc is up, a **decoration** frames the icon on its outer side: the big rune-engraved arc Blizzard painted for the Arcane Missiles proc alert, purple for Missile Barrage and tinted blue for Clearcasting. When the proc fires, the light wave is an echo of that arc that expands and fades. The "Proc decoration" setting (or `/arc decor`) hides it; the wave is then a plain ring.
+- **Above: Arcane Blast charges**, only while you have some. One crystal per charge; at four charges, the maximum, they brighten. Below them, a bar empties over the 18 seconds of the charge window, with the seconds left; it turns red when the window is about to close.
+- **Above the charges: Presence of Mind and Eureka**, while they are active. The Presence of Mind icon, ringed in green, reminds you that your next spell is instant; the Eureka icon, ringed in gold, shows its time left. One active: centered; both: side by side.
+- **Below, out of combat: reminders.** The icon of whatever is missing before you pull: Arcane Intellect, your armor, and what is left to conjure: water, food, mana gem. Only conjured items count (bought water does not excuse you from conjuring), and for the gem it is the best one you can conjure that is expected. Nothing missing, nothing shown. While resting in a city, reminders wait until you leave or target an enemy.
 
-Le HUD est centré sur l'écran, là où se tient ton personnage. Le réglage « Écartement » (ou `/arc ecart 150`) éloigne ou rapproche les quatre zones ; `/arc verrou` permet de déplacer l'ensemble.
+The HUD is centered on the screen, where your character stands. The "Spread" setting (or `/arc spread 150`) moves the four zones closer or further; `/arc lock` lets you drag the whole thing.
 
-**Les sons.** Un son à l'arrivée d'un proc. Ce sont des sons du jeu : celui des Projectiles des Arcanes pour un Barrage de projectiles, celui du sort Idées claires pour des Idées claires. `/arc sons` les fait entendre.
+Arcanum only displays. It does not advise a rotation and never casts anything.
 
-Tu peux en choisir d'autres dans les réglages (`/arc`) : chaque signal a sa ligne, avec le nom du son entre deux flèches. Une flèche passe au son suivant et le fait entendre ; un clic sur le nom le rejoue. La liste propose une quinzaine de sons du jeu (alerte de raid, appel de préparation, montée de niveau, quête terminée, réveil…) et la **voix du jeu**, qui dit « Barrage » ou « Idées claires » avec la synthèse vocale de WoW, si une voix est installée sur ton ordinateur. Un son que ton client ne joue pas est sauté.
+## Sounds
 
-Pour un son hors liste : `/arc son 888` fait entendre le son de cet identifiant, `/arc son barrage 888` le choisit pour le Barrage (`clear` pour les Idées claires), `/arc son barrage` revient au son par défaut. Les identifiants se trouvent dans la base de sons de Wowhead (le nombre dans l'adresse de la page). Tu peux aussi déposer tes propres fichiers `.ogg` dans `Arcanum\Sounds` (voir le LISEZMOI du dossier).
+A sound plays when a proc fires. They are game sounds: the Arcane Missiles sound for Missile Barrage, the Clearcasting spell sound for Clearcasting. `/arc sounds` plays them.
 
-**Ce qu'Arcanum ne fait plus.** Jusqu'à la version 0.12, Arcanum était un cercle qui conseillait le prochain sort. Depuis la 1.0 il ne conseille plus le cycle, et depuis la 1.1 il ne signale plus le moment du burst : il montre tes procs, tes charges, ta Présence spirituelle, ton Eurêka et tes rappels, et te laisse jouer.
+You can pick others in the settings (`/arc`): each proc has its row, with the sound's name between two arrows. An arrow moves to the next sound and plays it; clicking the name replays it. The list offers about fifteen game sounds (raid warning, ready check, level up, quest complete, alarm clock…) and the **game voice**, which says "Missile Barrage" or "Clearcasting" with WoW's text-to-speech, if a voice is installed on your computer. A sound your client cannot play is skipped.
+
+For a sound that is not in the list: `/arc sound 888` plays the sound with that id, `/arc sound barrage 888` picks it for Missile Barrage (`clear` for Clearcasting), `/arc sound barrage` goes back to the default. Ids can be found in Wowhead's sound database (the number in the page address). You can also drop your own `.ogg` files in `Arcanum\Sounds` (see the README in that folder).
+
+## Languages
+
+Arcanum follows your game client's language. English is built in and French is fully translated; other clients show English. Spell names always come from the game itself, so procs and reminders work in every language.
+
+Commands are English, and the French ones still work (`/arc verrou`, `/arc taille`, `/arc ecart`, `/arc sons`, `/arc son`).
 
 ## Installation
 
-1. Télécharge `Arcanum-x.y.z-forever.zip` sur la dernière release du dépôt, ou récupère le dossier `Arcanum`.
-2. Place le dossier `Arcanum` dans `World of Warcraft\_forever_\Interface\AddOns`.
-3. Lance le jeu. Si Arcanum est marqué « périmé » dans la liste des addons, coche **Charger les addons périmés**.
+1. Download `Arcanum-x.y.z-forever.zip` from the latest release, or grab the `Arcanum` folder.
+2. Put the `Arcanum` folder in `World of Warcraft\_forever_\Interface\AddOns`.
+3. Start the game. If Arcanum is flagged "out of date" in the addon list, tick **Load out of date AddOns**.
 
-Il ne se réveille que sur un mage. Après une mise à jour qui ajoute des textures, quitte et relance le jeu : un `/reload` ne les voit pas.
+With WowUp, add the repository URL (`https://github.com/NansMM/Arcanum`) under *Get Addons > Install from URL*.
 
-## Commandes
+Arcanum only wakes up on a mage. After an update that adds files, quit and restart the game: a `/reload` does not see them.
 
-| Commande | Effet |
+## Commands
+
+| Command | Effect |
 |---|---|
-| `/arc` | Réglages (ce qui s'affiche, taille, écartement, sons) |
-| `/arc demo` | Le HUD joue un cycle complet, sans combattre (marche sur toute classe) |
-| `/arc verrou` | Déplacer le HUD, puis le fixer |
-| `/arc taille 120` | Taille du HUD, en pourcentage (de 60 à 180) |
-| `/arc ecart 150` | Distance entre le personnage et les zones (de 80 à 320) |
-| `/arc decor` | Affiche ou masque le décor des procs (les arcs de runes) |
-| `/arc sons` | Fait entendre les deux sons (Idées claires, Barrage) |
-| `/arc son 3071` | Fait entendre un son du jeu ; `/arc son barrage 3071` le choisit pour un proc (`clear` ou `barrage`), `/arc son barrage voix` le fait dire par la voix du jeu |
-| `/arc macro` | Crée la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts que le jeu donne aux sorts |
-| `/arc diag` | Rapport à copier : sorts reconnus, signaux lus, derniers changements d'état |
+| `/arc` | Settings (what is shown, size, spread, sounds) |
+| `/arc demo` | The HUD plays a full cycle without fighting (works on any class) |
+| `/arc lock` | Move the HUD, then lock it in place |
+| `/arc scale 120` | HUD size, in percent (60 to 180) |
+| `/arc spread 150` | Distance between your character and the zones (80 to 320) |
+| `/arc decor` | Show or hide the proc decoration (the rune arcs) |
+| `/arc sounds` | Play both sounds (Clearcasting, Missile Barrage) |
+| `/arc sound 3071` | Play a game sound; `/arc sound barrage 3071` picks it for a proc (`clear` or `barrage`), `/arc sound barrage voice` has the game voice say it |
+| `/arc macro` | Create the burst macro (Eureka + Presence of Mind + Arcane Wrath) with the exact names the game gives the spells |
+| `/arc diag` | A report to copy: spells found, signals read, latest state changes |
+| `/arc reset` | Restore the default settings |
 
-**Comment il voit les procs en combat.** Forever cache les auras aux addons pendant le combat. Arcanum s'appuie sur ce qui reste lisible : tes propres sorts lancés (chaque Déflagration ajoute une charge, pendant les 18 s que dure la fenêtre ouverte par la première), le coût en mana annoncé par le jeu (Projectiles gratuits = Barrage, tout gratuit = Idées claires, et le coût de la Déflagration, +100 % par charge, donne le nombre exact de charges), la surbrillance des boutons, et les icônes du Gestionnaire de temps de recharge de Blizzard si tu y suis ces buffs (Options > Améliorations de jeu). Hors combat il relit les vraies auras et apprend les durées et les coûts réels. Il affiche, il ne lance rien.
+## How it sees procs in combat
 
-## Développement
+Forever hides auras from addons during combat. Arcanum relies on what stays readable:
 
-- `python tools/test/run_tests.py` lance un mage simulé avec les règles de Forever : auras cachées et valeurs secrètes en combat, coût des sorts et sorts lancés lisibles. Il compte aussi les appels au jeu et les opérations d'affichage, pour que l'addon reste sobre. Il faut le module `lupa` (`pip install lupa`).
-- `python tools/make_media.py` régénère les textures, `python tools/preview.py` l'aperçu `docs/apercu.png`.
-- Publier une version : ajoute une section `## X.Y.Z` dans `CHANGELOG.md`, puis `python tools/release.py X.Y.Z`. Le script met le numéro à jour, lance les tests, crée l'étiquette `vX.Y.Z` et pousse ; GitHub Actions publie la release (`Arcanum-X.Y.Z-forever.zip` et `release.json` pour WowUp).
+- **your own casts**: each Arcane Blast adds a charge, during the 18 seconds of the window opened by the first one;
+- **the mana cost the game announces**: free Arcane Missiles means Missile Barrage, everything free means Clearcasting, and the cost of Arcane Blast (+100 % per charge) gives the exact number of charges;
+- **the glow on action buttons**;
+- **Blizzard's Cooldown Manager icons**, if you track those buffs there (Options > Gameplay Enhancements).
+
+Out of combat it reads the real auras again and learns the actual durations and costs.
+
+## Development
+
+- `python tools/test/run_tests.py` runs a simulated mage under Forever's rules: hidden auras and secret values in combat, readable spell costs and casts. It needs the `lupa` module (`pip install lupa`).
+- `python tools/make_media.py` regenerates the textures, `python tools/preview.py` the preview `docs/preview.png`.
+- Releasing: add a `## X.Y.Z` section to `CHANGELOG.md`, then `python tools/release.py X.Y.Z`. The script bumps the version, runs the tests, creates the `vX.Y.Z` tag and pushes; GitHub Actions publishes the release (`Arcanum-X.Y.Z-forever.zip` and `release.json` for WowUp).
+- Adding a language: copy `Arcanum/Locales/frFR.lua`, change the locale code, translate the right-hand sides, and add the file to `Arcanum/Arcanum.toc`.

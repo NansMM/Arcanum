@@ -1,8 +1,8 @@
--- Arcanum — catalogue des sorts du mage Arcanes.
+-- Arcanum — Arcane mage spell catalog.
 --
--- Sur WoW Forever, chaque rang d'un sort a son propre identifiant et les noms dépendent de la langue du
--- jeu. On part donc d'un identifiant de référence, on lit son nom dans le client, puis on retrouve tous
--- les rangs dans le grimoire par ce nom.
+-- On WoW Forever, each rank of a spell has its own ID and names depend on the game's
+-- language. So we start from a reference ID, read its name from the client, then find all
+-- the ranks in the spellbook by that name.
 local ADDON, ns = ...
 local S = ns.Secret
 
@@ -11,53 +11,45 @@ ns.Spells = Spells
 
 local pairs, ipairs, type, tonumber = pairs, ipairs, type, tonumber
 
--- id : identifiant de référence ; auras : identifiants possibles de l'amélioration correspondante.
+-- id: reference ID; auras: possible IDs of the corresponding buff.
 Spells.DEF = {
-  -- cycle
-  blast     = { id = 400574, auras = { 400574, 400573 } },   -- Déflagration des Arcanes (charges)
-  missiles  = { id = 5143 },                                 -- Projectiles des Arcanes
-  wrath     = { id = 1326079 },                              -- Courroux des Arcanes
-  barrage   = { id = 400588, auras = { 400589, 400588 } },   -- Barrage de projectiles (talent, proc 400589)
-  clear     = { id = 12536, auras = { 12536 }, talent = 11213, extra = { 11213 } },  -- Idées claires (Concentration des Arcanes)
-  power     = { id = 12042, auras = { 12042 } },             -- Pouvoir des Arcanes
-  pom       = { id = 12043, auras = { 12043 } },             -- Présence spirituelle
-  evoc      = { id = 12051 },                                -- Évocation
-  -- variante Arcanes / Feu
-  pyro      = { id = 11366 },                                -- Explosion pyrotechnique
-  fireblast = { id = 2136 },                                 -- Trait de feu
-  heat      = { id = 400624, auras = { 400625, 400624 } },   -- Échauffement (talent, charges 400625)
-  -- gros temps de recharge de race
-  eureka    = { id = 1259817, alt = { 1259813, 1259823, 1259812, 1259821 } },  -- Eureka (racial gnome, un identifiant par classe)
-  shoot     = { id = 5019 },                                 -- Tir (baguette)
-  berserking = { id = 20554 },
-  bloodfury = { id = 20572 },
-  -- autres sorts de dégâts : ils comptent pour les charges et la Présence spirituelle
+  -- what the HUD shows: charges, procs, active buffs
+  blast     = { id = 400574, auras = { 400574, 400573 } },   -- Arcane Blast (charges)
+  missiles  = { id = 5143 },                                 -- Arcane Missiles
+  wrath     = { id = 1326079 },                              -- Arcane Wrath
+  barrage   = { id = 400588, auras = { 400589, 400588 } },   -- Missile Barrage (talent, proc 400589)
+  clear     = { id = 12536, auras = { 12536 }, talent = 11213, extra = { 11213 } },  -- Clearcasting (Arcane Concentration)
+  power     = { id = 12042, auras = { 12042 } },             -- Arcane Power
+  pom       = { id = 12043, auras = { 12043 } },             -- Presence of Mind
+  -- a cast-time spell: like the ones below, it consumes Presence of Mind
+  pyro      = { id = 11366 },                                -- Pyroblast
+  -- racial buff shown while active
+  eureka    = { id = 1259817, alt = { 1259813, 1259823, 1259812, 1259821 } },  -- Eureka (gnome racial, one ID per class)
+  -- other spells: cast-time spells consume Presence of Mind, and some serve as cost references
   fireball  = { id = 133 },
   frostbolt = { id = 116 },
   frostfire = { id = 401502 },
   explosion = { id = 1449 },
   scorch    = { id = 2948 },
   flamestrike = { id = 2120 },
-  cone      = { id = 120 },
-  blizzard  = { id = 10 },
   poly      = { id = 118 },
-  -- améliorations à avoir avant le combat
-  intellect = { id = 1459 },                                 -- Intelligence des Arcanes
-  brilliance = { id = 23028 },                               -- Illumination des Arcanes (version de groupe)
+  -- buffs to have before combat
+  intellect = { id = 1459 },                                 -- Arcane Intellect
+  brilliance = { id = 23028 },                               -- Arcane Brilliance (group version)
   magearmor = { id = 6117 },
   icearmor  = { id = 7302 },
   frostarmor = { id = 168 },
-  -- (ranks : tous les rangs, du premier au dernier, au cas où le grimoire ne les rangerait pas sous un même nom)
-  water     = { id = 5504, ranks = { 5504, 5505, 5506, 6127, 10138, 10139, 10140, 468766 } },  -- Invocation d'eau
-  food      = { id = 587, ranks = { 587, 597, 990, 6129, 10144, 10145, 28612 } },             -- Invocation de nourriture
+  -- (ranks: every rank, from first to last, in case the spellbook does not file them under a single name)
+  water     = { id = 5504, ranks = { 5504, 5505, 5506, 6127, 10138, 10139, 10140, 468766 } },  -- Conjure Water
+  food      = { id = 587, ranks = { 587, 597, 990, 6129, 10144, 10145, 28612 } },             -- Conjure Food
 }
 
--- Gemmes de mana (objets), de la meilleure à la moins bonne, et les sorts qui les invoquent.
+-- Mana gems (items), from best to worst, and the spells that conjure them.
 Spells.GEMS = { 8008, 8007, 5513, 5514 }
 Spells.GEM_SPELLS = { 10054, 10053, 3552, 759 }
 
-local idToKey = {}     -- [identifiant de sort] = clé
-local nameToKey = {}   -- [nom localisé] = clé
+local idToKey = {}     -- [spell ID] = key
+local nameToKey = {}   -- [localized name] = key
 
 local function spellName(id)
   if C_Spell and C_Spell.GetSpellName then
@@ -92,7 +84,7 @@ local function isKnown(id)
   return false
 end
 
--- Tous les sorts du grimoire, rangés par nom : { [nom] = { { id, rang }, … } }
+-- All spells in the spellbook, grouped by name: { [name] = { { id, rank }, … } }
 local function scanSpellBook()
   local byName = {}
   local SB = C_SpellBook
@@ -107,7 +99,7 @@ local function scanSpellBook()
       for i = info.itemIndexOffset + 1, info.itemIndexOffset + info.numSpellBookItems do
         local item = S.Call(SB.GetSpellBookItemInfo, i, bank)
         local id = type(item) == "table" and S.Num(item.spellID) or nil
-        if id and not item.isOffSpec then
+        if id and S.Plain(item.isOffSpec) ~= true then
           local name = S.Plain(item.name)
           if type(name) ~= "string" or name == "" then name = spellName(id) end
           if name then
@@ -127,8 +119,8 @@ local function scanSpellBook()
   return byName
 end
 
--- L'aura de ce sort reste-t-elle lisible en combat ? Le jeu classe chaque sort une fois pour toutes
--- (jamais secret, toujours, selon le contexte). true / false, ou nil si le client ne le dit pas.
+-- Does this spell's aura stay readable in combat? The game classifies each spell once and for all
+-- (never secret, always, depending on context). true / false, or nil if the client does not say.
 local function auraNeverSecret(def)
   local CS = C_Secrets
   if not (CS and CS.GetSpellAuraSecrecy) then return nil end
@@ -140,12 +132,11 @@ local function auraNeverSecret(def)
   return false
 end
 
--- Relit le grimoire : noms, rangs, sorts connus. À rappeler quand les sorts ou les talents changent.
+-- Re-reads the spellbook: names, ranks, known spells. To be called again when spells or talents change.
 function Spells.Refresh()
   idToKey, nameToKey = {}, {}
   local book = scanSpellBook()
   for key, def in pairs(Spells.DEF) do
-    def.key = key
     def.name = spellName(def.id) or def.name
     if not def.name and def.alt then
       for _, id in ipairs(def.alt) do
@@ -155,23 +146,19 @@ function Spells.Refresh()
     end
     def.ids = { def.id }
     def.best = def.id
-    def.lowest = nil
     def.known = false
     local entries = def.name and book[def.name]
     if entries then
-      local top, low = -1, nil
+      local top = -1
       for _, e in ipairs(entries) do
         if e.id ~= def.id then def.ids[#def.ids + 1] = e.id end
         if e.rank > top then top = e.rank; def.best = e.id end
-        if e.rank > 0 and (not low or e.rank < low) then low = e.rank; def.lowest = e.id end
       end
       def.known = true
-      -- le grimoire peut ne montrer que le dernier rang : l'identifiant de référence est le rang 1
-      if def.lowest ~= def.id and isKnown(def.id) then def.lowest = def.id end
     elseif isKnown(def.id) or (def.talent and isKnown(def.talent)) then
       def.known = true
     end
-    if def.ranks then   -- le plus haut rang connu, quand le grimoire n'a pas suffi
+    if def.ranks then   -- the highest known rank, when the spellbook was not enough
       for i = #def.ranks, 1, -1 do
         if isKnown(def.ranks[i]) then
           if not def.known or def.best == def.id then def.best = def.ranks[i] end
@@ -181,7 +168,6 @@ function Spells.Refresh()
       end
     end
     def.auraPlain = auraNeverSecret(def)
-    def.baseCD = nil
     for _, id in ipairs(def.ids) do idToKey[id] = key end
     for _, list in ipairs({ def.auras or {}, def.extra or {} }) do
       for _, id in ipairs(list) do
@@ -202,19 +188,13 @@ function Spells.Known(key)
   return def ~= nil and def.known == true
 end
 
--- Identifiant du plus haut rang connu.
+-- ID of the highest known rank.
 function Spells.Best(key)
   local def = Spells.DEF[key]
   return def and def.best or nil
 end
 
--- Identifiant du plus bas rang connu (le rang 1 en général) ; à défaut, le plus haut.
-function Spells.Lowest(key)
-  local def = Spells.DEF[key]
-  return def and (def.lowest or def.best) or nil
-end
-
--- Clé du catalogue pour un sort lancé (par identifiant, puis par nom : un rang absent du grimoire).
+-- Catalog key for a cast spell (by ID, then by name: a rank missing from the spellbook).
 function Spells.KeyOf(spellID)
   local key = idToKey[spellID]
   if key then return key end
@@ -235,69 +215,37 @@ function Spells.Icon(key)
   return nil
 end
 
--- Coût en mana du sort, tel que le jeu l'annonce maintenant (charges et procs compris).
--- Retourne : coût, ou nil + "aucun" (le jeu n'annonce aucun coût) ou nil + "illisible".
+-- Mana cost of the spell, as the game announces it right now (charges and procs included).
+-- Returns: cost, or nil + "none" (the game announces no cost) or nil + "unreadable".
 function Spells.Cost(key)
   return Spells.CostOf(Spells.Best(key))
 end
 
--- Le même, pour un identifiant de sort précis (un rang donné).
+-- The same, for a specific spell ID (a given rank).
 function Spells.CostOf(id)
-  if not (id and C_Spell and C_Spell.GetSpellPowerCost) then return nil, "illisible" end
+  if not (id and C_Spell and C_Spell.GetSpellPowerCost) then return nil, "unreadable" end
   local ok, costs = pcall(C_Spell.GetSpellPowerCost, id)
-  if not ok then return nil, "illisible" end
-  if S.Is(costs) then return nil, "illisible" end
-  if costs == nil then return nil, "aucun" end
-  if type(costs) ~= "table" or S.IsTable(costs) then return nil, "illisible" end
+  if not ok then return nil, "unreadable" end
+  if S.Is(costs) then return nil, "unreadable" end
+  if costs == nil then return nil, "none" end
+  if type(costs) ~= "table" or S.IsTable(costs) then return nil, "unreadable" end
   local found = false
   for _, entry in ipairs(costs) do
     if type(entry) == "table" and not S.IsTable(entry) then
       local kind = S.Plain(entry.type)
-      if kind == nil or kind == 0 then   -- 0 : mana
+      if kind == nil or kind == 0 then   -- 0: mana
         local cost = S.Num(entry.cost)
-        if cost == nil then return nil, "illisible" end
+        if cost == nil then return nil, "unreadable" end
         return cost
       end
       found = true
     end
   end
-  if found then return nil, "illisible" end
-  return nil, "aucun"
+  if found then return nil, "unreadable" end
+  return nil, "none"
 end
 
--- Temps d'incantation annoncé (secondes), ou nil.
-function Spells.CastTime(key)
-  local id = Spells.Best(key)
-  if not (id and C_Spell and C_Spell.GetSpellInfo) then return nil end
-  local info = S.Call(C_Spell.GetSpellInfo, id)
-  if type(info) ~= "table" or S.IsTable(info) then return nil end
-  local ms = S.Num(info.castTime)
-  return ms and ms / 1000 or nil
-end
-
--- Temps de recharge de base (secondes), ou nil.
-function Spells.BaseCooldown(key)
-  local def = Spells.DEF[key]
-  if not def then return nil end
-  if def.baseCD == nil then   -- ne change pas d'une passe à l'autre : lu une fois
-    local ms = GetSpellBaseCooldown and S.Num(S.Call(GetSpellBaseCooldown, def.best))
-    def.baseCD = (ms and ms > 0) and ms / 1000 or false
-  end
-  return def.baseCD or nil
-end
-
--- La meilleure gemme de mana en sac : identifiant d'objet, quantité. nil si aucune.
-function Spells.Gem()
-  local count = C_Item and C_Item.GetItemCount or GetItemCount
-  if not count then return nil end
-  for _, itemID in ipairs(Spells.GEMS) do
-    local n = S.Num(S.Call(count, itemID, false, true))
-    if n and n > 0 then return itemID, n end
-  end
-  return nil
-end
-
--- Le sort d'invocation de gemme de mana que le personnage connaît (le meilleur), ou nil.
+-- The mana gem conjuring spell the character knows (the best one), or nil.
 function Spells.GemSpell()
   for _, id in ipairs(Spells.GEM_SPELLS) do
     if isKnown(id) then return id end
@@ -305,9 +253,9 @@ function Spells.GemSpell()
   return nil
 end
 
--- Eau et nourriture invoquées, de la meilleure à la moins bonne (base de données de Forever, 1.60.1) :
--- chaque rang d'Invocation d'eau ou de nourriture crée un objet différent. Seuls ces objets comptent :
--- une eau achetée ne dispense pas d'en invoquer.
+-- Conjured water and food, from best to worst (Forever database, 1.60.1):
+-- each rank of Conjure Water or Conjure Food creates a different item. Only these items count:
+-- bought water does not exempt you from conjuring some.
 Spells.WATER = { 231778, 8079, 8078, 8077, 3772, 2136, 2288, 5350 }
 Spells.FOOD = { 22895, 8076, 8075, 1487, 1114, 1113, 5349 }
 
@@ -321,12 +269,12 @@ local function carries(list)
   return false
 end
 
--- Le personnage a-t-il de l'eau invoquée, de la nourriture invoquée ?
+-- Does the character have conjured water, conjured food?
 function Spells.Supplies()
   return carries(Spells.WATER), carries(Spells.FOOD)
 end
 
--- La gemme de mana que crée ce sort d'invocation est-elle en sac ?
+-- Is the mana gem created by this conjuring spell in the bags?
 function Spells.HasGemOf(spellID)
   for i, id in ipairs(Spells.GEM_SPELLS) do
     if id == spellID then return carries({ Spells.GEMS[i] }) end
@@ -334,7 +282,7 @@ function Spells.HasGemOf(spellID)
   return false
 end
 
--- Icône d'un sort par identifiant.
+-- Icon of a spell by ID.
 function Spells.IconOf(id)
   if id and C_Spell and C_Spell.GetSpellTexture then
     return S.Plain(S.Call(C_Spell.GetSpellTexture, id))

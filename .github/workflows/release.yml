@@ -1,5 +1,5 @@
-# Publie une release d'Arcanum à chaque étiquette « vX.Y.Z » (voir tools/release.py).
-# WowUp lit release.json pour proposer la mise à jour aux joueurs de WoW Forever.
+# Publishes an Arcanum release for every "vX.Y.Z" tag (see tools/release.py).
+# WowUp reads release.json to offer the update to WoW Forever players.
 name: Release
 
 on:
@@ -19,17 +19,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Banc de test (rien n'est publié s'il échoue)
+      - name: Test suite (nothing is published if it fails)
         env:
           PYTHONIOENCODING: utf-8
         run: |
           pip install lupa==2.8
           python tools/test/run_tests.py
 
-      - name: Paquet (zip, release.json, notes)
+      - name: Package (zip, release.json, notes)
         run: python tools/package.py "${GITHUB_REF_NAME#v}"
 
-      - name: Release GitHub
+      - name: GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
