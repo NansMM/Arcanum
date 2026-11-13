@@ -37,6 +37,7 @@ L["%s: %s."] = "%s : %s."
 
 -- Settings window
 L["Arcane Mage HUD"] = "HUD du mage Arcanes"
+L["/arc opens these settings anywhere, even in combat."] = "/arc ouvre ces réglages partout, même en combat."
 L["Display"] = "Affichage"
 L["Enable the HUD"] = "Activer le HUD"
 L["Arcane Blast charges (top)"] = "Charges de Déflagration (en haut)"

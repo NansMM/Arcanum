@@ -45,7 +45,7 @@ Arcanum only wakes up on a mage. After an update that adds files, quit and resta
 
 | Command | Effect |
 |---|---|
-| `/arc` | Settings (what is shown, size, spread, sounds) |
+| `/arc` | Settings (what is shown, size, spread, sounds). The same settings are in the game's Options > AddOns list |
 | `/arc demo` | The HUD plays a full cycle without fighting (works on any class) |
 | `/arc lock` | Move the HUD, then lock it in place |
 | `/arc scale 120` | HUD size, in percent (60 to 180) |

@@ -918,6 +918,27 @@ def main():
           "the setting that showed nothing and the old burst observations are dropped; the rest is kept")
     no_errors(old, "review: saved position")
 
+    print("The game's Options > AddOns list")
+    o = Game()
+    cats = list(o.M.settingsCategories.values())
+    check(len(cats) == 1 and cats[0].name == "Arcanum" and o.M.named["ArcanumOptionsPanel"] is not None,
+          "Arcanum registers one panel in the game's AddOns list")
+    o.run('Mock.ns.Options.Refresh()')
+    o.slash("")
+    window = o.M.named["ArcanumOptions"]
+    check(window._shown is True, "/arc still opens Arcanum's own window")
+    o.run('Mock.ns.Set("showCharges", false); Mock.ns.Options.Refresh()')
+    check(o.ns.db.showCharges is False, "a change refreshes both copies of the settings without error")
+    o.fight()
+    o.M.advance(0.3)
+    no_errors(o, "game options panel")
+    bare = Game(pre="Settings = nil")
+    check(len(list(bare.M.settingsCategories.values())) == 0 and bare.ns.Options.category is None,
+          "a client without that list gets no panel")
+    bare.slash("")
+    check(bare.M.named["ArcanumOptions"]._shown is True, "and /arc works there all the same")
+    no_errors(bare, "client without the game's options list")
+
     print("English client")
     e = Game(pre='Mock.locale = "enUS"')
     check(e.run("return next(Mock.ns.L)") is None, "no translation is loaded: the strings stay in English")

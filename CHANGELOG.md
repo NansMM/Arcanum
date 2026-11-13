@@ -3,6 +3,7 @@
 ## 2.0.0 — 2026-11-13
 
 - Arcanum now follows your game client's language. English is built in, French is fully translated, other clients show English. Spell names still come from the game, so procs and reminders work in every language.
+- Arcanum's settings also appear in the game's Options > AddOns list. `/arc` still opens its own window, which works everywhere, combat included.
 - Commands are English: `/arc lock`, `/arc scale 120`, `/arc spread 150`, `/arc sounds`, `/arc sound barrage 888`, `/arc sound barrage voice`. The French ones (`/arc verrou`, `/arc taille`, `/arc ecart`, `/arc sons`, `/arc son`) still work.
 - Lighter engine: the old next-spell advice (rotation, burst, multi-target mode, cooldown and mana tracking) was still computed ten times a second although nothing displayed it any more. It is removed; Arcanum now only tracks what it shows.
 - Leftovers of the old circle HUD are removed (two textures, unused colors and settings). Old settings are cleaned from your saved variables; your sound choices, position, size and spread are kept.

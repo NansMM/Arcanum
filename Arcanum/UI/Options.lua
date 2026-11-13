@@ -123,6 +123,48 @@ local function soundRow(parent, label, key, y)
   return y - 34
 end
 
+-- ------------------------------------------------------------------ settings rows
+-- Builds every setting in `parent` (a frame W wide), from `y` down, and returns the y under the last row.
+-- Called twice: for Arcanum's own window (/arc) and for the panel in the game's Options > AddOns list. Both
+-- copies register in `refreshers`, so a change made in one shows in the other.
+local function fill(parent, y)
+  y = sectionTitle(parent, L["Display"], y)
+  y = toggle(parent, L["Enable the HUD"], "enabled", y)
+  y = toggle(parent, L["Arcane Blast charges (top)"], "showCharges", y)
+  y = toggle(parent, L["Procs, Presence of Mind, Eureka"], "showProcs", y)
+  y = toggle(parent, L["Pre-combat reminders (bottom)"], "showReminders", y)
+  y = toggle(parent, L["Proc decoration (rune arcs)"], "decor", y)
+  y = stepper(parent, L["Size"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y)
+  y = stepper(parent, L["Spread"], "spread", 80, 320, 10, function(v) return string.format("%d", v) end, y)
+
+  y = sectionTitle(parent, L["Alerts"], y - 8)
+  y = toggle(parent, L["Sound when a proc fires"], "sound", y)
+  y = soundRow(parent, L["Clearcasting"], "clear", y - 2)
+  y = soundRow(parent, L["Barrage"], "barrage", y)
+  y = toggle(parent, L["Light wave"], "flash", y)
+
+  local bw = (W - 44 - 16) / 3
+  local move = pillButton(parent, "", bw, function()
+    ns.Set("locked", not ns.db.locked)
+    Options.Refresh()
+  end)
+  move:SetPoint("TOPLEFT", 22, y - 10)
+  local demo = pillButton(parent, "", bw, function()
+    State.SetDemo(not State.demo)
+    Options.Refresh()
+  end)
+  demo:SetPoint("LEFT", move, "RIGHT", 8, 0)
+  local diag = pillButton(parent, L["Diagnostics"], bw, function() ns.Diag.Show() end)
+  diag:SetPoint("LEFT", demo, "RIGHT", 8, 0)
+  refreshers[#refreshers + 1] = function()
+    move.label:SetText(ns.db.locked and L["Move"] or L["Lock"])
+    move:SetAccent(not ns.db.locked)
+    demo.label:SetText(State.demo and L["Stop demo"] or L["Demo"])
+    demo:SetAccent(State.demo)
+  end
+  return y - 10 - 28
+end
+
 -- ------------------------------------------------------------------ window
 function Options.Build()
   if frame then return frame end
@@ -165,50 +207,14 @@ function Options.Build()
     function() cross:SetTextColor(C.muted[1], C.muted[2], C.muted[3], 1) end)
   close:SetScript("OnClick", function() f:Hide() end)
 
-  local y = -70
-  y = sectionTitle(f, L["Display"], y)
-  y = toggle(f, L["Enable the HUD"], "enabled", y)
-  y = toggle(f, L["Arcane Blast charges (top)"], "showCharges", y)
-  y = toggle(f, L["Procs, Presence of Mind, Eureka"], "showProcs", y)
-  y = toggle(f, L["Pre-combat reminders (bottom)"], "showReminders", y)
-  y = toggle(f, L["Proc decoration (rune arcs)"], "decor", y)
-  y = stepper(f, L["Size"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y)
-  y = stepper(f, L["Spread"], "spread", 80, 320, 10, function(v) return string.format("%d", v) end, y)
-
-  y = sectionTitle(f, L["Alerts"], y - 8)
-  y = toggle(f, L["Sound when a proc fires"], "sound", y)
-  y = soundRow(f, L["Clearcasting"], "clear", y - 2)
-  y = soundRow(f, L["Barrage"], "barrage", y)
-  y = toggle(f, L["Light wave"], "flash", y)
-
-  local bw = (W - 44 - 16) / 3
-  local move = pillButton(f, "", bw, function()
-    ns.Set("locked", not ns.db.locked)
-    Options.Refresh()
-  end)
-  move:SetPoint("TOPLEFT", 22, y - 10)
-  local demo = pillButton(f, "", bw, function()
-    State.SetDemo(not State.demo)
-    Options.Refresh()
-  end)
-  demo:SetPoint("LEFT", move, "RIGHT", 8, 0)
-  local diag = pillButton(f, L["Diagnostics"], bw, function() ns.Diag.Show() end)
-  diag:SetPoint("LEFT", demo, "RIGHT", 8, 0)
-  refreshers[#refreshers + 1] = function()
-    move.label:SetText(ns.db.locked and L["Move"] or L["Lock"])
-    move:SetAccent(not ns.db.locked)
-    demo.label:SetText(State.demo and L["Stop demo"] or L["Demo"])
-    demo:SetAccent(State.demo)
-  end
-  y = y - 10 - 28
-
+  local y = fill(f, -70)
   f:SetSize(W, -y + 22)
   frame = f
   return f
 end
 
 function Options.Refresh()
-  if not frame then return end
+  if not ns.db then return end
   for _, fn in ipairs(refreshers) do fn() end
 end
 
@@ -222,6 +228,40 @@ function Options.Toggle()
     f:Raise()
   end
 end
+
+-- ------------------------------------------------------------------ the game's Options > AddOns list
+-- The same settings, as a panel in the game's own options, for players who look for an addon's settings
+-- there. /arc keeps opening Arcanum's window, which also works when the game's options cannot be opened.
+-- A client without this part of the interface simply gets no panel.
+local function registerInGame()
+  if Options.category or not (Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory) then
+    return
+  end
+  local panel = CreateFrame("Frame", "ArcanumOptionsPanel")
+  panel:Hide()
+  local title = UI.Text(panel, 18, C.text, UI.FONT.title)
+  title:SetPoint("TOPLEFT", 22, -16)
+  title:SetText("Arcanum")
+  local sub = UI.Text(panel, 11, C.muted)
+  sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+  sub:SetText(L["Arcane Mage HUD"] .. "  ·  v" .. ns.VERSION)
+  local hint = UI.Text(panel, 11, C.faint)
+  hint:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -3)
+  hint:SetText(L["/arc opens these settings anywhere, even in combat."])
+  local box = CreateFrame("Frame", nil, panel)   -- the rows anchor to a box as wide as Arcanum's own window
+  box:SetSize(W, 10)
+  box:SetPoint("TOPLEFT", 0, 0)
+  fill(box, -78)
+  panel:SetScript("OnShow", function() Options.Refresh() end)
+  local ok, category = pcall(Settings.RegisterCanvasLayoutCategory, panel, "Arcanum")
+  if not ok or not category then return end
+  pcall(Settings.RegisterAddOnCategory, category)
+  Options.category, Options.panel = category, panel
+end
+ns:On("START", function()
+  local ok, err = pcall(registerInGame)
+  if not ok then ns.Report(err) end
+end)
 
 -- ------------------------------------------------------------------ burst macro
 -- Creates (or updates) the Eureka + Presence of Mind + Arcane Wrath macro with the exact names the game

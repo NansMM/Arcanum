@@ -238,6 +238,18 @@ function EditMacro(index, name, icon, body)
   return index
 end
 SlashCmdList = {}
+-- The game's own options window: addons register a panel in its AddOns list. A test models a client
+-- without it by setting `Settings = nil` before the addon loads.
+M.settingsCategories = {}
+Settings = {}
+function Settings.RegisterCanvasLayoutCategory(frame, name)
+  if type(frame) ~= "table" or type(name) ~= "string" then error("RegisterCanvasLayoutCategory: bad arguments", 2) end
+  return { frame = frame, name = name }
+end
+function Settings.RegisterAddOnCategory(category)
+  if type(category) ~= "table" or not category.frame then error("RegisterAddOnCategory: bad category", 2) end
+  M.settingsCategories[#M.settingsCategories + 1] = category
+end
 C_AddOns = { GetAddOnMetadata = function(addon, field) return M.meta and M.meta[field] end }
 C_Item = {
   GetItemCount = function(id) return M.items[id] or 0 end,
@@ -584,7 +596,8 @@ end
 -- variables, slash commands, named frames). Any other global write is recorded.
 M.leaks = {}
 local ALLOWED = { ArcanumDB = true, SLASH_ARCANUM1 = true, SLASH_ARCANUM2 = true,
-  ArcanumHUD = true, ArcanumOptions = true, ArcanumDiag = true, BuffIconCooldownViewer = true }
+  ArcanumHUD = true, ArcanumOptions = true, ArcanumOptionsPanel = true, ArcanumDiag = true,
+  BuffIconCooldownViewer = true }
 function M.watchGlobals()
   setmetatable(_G, { __newindex = function(t, k, v)
     if not ALLOWED[k] then M.leaks[#M.leaks + 1] = tostring(k) end
