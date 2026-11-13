@@ -4,13 +4,13 @@ An Arcane Mage HUD for World of Warcraft: Forever. It shows your procs, your Arc
 
 ![Preview of the Arcanum HUD](docs/preview.png)
 
-*Preview built from the addon's own textures (the character is a silhouette, icons are flat colors, the zones sit closer together than in game, and the proc decoration, which is a game image, is not drawn). Left to right: in combat with two procs and charges, out of combat with three reminders, and Presence of Mind and Eureka active. In game: `/arc demo`.*
+*Preview built from the addon's own textures (the character is a silhouette, icons are flat colors, the zones sit closer together than in game, and the proc decoration, which is a game image, is not drawn). Left to right: in combat with two procs and charges, out of combat with three reminders, and active buffs above the charges. In game: `/arc demo`.*
 
 ## What it shows
 
 - **Left: Clearcasting. Right: Missile Barrage.** A large icon of the proc, ringed in its color (light blue or pink), with the time left as a number and a swipe that grows as the proc runs out. No proc, nothing on that side. While the proc is up, a **decoration** frames the icon on its outer side: the big rune-engraved arc Blizzard painted for the Arcane Missiles proc alert, purple for Missile Barrage and tinted blue for Clearcasting. When the proc fires, the light wave is an echo of that arc that expands and fades. The "Proc decoration" setting (or `/arc decor`) hides it; the wave is then a plain ring.
 - **Above: Arcane Blast charges**, only while you have some. One crystal per charge; at four charges, the maximum, they brighten. Below them, a bar empties over the 18 seconds of the charge window, with the seconds left; it turns red when the window is about to close.
-- **Above the charges: Presence of Mind and Eureka**, while they are active. The Presence of Mind icon, ringed in green, reminds you that your next spell is instant; the Eureka icon, ringed in gold, shows its time left. One active: centered; both: side by side.
+- **Above the charges: your active buffs.** Presence of Mind, ringed in green, reminds you that your next spell is instant; Eureka, ringed in gold, and Arcane Power, ringed in purple, show their time left. One active: centered; several: side by side.
 - **Below, out of combat: reminders.** The icon of whatever is missing before you pull: Arcane Intellect, your armor, and what is left to conjure: water, food, mana gem. Only conjured items count (bought water does not excuse you from conjuring), and for the gem it is the best one you can conjure that is expected. Nothing missing, nothing shown. While resting in a city, reminders wait until you leave or target an enemy.
 
 The HUD is centered on the screen, where your character stands. The "Spread" setting (or `/arc spread 150`) moves the four zones closer or further; `/arc lock` lets you drag the whole thing.

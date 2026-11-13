@@ -8,7 +8,7 @@ local ADDON, ns = ...
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "2.0.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "2.1.0"
 
 local pcall, type, pairs, ipairs = pcall, type, pairs, ipairs
 
@@ -121,7 +121,7 @@ ns.DEFAULTS = {
   spread = 150,           -- spread: distance between the character and the zones (procs, charges, reminders)
   decor = true,           -- proc decoration: the game's rune arc, on the outer side of each icon
   showCharges = true,     -- charge crystals above the character, when there are charges
-  showProcs = true,       -- proc icons: Clearcasting on the left, Missile Barrage on the right, Presence of Mind and Eureka at the top
+  showProcs = true,       -- proc icons: Clearcasting on the left, Missile Barrage on the right, Arcane Power, Presence of Mind and Eureka at the top
   showReminders = true,   -- out of combat, flag what is missing: Arcane Intellect, armor, conjured water, food and mana gem
   sound = true,
   soundKit = {},          -- game sounds chosen in place of the original ones: [clear|barrage] = ID, or "voice"

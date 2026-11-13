@@ -2,7 +2,7 @@
 """Preview of Arcanum's HUD: composites the addon's real textures following the layout in UI/Hud.lua.
 
 Three scenes: in combat (procs on either side of the character, charges above), out of combat (reminders
-below the character), and Presence of Mind and Eureka active.
+below the character), and the active buffs (Presence of Mind, Eureka, Arcane Power).
 
 This is not a game screenshot: spell icons and text are replaced by flat colour blocks.
 It is for judging shapes, colours and glows without launching WoW. No dependencies.
@@ -168,10 +168,11 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=
         blit(None, cx, by, 126, 6, C["socket"], 0.90)
         blit(None, cx - 62 + 124 * window / 2, by, 124 * window, 4, col, 1)
         blit(None, cx + 62 + 16, by, 14, 7, mix(C["text"], C["ink"], 0.35), 0.9)   # seconds (flat block)
-    # Presence of Mind and Eureka active: their icons side by side, above the charges
+    # active buffs (Presence of Mind, Eureka, Arcane Power): their icons side by side, above the charges
     if pom:
-        round_icon(cx - 28, top - 17 - 23 - 12, 46, C["pom"], C["pom"], glow=0.50)
-        round_icon(cx + 28, top - 17 - 23 - 12, 46, C["power"], C["power"], glow=0.50, cooldown=0.35)
+        round_icon(cx - 56, top - 17 - 23 - 12, 46, C["pom"], C["pom"], glow=0.50)
+        round_icon(cx, top - 17 - 23 - 12, 46, C["power"], C["power"], glow=0.50, cooldown=0.35)
+        round_icon(cx + 56, top - 17 - 23 - 12, 46, C["arcane"], C["arcane"], glow=0.50, cooldown=0.15)
     # pre-combat reminders, below the character
     amber = (1.000, 0.700, 0.300)
     for i in range(reminders):
@@ -181,7 +182,7 @@ def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, pom=
 
 def main():
     background()
-    # in combat, two procs and three charges out of four; out of combat, three reminders; Presence of Mind and Eureka active
+    # in combat, two procs and three charges out of four; out of combat, three reminders; the three buffs active
     scene(200, 215, stacks=3, target=4, window=0.62, clear=0.6, barrage=0.85)
     scene(480, 215, reminders=3)
     scene(790, 215, stacks=4, target=4, window=0.45, pom=True)

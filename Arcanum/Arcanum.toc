@@ -1,9 +1,9 @@
 ## Interface: 16001
 ## Title: |cffb07cffArcanum|r
-## Notes: Arcane Mage HUD around your character: Clearcasting on the left, Missile Barrage on the right, Arcane Blast charges, Presence of Mind and Eureka above, pre-combat reminders below.
-## Notes-frFR: HUD du mage Arcanes, autour du personnage : Idées claires à gauche, Barrage de projectiles à droite, charges de Déflagration des Arcanes, Présence spirituelle et Eurêka en haut, rappels avant le combat en bas.
+## Notes: Arcane Mage HUD around your character: Clearcasting on the left, Missile Barrage on the right, Arcane Blast charges, Arcane Power, Presence of Mind and Eureka above, pre-combat reminders below.
+## Notes-frFR: HUD du mage Arcanes, autour du personnage : Idées claires à gauche, Barrage de projectiles à droite, charges de Déflagration des Arcanes, Pouvoir des Arcanes, Présence spirituelle et Eurêka en haut, rappels avant le combat en bas.
 ## Author: Nans
-## Version: 2.0.0
+## Version: 2.1.0
 ## IconTexture: Interface\AddOns\Arcanum\Media\logo
 ## SavedVariables: ArcanumDB
 

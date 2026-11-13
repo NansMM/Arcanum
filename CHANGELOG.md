@@ -1,5 +1,10 @@
 # Arcanum changelog
 
+## 2.1.0 — 2026-11-13
+
+- Arcane Power active: its icon, ringed in purple, shows above the charges with its time left, next to Presence of Mind and Eureka.
+- The demo (`/arc demo`) now plays the proc sounds, so you can hear your choices without waiting for a fight. It also shows Arcane Power.
+
 ## 2.0.0 — 2026-11-13
 
 - Arcanum now follows your game client's language. English is built in, French is fully translated, other clients show English. Spell names still come from the game, so procs and reminders work in every language.

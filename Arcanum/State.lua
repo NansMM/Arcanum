@@ -669,7 +669,7 @@ end
 -- Does the display have something to show? Computed once per pass (State.live), read every frame.
 local function refreshLive()
   State.live = State.demo or State.combat or State.hostile or State.stacks > 0 or State.barrage.active
-    or State.clear.active or State.pom.active or State.eureka.active
+    or State.clear.active or State.pom.active or State.eureka.active or State.power.active
 end
 
 -- ------------------------------------------------------------------ loop
@@ -747,6 +747,7 @@ function State.DemoTick(now)
     elseif step == 4 then
       setProc(State.barrage, "barrage", false)                             -- spent by Arcane Missiles
       setProc(State.clear, "clear", false)                                 -- spent by Arcane Blast
+      setProc(State.power, "power", true, "demo", now + 15, 15, now)       -- Arcane Power
     end
   elseif step == 5 then             -- Eureka
     setProc(State.eureka, "eureka", true, "demo", now + 8, 8, now)
@@ -757,6 +758,7 @@ function State.DemoTick(now)
   elseif step == 9 then             -- end of the charge window
     setStacks(0, nil, "demo")
     setProc(State.eureka, "eureka", false)
+    setProc(State.power, "power", false)
   end
 end
 

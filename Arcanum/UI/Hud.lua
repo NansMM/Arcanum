@@ -5,7 +5,7 @@
 --     with the time left, flanked by a rune arc (the decoration). No proc: nothing.
 --   * top, only while there are Arcane Blast charges: one crystal per charge, and below them the
 --     bar of the 18 seconds of their window;
---   * above the charges, while active: Presence of Mind and Eureka;
+--   * above the charges, while active: Presence of Mind, Eureka and Arcane Power;
 --   * bottom, out of combat: what is missing before pulling (Arcane Intellect, armor, water, food
 --     and a mana gem to conjure).
 -- The zones move away from the character with the "spread" setting.
@@ -39,6 +39,7 @@ local PROCS = {
 local BUFFS = {
   { key = "pom", color = C.pom },
   { key = "eureka", color = C.gold, timed = true },
+  { key = "power", color = C.arcane, timed = true },
 }
 -- The proc decoration: the proc alert artwork painted by Blizzard for Arcane Missiles, read from the
 -- game files (file: its id). It is a large arc engraved with runes, twice as tall as it is wide (w, h,
@@ -883,7 +884,7 @@ function Hud.Build()
   end)
   Hud.root, Hud.fight, Hud.prep = root, fight, prep
   Hud.procs, Hud.crystals, Hud.reminders, Hud.bar, Hud.barText = procs, crystals, reminders, bar, barText
-  Hud.buffs, Hud.pomIcon, Hud.eurekaIcon = buffs, buffs[1], buffs[2]
+  Hud.buffs, Hud.pomIcon, Hud.eurekaIcon, Hud.powerIcon = buffs, buffs[1], buffs[2], buffs[3]
   return root
 end
 
@@ -916,11 +917,12 @@ ns:On("PROC", function(key)
   if not root then return end
   local def = PROC_SOUND[key]
   if not def or not ns.db.enabled then return end
-  if GetTime() < (State.quietUntil or 0) then return end   -- found again after a loading screen: already announced
+  -- found again after a loading screen: already announced (the demo, which starts with a reset, plays its own)
+  if not State.demo and GetTime() < (State.quietUntil or 0) then return end
   if ns.db.flash and ns.db.showProcs then
     for _, f in ipairs(procs) do
       if f.def.key == key and not f.decorDef then spawnHalo(f, f.def.color, PROC, PROC + 80, 0.45) end
     end
   end
-  if not State.demo then playSound(def) end
+  playSound(def)   -- (in the demo as well: it shows what a proc sounds like)
 end)

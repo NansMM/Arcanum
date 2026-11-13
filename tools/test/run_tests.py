@@ -476,7 +476,7 @@ def main():
     check(f.S.stacks == 1 and len(shown) == 1 and all(c._points[1][5] > 100 for c in shown),
           "one charge: a crystal appears above the character")
     check(hud.bar._alpha == 1 and hud.barText._text in ("18 s", "17 s"), "below the crystals, the bar of their window and its seconds")
-    pom, eur = hud.pomIcon, hud.eurekaIcon
+    pom, eur, power = hud.pomIcon, hud.eurekaIcon, hud.powerIcon
     check(pom.on is False and pom._alpha == 0 and eur.on is False and eur._alpha == 0,
           "neither Presence of Mind nor Eureka: nothing above the charges")
     f.cast(EUREKA)
@@ -495,6 +495,14 @@ def main():
     check(eur.on is True and eur._points[1][4] == 0, "Eureka, still active, moves back to the centre")
     f.M.advance(7)
     check(not f.S.eureka.active and eur.on is False and eur._alpha == 0, "Eureka over: its icon goes away")
+    check(power.on is False and power._alpha == 0, "Arcane Power not cast: no icon")
+    f.cast(AP)
+    f.M.advance(0.4)
+    check(f.S.power.active and power.on is True and power._alpha > 0.9 and power.icon._tex == 130042
+          and power.cd._cd[2] == 15 and power._points[1][4] == 0 and power._points[1][5] > shown[0]._points[1][5],
+          "Arcane Power active: its icon shows above the charges, centered, with its 15 s")
+    f.M.advance(15.5)
+    check(not f.S.power.active and power.on is False and power._alpha == 0, "Arcane Power over: its icon goes away")
     played = lambda name: f.sound_files().count(name + ".ogg")
     check(played("burst") == 0, "no burst sound any more")
     f.M.proc("Barrage de projectiles", 400588)
@@ -539,16 +547,20 @@ def main():
     f.M.setCombat(False)
     f.run('Mock.auras = {}; Mock.fire("UNIT_AURA", "player", {})')
     f.slash("demo")
-    sides, charges, pom_seen, eur_seen = set(), set(), False, False
+    sides, charges, pom_seen, eur_seen, power_seen = set(), set(), False, False, False
+    demo_sounds = len(f.sound_files())
     for _ in range(240):
         f.M.advance(0.05)
         pom_seen = pom_seen or pom.on is True
         eur_seen = eur_seen or eur.on is True
+        power_seen = power_seen or power.on is True
         sides.update(k for k, b in (("clear", left), ("barrage", right)) if b.on)
         charges.add(f.S.stacks)
     check(sides == {"clear", "barrage"}, "the demo shows both procs, each on its side")
     check(charges == {0, 1, 2, 3, 4}, "the charges building up")
-    check(pom_seen and eur_seen, "Presence of Mind and Eureka")
+    check(pom_seen and eur_seen and power_seen, "Presence of Mind, Eureka and Arcane Power")
+    heard = f.sound_files()[demo_sounds:]
+    check("clear.ogg" in heard and "barrage.ogg" in heard, "the demo plays the sound of each proc")
     f.slash("demo")
     f.M.advance(0.5)
     check(not any(b.on for b in hud.procs.values()) and f.S.stacks == 0 and not any(c._shown for c in hud.crystals.values()),
