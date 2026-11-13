@@ -754,54 +754,6 @@ def main():
           "les réglages de l'ancien cercle sont oubliés, les autres gardés")
     no_errors(m, "mise à jour des réglages")
 
-    print("Charges en orbes du jeu")
-    o = Game(pre="Mock.hasOrbs = true")
-    hud = o.ns.Hud
-    check(hud.OrbsAvailable() is True and hud.orbBar is not None and hud.orbBar._scale == 1.6,
-          "ce client a les images : la rangée d'orbes est montée, agrandie d'un bloc")
-    o.fight()
-    o.M.advance(0.3)
-    check(hud.orbBar._alpha == 0 and not any(c._shown for c in hud.crystals.values()), "sans charge : ni orbes ni cristaux")
-    o.cast(AB)
-    o.M.advance(0.2)
-    first, second = hud.orbs[1], hud.orbs[2]
-    check(hud.orbBar._alpha > 0.9 and first.on is True and 0.3 < first.base._alpha < 1 and first.glow._alpha > 0,
-          "une charge : la rangée apparaît, le premier orbe s'allume dans un halo")
-    check(second.on is False and second.base._alpha == 0.3 and second.spark._alpha == 0,
-          "les orbes suivants restent éteints, sans animation d'extinction")
-    check(not any(c._shown for c in hud.crystals.values()), "les cristaux d'Arcanum ne s'affichent pas en plus")
-    o.M.advance(1.5)
-    check(first.base._alpha == 1 and first.glow._alpha == 0 and first.small._alpha == 0, "une seconde plus tard : orbe plein, effets éteints")
-    bar_y, pom_y = hud.bar._points[1][5], hud.pomIcon._points[1][5]
-    check(bar_y < 135 - 31 and bar_y > 60, "la barre de la fenêtre passe sous la rangée d'orbes")
-    o.cast(AB)
-    o.cast(AB)
-    o.cast(AB)
-    o.M.advance(1.5)
-    check(o.S.stacks == 4 and all(c.on and c.base._alpha == 1 for c in hud.orbs.values()), "quatre charges : quatre orbes pleins")
-    o.M.advance(o.S.stacksExpire - o.M.now + 0.3)   # la fenêtre des charges vient de se fermer
-    check(o.S.stacks == 0 and hud.orbs[1].on is False and hud.orbs[1].spark._alpha > 0 and hud.orbBar._alpha > 0,
-          "fin de la fenêtre : les orbes s'éteignent dans un éclat, la rangée s'efface lentement")
-    o.M.advance(3)
-    check(hud.orbBar._alpha == 0, "puis la rangée disparaît")
-    o.run('Mock.ns.Set("chargeArt", false)')
-    o.cast(AB)
-    o.M.advance(0.3)
-    check(hud.orbBar._shown is False and len([c for c in hud.crystals.values() if c._shown]) == 1,
-          "réglage coupé : retour aux cristaux")
-    o.run('Mock.ns.Set("chargeArt", true)')
-    o.M.advance(0.3)
-    check(hud.orbBar._shown is True and not any(c._shown for c in hud.crystals.values()), "réglage rétabli : les orbes reviennent")
-    o.run('SlashCmdList.ARCANUM("diag")')
-    check("orbes de charge du jeu : trouvés" in o.M.named["ArcanumDiag"].text, "le diagnostic dit que les images sont là")
-    no_errors(o, "orbes du jeu")
-    plain = Game()
-    plain.run('SlashCmdList.ARCANUM("diag")')
-    check(plain.ns.Hud.OrbsAvailable() is False and plain.ns.Hud.orbBar is None
-          and "orbes de charge du jeu : introuvables" in plain.M.named["ArcanumDiag"].text,
-          "client sans ces images : pas de rangée d'orbes, cristaux gardés, et le diagnostic le dit")
-    no_errors(plain, "sans orbes")
-
     print("Sons par leur nom")
     q = Game()
     name = lambda key: q.run('return Mock.ns.Hud.SoundName("%s")' % key)

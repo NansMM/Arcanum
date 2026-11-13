@@ -130,8 +130,6 @@ function Diag.Report()
     tostring(State.nextId), State.cast and (" · en cours : " .. tostring(State.cast.key)) or "")
   add("  mode multi-cibles : %s%s", State.aoe and "oui" or "non", State.aoeForced and " (forcé)" or "")
   add("  rappels : %s", #State.reminders > 0 and table.concat(State.reminders, ", ") or "aucun")
-  add("  orbes de charge du jeu : %s%s", ns.Hud.OrbsAvailable() and "trouvés" or "introuvables dans ce client (cristaux à la place)",
-    ns.db.chargeArt == false and " · réglage coupé" or "")
   add("  charges %d (source %s), fin dans %s s", State.stacks, tostring(State.stacksSource),
     State.stacksExpire and show(State.stacksExpire - GetTime()) or "?")
   for _, key in ipairs({ "barrage", "clear", "power", "pom", "eureka" }) do

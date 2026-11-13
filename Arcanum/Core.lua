@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.5.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.5.1"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -123,8 +123,7 @@ ns.DEFAULTS = {
   decor = true,           -- décor des procs : l'arc de runes du jeu, du côté extérieur de chaque icône
   showIdle = false,       -- afficher aussi hors combat, sans cible
   idleAlpha = 0.35,       -- opacité hors combat quand showIdle est actif
-  showCharges = true,     -- charges au-dessus du personnage, quand il y en a
-  chargeArt = true,       -- charges en orbes du jeu (illustrations de Blizzard) ; sinon, ou si ce client ne les a pas : cristaux
+  showCharges = true,     -- cristaux de charge au-dessus du personnage, quand il y a des charges
   showProcs = true,       -- icônes de proc : Idées claires à gauche, Barrage de projectiles à droite, Présence spirituelle et Eurêka en haut
   fillerRank = 1,         -- rang de l'Éclair de givre de remplissage : 1 (économe) ou "max" (plus de dégâts)
   burstOne = true,        -- macro de burst (Eureka + Présence spirituelle + Courroux) : l'icône de burst montre directement le Courroux
@@ -188,6 +187,7 @@ function ns.InitDB()
   elseif type(db.decor) ~= "boolean" then
     db.decor = true
   end
+  db.chargeArt = nil     -- 1.5.1 : les orbes du jeu sont retirés
   db.burstRemind = nil   -- 1.1 : plus de signal de burst
   db.soundKit.burst = nil
   if type(db.spread) ~= "number" or db.spread < 80 or db.spread > 320 then db.spread = 150 end

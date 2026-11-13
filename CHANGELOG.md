@@ -1,5 +1,9 @@
 # Historique d'Arcanum
 
+## 1.5.1 — 13 novembre 2026
+
+- Les orbes de charge du jeu, ajoutés en 1.5.0, sont retirés : ces images sont faites pour s'afficher en tout petit, et agrandies au-dessus du personnage elles étaient pixelisées. Les charges reviennent aux cristaux, un par charge.
+
 ## 1.5.0 — 13 novembre 2026
 
 - Charges en orbes du jeu : les charges de Déflagration s'affichent avec les illustrations peintes par Blizzard pour le mage Arcanes (un socle, quatre orbes, et un éclat, un halo et un cercle de runes à chaque charge gagnée ou perdue), montées et animées comme dans l'interface d'origine, en plus grand.
