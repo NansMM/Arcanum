@@ -1,5 +1,10 @@
 # Historique d'Arcanum
 
+## 1.3.1 — 13 novembre 2026
+
+- L'onde lumineuse à l'arrivée d'un proc est dans le thème du décor choisi : c'est un écho de ce décor, qui s'élargit et s'efface, au lieu d'un anneau. Sans décor, l'anneau reste.
+- Décor « Art du jeu » : les deux procs ont maintenant le même arc gravé de runes, violet pour le Barrage, teinté en bleu pour les Idées claires. L'arc bleu précédent était plus fin et plus pâle que l'autre.
+
 ## 1.3.0 — 13 novembre 2026
 
 - Nouveau décor de procs, « Art du jeu » (`/arc decor jeu`) : les grands arcs peints par Blizzard pour ses propres alertes de proc, lus dans les fichiers du jeu. L'arc violet gravé de runes des Projectiles des Arcanes pour le Barrage de projectiles, un arc ouvragé teinté en bleu pour les Idées claires. Si ton client n'a pas ces images, le décor reste vide : choisis-en un autre.

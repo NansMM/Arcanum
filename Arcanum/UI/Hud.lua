@@ -44,10 +44,12 @@ local BUFFS = {
 -- (radians par seconde) ; pulse : elle bat ; burst : son bond à l'arrivée du proc.
 -- « jeu » : les illustrations de proc peintes par Blizzard, lues dans les fichiers du jeu (files : leur
 -- identifiant, par proc). Ce sont de grands arcs, deux fois plus hauts que larges (w, h), posés du côté
--- extérieur de l'icône (offset, en nombre de fois sa taille) ; tint : ceux qui sont blancs et se teintent.
+-- extérieur de l'icône (offset, en nombre de fois sa taille). Les deux procs ont le même arc gravé de
+-- runes, celui des Projectiles des Arcanes : il garde son violet pour le Barrage ; pour les Idées claires
+-- il est passé en gris (grey) puis teinté à la couleur du proc (tint).
 local DECORS = {
-  jeu = { files = { clear = 450918, barrage = 449486 }, tint = { clear = true }, w = 2.0, h = 4.0, offset = 0.75,
-    flip = true, pulse = true, burst = 0.08 },
+  jeu = { files = { clear = 449486, barrage = 449486 }, grey = { clear = true }, tint = { clear = true },
+    w = 2.0, h = 4.0, offset = 0.75, flip = true, pulse = true, burst = 0.08 },
   croissants = { file = "decor-crescent", size = 2.6, flip = true, burst = 0.10 },
   losange = { file = "decor-lozenge", size = 2.1, burst = 0.14 },
   runes = { file = "decor-runes", size = 2.0, spin = 0.35, burst = 0.14 },
@@ -330,6 +332,7 @@ local function refreshProcs()
       if active then
         f.icon:SetTexture(Spells.Icon(f.def.key) or Spells.Icon(f.def.spell) or 134400)
         f.pop = 1
+        if ns.db.flash and f.decorDef then f.echoT0 = GetTime() end   -- l'onde lumineuse : un écho du décor
         f:Show()
       end
     end
@@ -369,6 +372,19 @@ local function animateProcs(dt, now)
             f.decor:SetRotation(f.spin)
           end
           if d.pulse then f.decor:SetAlpha(0.60 + 0.40 * pulse) end
+          -- l'onde lumineuse, dans le thème du décor : son écho s'élargit et s'efface
+          if f.echoT0 then
+            local t = (now - f.echoT0) / 0.6
+            if t >= 1 then
+              f.echoT0 = nil
+              f.echo:SetAlpha(0)
+            else
+              local e = 1 + 0.45 * (1 - (1 - t) * (1 - t))   -- ralentit en fin de course
+              f.echo:SetSize(f.decorW * e, f.decorH * e)
+              if d.spin and f.echo.SetRotation then f.echo:SetRotation(f.spin) end
+              f.echo:SetAlpha((1 - t) * 0.8)
+            end
+          end
         end
       end
     end
@@ -480,27 +496,34 @@ local function applyDecor()
   local d = DECORS[ns.db.decor]
   for _, f in ipairs(procs) do
     f.decorDef = d
+    f.echoT0 = nil
+    f.echo:SetAlpha(0)
     if d then
       local key = f.def.key
-      f.decor:SetTexture(d.files and d.files[key] or UI.Media(d.file))
       f.decorW, f.decorH = PROC * (d.w or d.size), PROC * (d.h or d.size)
-      f.decor:SetSize(f.decorW, f.decorH)
-      f.decor:ClearAllPoints()
-      f.decor:SetPoint("CENTER", f, "CENTER", f.def.side * PROC * (d.offset or 0), 0)
       -- (une illustration du jeu déjà peinte garde ses couleurs ; le reste prend celle du proc)
       local c = (d.files and not (d.tint and d.tint[key])) and C.text or f.def.color
-      f.decor:SetVertexColor(c[1], c[2], c[3], 1)
-      if d.flip and f.def.side > 0 then
-        f.decor:SetTexCoord(1, 0, 0, 1)   -- miroir : le croissant se place du côté extérieur
-      else
-        f.decor:SetTexCoord(0, 1, 0, 1)
+      -- le décor, et son écho : la même image, pour l'onde lumineuse à l'arrivée du proc
+      for _, tex in ipairs({ f.decor, f.echo }) do
+        tex:SetTexture(d.files and d.files[key] or UI.Media(d.file))
+        tex:SetDesaturated(d.grey ~= nil and d.grey[key] == true)
+        tex:SetSize(f.decorW, f.decorH)
+        tex:ClearAllPoints()
+        tex:SetPoint("CENTER", f, "CENTER", f.def.side * PROC * (d.offset or 0), 0)
+        tex:SetVertexColor(c[1], c[2], c[3], 1)
+        if d.flip and f.def.side > 0 then
+          tex:SetTexCoord(1, 0, 0, 1)   -- miroir : l'arc se place du côté extérieur
+        else
+          tex:SetTexCoord(0, 1, 0, 1)
+        end
+        if tex.SetRotation then tex:SetRotation(0) end
+        tex:Show()
       end
-      if f.decor.SetRotation then f.decor:SetRotation(0) end
       f.spin = 0
       f.decor:SetAlpha(1)
-      f.decor:Show()
     else
       f.decor:Hide()
+      f.echo:Hide()
     end
   end
 end
@@ -773,6 +796,8 @@ function Hud.Build()
     f.def, f.vis, f.on = def, 0, false
     f.decor = UI.Tex(f, "BACKGROUND", nil, def.color, 1, nil, -1)
     f.decor:SetPoint("CENTER")
+    f.echo = UI.Tex(f, "BACKGROUND", nil, def.color, 0, "ADD", -1)
+    f.echo:SetPoint("CENTER")
     f:SetFrameLevel(level + 4)
     f.ring:SetVertexColor(def.color[1], def.color[2], def.color[3], 1)
     f:SetAlpha(0)
@@ -848,14 +873,15 @@ ns:On("STACKS", function(n, old)
   end
 end)
 
--- Un proc arrive : une onde part de son icône, à sa couleur, et son son retentit.
+-- Un proc arrive : son son retentit. Sans décor, une onde ronde part de son icône ; avec un décor, l'onde
+-- est un écho de ce décor (voir refreshProcs).
 ns:On("PROC", function(key)
   if not root then return end
   local def = PROC_SOUND[key]
   if not def then return end
   if ns.db.flash and ns.db.showProcs then
     for _, f in ipairs(procs) do
-      if f.def.key == key then spawnHalo(f, f.def.color, PROC, PROC + 80, 0.45) end
+      if f.def.key == key and not f.decorDef then spawnHalo(f, f.def.color, PROC, PROC + 80, 0.45) end
     end
   end
   if not State.demo then playSound(def) end

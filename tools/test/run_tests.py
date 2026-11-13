@@ -656,6 +656,9 @@ def main():
     check(left.on is False, "rien à gauche tant qu'il n'y a pas d'Idées claires")
     f.M.proc("Idées claires", 12536)
     f.M.advance(0.3)
+    check(left.echo._tex.endswith("decor-crescent") and 0 < left.echo._alpha < 0.8 and left.echo._w > left.decor._w,
+          "à l'arrivée du proc, l'onde lumineuse est un écho de son décor, qui s'élargit")
+    check(right.echo._alpha == 0, "l'onde du Barrage, arrivé plus tôt, s'est effacée")
     check(left.on is True and left._shown is True and left.icon._tex == 130536 and right.on is True,
           "les Idées claires s'affichent à gauche, avec leur propre icône, en même temps")
     check(left.decor._shown is True and left.decor._tex.endswith("decor-crescent") and abs(left.decor._w - 64 * 2.6) < 3,
@@ -674,8 +677,11 @@ def main():
     check(left.decor._shown is False and right.decor._shown is False and left._shown is True,
           "/arc decor aucun : les procs restent, sans décor")
     f.run('Mock.ns.Set("decor", "jeu")')
-    check(left.decor._tex == 450918 and right.decor._tex == 449486 and left.decor._shown is True,
-          "décor « art du jeu » : les illustrations de proc du jeu, par leur identifiant de fichier")
+    check(left.decor._tex == 449486 and right.decor._tex == 449486 and left.decor._shown is True,
+          "décor « art du jeu » : l'illustration de proc du jeu, par son identifiant de fichier")
+    check(left.decor._desat is True and not right.decor._desat,
+          "le même arc des deux côtés : passé en gris et teinté pour les Idées claires, tel quel pour le Barrage")
+    check(left.echo._tex == 449486 and left.echo._desat is True, "l'onde lumineuse reprend l'image du décor")
     check(abs(left.decor._h - 256) < 12 and abs(left.decor._w - 128) < 6
           and left.decor._points[1][4] == -48 and right.decor._points[1][4] == 48,
           "de grands arcs, du côté extérieur de chaque proc")

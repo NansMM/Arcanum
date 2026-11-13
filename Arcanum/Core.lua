@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.3.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.3.1"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -135,7 +135,7 @@ ns.DEFAULTS = {
   targetStacks = 2,       -- charges visées (2, 3 ou 4) : on monte jusque-là, puis Colère et sorts bon marché
   sound = true,
   soundKit = {},          -- sons du jeu choisis à la place de ceux d'origine : [clear|barrage] = identifiant, ou "voix"
-  flash = true,           -- petite onde autour de l'icône quand un proc arrive
+  flash = true,           -- onde lumineuse quand un proc arrive : un écho de son décor (un anneau, sans décor)
 }
 
 -- Ce que l'addon apprend en jeu quand les données sont lisibles (hors combat) : durées et coûts réels.
