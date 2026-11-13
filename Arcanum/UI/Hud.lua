@@ -118,7 +118,8 @@ local function spawnHalo(anchor, color, from, to, life)
   end
   if not h then
     if #halos >= 4 then return end
-    h = { tex = UI.Tex(fight, "BACKGROUND", "halo", color, 0, "ADD", -3) }
+    h = { tex = UI.Tex(fight, "BACKGROUND", "halo", color, 1, "ADD", -3) }
+    h.tex:SetAlpha(0)
     halos[#halos + 1] = h
   end
   h.tex:ClearAllPoints()
@@ -137,8 +138,8 @@ local function animateHalos(now)
         local e = 1 - (1 - t) * (1 - t)   -- ralentit en fin de course
         local size = h.from + (h.to - h.from) * e
         h.tex:SetSize(size, size)
-        h.tex:SetVertexColor(h.color[1], h.color[2], h.color[3], (1 - t) * 0.75)
-        h.tex:SetAlpha(1)
+        h.tex:SetVertexColor(h.color[1], h.color[2], h.color[3])
+        h.tex:SetAlpha((1 - t) * 0.75)   -- l'onde s'efface en s'élargissant
       end
     end
   end
@@ -521,6 +522,8 @@ local function applyDecor()
       end
       f.spin = 0
       f.decor:SetAlpha(1)
+      -- (la couleur vient d'être donnée avec une opacité pleine : l'écho ne se montre qu'à l'arrivée d'un proc)
+      f.echo:SetAlpha(0)
     else
       f.decor:Hide()
       f.echo:Hide()
@@ -533,6 +536,13 @@ function Hud.PreviewDecor()
   if not root then return end
   previewUntil = GetTime() + 4
   Hud.Refresh()
+  -- (les icônes sont peut-être déjà affichées par l'aperçu précédent : l'onde repart quand même)
+  for _, f in ipairs(procs) do
+    if f.on then
+      f.pop = 1
+      if ns.db.flash and f.decorDef then f.echoT0 = GetTime() end
+    end
+  end
 end
 
 -- ------------------------------------------------------------------ mise en page
@@ -796,8 +806,9 @@ function Hud.Build()
     f.def, f.vis, f.on = def, 0, false
     f.decor = UI.Tex(f, "BACKGROUND", nil, def.color, 1, nil, -1)
     f.decor:SetPoint("CENTER")
-    f.echo = UI.Tex(f, "BACKGROUND", nil, def.color, 0, "ADD", -1)
+    f.echo = UI.Tex(f, "BACKGROUND", nil, def.color, 1, "ADD", -1)
     f.echo:SetPoint("CENTER")
+    f.echo:SetAlpha(0)
     f:SetFrameLevel(level + 4)
     f.ring:SetVertexColor(def.color[1], def.color[2], def.color[3], 1)
     f:SetAlpha(0)

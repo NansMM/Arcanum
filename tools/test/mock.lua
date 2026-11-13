@@ -346,6 +346,7 @@ function Texture:SetTexCoord(...) for i = 1, select("#", ...) do num((select(i, 
 function Texture:SetVertexColor(r, g, b, a)
   numOrSecret(r, "r"); numOrSecret(g, "g"); numOrSecret(b, "b"); if a ~= nil then numOrSecret(a, "a") end
   self._color = { r, g, b, a }
+  if a ~= nil then self._alpha = a end   -- comme en jeu : l'opacité donnée ici est celle de SetAlpha
 end
 function Texture:SetBlendMode(m) if m ~= "ADD" and m ~= "BLEND" then error("fusion invalide", 2) end end
 function Texture:SetDesaturated(v) self._desat = v end

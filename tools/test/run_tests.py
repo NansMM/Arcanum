@@ -682,6 +682,8 @@ def main():
     check(left.decor._desat is True and not right.decor._desat,
           "le même arc des deux côtés : passé en gris et teinté pour les Idées claires, tel quel pour le Barrage")
     check(left.echo._tex == 449486 and left.echo._desat is True, "l'onde lumineuse reprend l'image du décor")
+    check(left.echo._alpha == 0 and right.echo._alpha == 0,
+          "changer de décor ne laisse pas l'écho allumé par-dessus (il rendait l'aperçu trop lumineux)")
     check(abs(left.decor._h - 256) < 12 and abs(left.decor._w - 128) < 6
           and left.decor._points[1][4] == -48 and right.decor._points[1][4] == 48,
           "de grands arcs, du côté extérieur de chaque proc")
@@ -739,6 +741,13 @@ def main():
     f.run('Mock.ns.Hud.PreviewDecor()')
     f.M.advance(0.6)
     check(left.on is True and right.on is True and hud.fight._alpha > 0.9, "aperçu du décor : les deux procs s'affichent hors combat")
+    f.M.advance(0.3)
+    check(left.echo._alpha == 0, "l'onde de l'aperçu est finie : il ne reste que le décor")
+    f.run('Mock.ns.Hud.PreviewDecor()')
+    f.M.advance(0.2)
+    check(0 < left.echo._alpha < 0.8, "un nouvel aperçu relance l'onde, même si les procs sont déjà affichés")
+    f.run('Mock.ns.Set("decor", "runes")')
+    check(left.echo._alpha == 0, "et changer de décor pendant l'aperçu éteint l'écho")
     f.M.advance(5.5)
     check(left.on is False and right.on is False, "puis disparaissent au bout de quelques secondes")
     f.run('SlashCmdList.ARCANUM("verrou")')

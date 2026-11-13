@@ -1,5 +1,10 @@
 # Historique d'Arcanum
 
+## 1.3.2 — 13 novembre 2026
+
+- Corrigé : dans l'aperçu des réglages, le décor des procs était trop lumineux. L'écho qui sert d'onde lumineuse restait allumé par-dessus le décor après un changement de décor ou de réglage, jusqu'au proc suivant.
+- Chaque aperçu relance l'onde, même si les deux procs sont déjà affichés.
+
 ## 1.3.1 — 13 novembre 2026
 
 - L'onde lumineuse à l'arrivée d'un proc est dans le thème du décor choisi : c'est un écho de ce décor, qui s'élargit et s'efface, au lieu d'un anneau. Sans décor, l'anneau reste.
