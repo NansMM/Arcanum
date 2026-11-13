@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Aperçu du HUD d'Arcanum : compose les vraies textures de l'addon selon la mise en page de UI/Hud.lua.
 
+Trois scènes : en combat (procs de part et d'autre du personnage, charges au-dessus), hors combat (rappels
+sous le personnage), et le moment du burst.
+
 Ce n'est pas une capture du jeu : les icônes de sorts et les textes sont remplacés par des aplats.
 Sert à juger les formes, les couleurs et les halos sans lancer WoW. Aucune dépendance.
 Usage : python tools/preview.py   ->   docs/apercu.png
@@ -14,8 +17,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MEDIA = os.path.join(ROOT, "Arcanum", "Media")
 OUT = os.path.join(ROOT, "docs", "apercu.png")
 
-K = 2.4                      # échelle du rendu
-W, H = int(848 * K), int(216 * K)
+K = 2.0                      # échelle du rendu
+W, H = int(960 * K), int(400 * K)
 
 C = dict(
     ink=(0.030, 0.024, 0.066), socket=(0.130, 0.108, 0.240), edge=(0.470, 0.380, 0.860),
@@ -162,85 +165,54 @@ def round_icon(cx, cy, size, tint, ring, glow=0.0, cooldown=0.0):
     blit("circle-edge", cx, cy, size + 4, size + 4, ring, 0.95)
 
 
-def hud(cx, cy, stacks, target, reason, tint, window, cooldowns, procs=(), stage=None, cue=False):
-    """Le cercle tel que le dispose UI/Hud.lua."""
-    R = 62
-    S = R / 0.465
-    urgent = reason is not C["arcane"]
+def scene(cx, cy, stacks=0, target=2, window=0.0, clear=None, barrage=None, cue=False, reminders=0, spread=110):
+    """Les quatre zones autour du personnage, telles que les dispose UI/Hud.lua (écartement réduit)."""
+    # le personnage (une silhouette : il n'appartient pas au HUD)
+    body = (0.16, 0.15, 0.24)
+    blit("circle", cx, cy + 62, 76, 16, (0.08, 0.07, 0.14), 0.9)
+    blit("roundsq", cx, cy + 22, 40, 62, body, 0.95)
+    blit("circle", cx, cy - 24, 30, 30, body, 0.95)
+    # procs : Idées claires à gauche, Barrage de projectiles à droite (temps restant en voile)
+    for side, proc, col in ((-1, clear, C["clear"]), (1, barrage, C["barrage"])):
+        if proc is not None:
+            round_icon(cx + side * spread, cy, 64, col, col, glow=0.40, cooldown=1 - proc)
+    # charges : un cristal par charge visée (un de plus quand le jeu en offre une), et la barre de leur fenêtre
+    top = cy - spread * 0.9
     full = stacks >= target
     col = C["hot"] if full else C["arcane"]
-    # (anneau : piste sombre sous l'arc de la fenêtre ; en or quand c'est le moment du burst)
-    line = mix(C["edge"], C["power"], 0.95) if cue else mix(C["edge"], reason, 0.55)
-
-    def on_ring(angle, radius=R):
-        a = math.radians(angle)
-        return cx + radius * math.cos(a), cy - radius * math.sin(a)
-
-    blit("circle", cx, cy, 2 * R + 6, 2 * R + 6, C["ink"], 0.34)
-    blit("ring", cx, cy, S, S, line, 0.85 if (cue or stacks == 0) else 0.32)
-    if stacks > 0:
-        blit("arc", cx, cy, S, S, col, 1, sweep=window)
-    if stage is None:
-        round_icon(cx, cy, 64, tint, reason, glow=0.35 if urgent else 0.0)
-    else:
-        # mode suivi seul : les procs actifs en grandes icônes au centre
-        size = (56, 40, 32)[min(len(stage), 3) - 1] if stage else 0
-        x = cx - (len(stage) - 1) * (size + 6) / 2
-        for pcol, left in stage:
-            round_icon(x, cy, size, pcol, pcol, glow=0.40, cooldown=1 - left)
-            x += size + 6
-        if cue and not stage:   # l'icône du sort de burst à lancer, cerclée d'or
-            round_icon(cx, cy, 56, C["power"], C["power"], glow=0.50)
-    # un cristal par charge visée (un de plus quand le jeu en offre une), au-dessus du cercle
     shown = min(4, max(target, stacks))
-    for i in range(shown):
-        x, y = on_ring(90 + ((shown + 1) / 2 - (i + 1)) * 22, R + 20)
-        on = i < stacks
-        if on:
-            blit("glow", x, y, 22 * 3, 28 * 2.6, col, 0.65 if full else 0.40, add=True)
-        blit("diamond", x, y, 22, 28, C["socket"], 0.95)
-        if on:
-            blit("diamond", x, y, 22, 28, col, 1)
-            blit("spark", x - 4, y - 6, 18, 18, C["white"], 0.85 if full else 0.5, add=True)
-        blit("diamond-edge", x, y, 22, 28, C["arcaneHi"] if on else C["edge"], 1 if on else 0.45)
-    # gros temps de recharge, sertis à gauche et à droite
-    for angle, cd in zip((200, 340), cooldowns):
-        ctint, active, cooldown = cd[:3]
-        x, y = on_ring(angle)
-        if len(cd) > 3 and cd[3]:   # bientôt prête : en couleurs, bord doré fixe
-            round_icon(x, y, 28, ctint, C["power"], glow=0.22, cooldown=cooldown)
-            blit(None, x, y, 6, 10, C["power"], 0.95)   # secondes restantes (aplat)
-        elif cue and cooldown == 0:   # c'est le moment : la gemme grossit et bat en or
-            round_icon(x, y, 35, ctint, C["power"], glow=0.85, cooldown=0)
-        else:
-            round_icon(x, y, 28, ctint, active or C["edge"], glow=0.7 if active else 0.0, cooldown=cooldown)
-    # orbes de proc, en bas : la couleur seule
-    for angle, (pcol, left) in zip((250, 290), procs):
-        if pcol:
-            x, y = on_ring(angle)
-            blit("glow", x, y, 16 * 2.6, 16 * 2.6, pcol, 0.45, add=True)
-            blit("circle", x, y, 20, 20, C["ink"], 0.96)
-            blit("circle", x, y, 16, 16, pcol, 1)
-            blit("circle", x, y, 16, 16, (0.02, 0.01, 0.06), 0.76, sweep=1 - left)
-            blit("circle-edge", x, y, 20, 20, mix(pcol, C["white"], 0.55), 1)
+    if stacks > 0 or cue or clear is not None or barrage is not None:
+        for i in range(shown):
+            x = cx + (i + 1 - (shown + 1) / 2) * 32
+            on = i < stacks
+            if on:
+                blit("glow", x, top, 26 * 3, 34 * 2.6, col, 0.65 if full else 0.40, add=True)
+            blit("diamond", x, top, 26, 34, C["socket"], 0.95)
+            if on:
+                blit("diamond", x, top, 26, 34, col, 1)
+                blit("spark", x - 5, top - 7, 20, 20, C["white"], 0.85 if full else 0.5, add=True)
+            blit("diamond-edge", x, top, 26, 34, C["arcaneHi"] if on else C["edge"], 1 if on else 0.45)
+    if stacks > 0:
+        by = top + 17 + 10
+        blit(None, cx, by, 126, 6, C["socket"], 0.90)
+        blit(None, cx - 62 + 124 * window / 2, by, 124 * window, 4, col, 1)
+        blit(None, cx + 62 + 16, by, 14, 7, mix(C["text"], C["ink"], 0.35), 0.9)   # secondes (aplat)
+    # burst : l'icône du sort à lancer, en or, au-dessus des charges
+    if cue:
+        round_icon(cx, top - 17 - 23 - 12, 46, C["power"], C["power"], glow=0.70)
+    # rappels avant le combat, sous le personnage
+    amber = (1.000, 0.700, 0.300)
+    for i in range(reminders):
+        x = cx + (i + 1 - (reminders + 1) / 2) * 38
+        round_icon(x, cy + spread, 30, mix(amber, C["ink"], 0.2), amber, glow=0.45)
 
 
 def main():
     background()
-    # cycle normal (Déflagration, 1 charge sur 2 visées), Barrage de projectiles, puis mode suivi seul
-    hud(118, 116, 1, 2, C["arcane"], C["arcane"], 0.86,
-        [(C["pom"], None, 0.0), (C["power"], None, 0.0)])
-    hud(322, 116, 2, 2, C["barrage"], C["barrage"], 0.55,
-        [(C["pom"], None, 0.7), (C["power"], C["power"], 0.0)],
-        procs=((C["barrage"], 0.8), (C["clear"], 0.45)))
-    # mode suivi seul : pas de conseil, les deux procs au centre
-    hud(526, 116, 2, 2, C["arcane"], C["arcane"], 0.55,
-        [(C["pom"], None, 0.0), (C["power"], None, 0.06, True)],
-        stage=((C["barrage"], 0.8), (C["clear"], 0.45)))
-    # mode suivi seul : charges visées atteintes, c'est le moment du burst
-    hud(730, 116, 2, 2, C["arcane"], C["arcane"], 0.70,
-        [(C["pom"], None, 0.0), (C["power"], None, 0.0)],
-        stage=(), cue=True)
+    # en combat, deux procs et trois charges sur quatre ; hors combat, deux rappels ; le moment du burst
+    scene(170, 215, stacks=3, target=4, window=0.62, clear=0.6, barrage=0.85)
+    scene(480, 215, reminders=2)
+    scene(790, 215, stacks=4, target=4, window=0.45, cue=True)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     raw = bytearray()

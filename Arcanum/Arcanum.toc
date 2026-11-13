@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: |cffb07cffArcanum|r
-## Notes: HUD du mage Arcanes : le prochain sort à lancer, les charges de Déflagration des Arcanes, les procs et les gros temps de recharge.
+## Notes: HUD du mage Arcanes, autour du personnage : Idées claires à gauche, Barrage de projectiles à droite, charges de Déflagration des Arcanes en haut, rappels avant le combat en bas, et le moment du burst.
 ## Author: Nans
-## Version: 0.12.2
+## Version: 1.0.0
 ## IconTexture: Interface\AddOns\Arcanum\Media\logo
 ## SavedVariables: ArcanumDB
 

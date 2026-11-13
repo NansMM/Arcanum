@@ -1,5 +1,16 @@
 # Historique d'Arcanum
 
+## 1.0.0 — 13 novembre 2026
+
+Arcanum repart sur de nouvelles bases : le cercle laisse la place à quatre zones autour du personnage.
+
+- À gauche du personnage, les Idées claires ; à droite, le Barrage de projectiles : une grande icône avec le temps restant, seulement quand le proc est actif.
+- En haut, les charges de Déflagration des Arcanes : un cristal par charge visée, et dessous la barre des 18 secondes de leur fenêtre, avec les secondes.
+- Au-dessus des charges, au moment du burst seulement : l'icône du sort à lancer, en or (Pouvoir des Arcanes, puis le Courroux de la macro de burst). Le son, l'onde et le rappel après 6 secondes sont conservés.
+- En bas, hors combat : les rappels de ce qui manque. Intelligence des Arcanes et armure, comme avant, plus l'eau et la nourriture quand les sacs n'en ont plus. Le rappel de gemme de mana est retiré. Au repos en ville, les rappels ne s'affichent pas.
+- Nouveau réglage « Écartement » (`/arc ecart 150`) : la distance entre le personnage et les zones. Le HUD est recentré sur l'écran à la mise à jour.
+- Retirés : le cercle, le conseil du prochain sort (et `/arc conseil`, `/arc aoe`), les gemmes de temps de recharge, la barre de mana, et les réglages qui allaient avec.
+
 ## 0.12.2 — 12 novembre 2026
 
 - Mode suivi seul : avec la macro de burst (réglage « Burst en une icône », actif par défaut), l'icône du centre montre directement le Courroux des Arcanes au lieu d'Eurêka puis de la Présence spirituelle : une seule touche fait tout. Le Pouvoir des Arcanes, qui n'est pas dans la macro, garde son icône.

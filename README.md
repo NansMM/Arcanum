@@ -1,21 +1,21 @@
 # Arcanum
 
-Le HUD du mage Arcanes pour World of Warcraft: Forever : un cercle qui dit quel sort lancer ensuite.
+Le HUD du mage Arcanes pour World of Warcraft: Forever : tes procs, tes charges et le moment du burst, autour de ton personnage.
 
-Arcanum affiche sous ton personnage un cercle, avec au centre le prochain sort à lancer :
+Arcanum place chaque information d'un côté de ton personnage, pour que tu la lises sans quitter le combat des yeux :
 
 ![Aperçu du HUD d'Arcanum](docs/apercu.png)
 
-*Aperçu composé avec les textures de l'addon (les icônes de sorts sont remplacées par des aplats). De gauche à droite : le cycle normal, un Barrage de projectiles, puis le mode suivi seul avec deux procs au centre (et, à droite, une gemme bientôt prête), et au moment du burst. En jeu : `/arc demo`.*
+*Aperçu composé avec les textures de l'addon (le personnage est une silhouette, les icônes de sorts sont remplacées par des aplats, les zones sont plus rapprochées qu'en jeu). De gauche à droite : en combat avec deux procs, hors combat avec deux rappels, et le moment du burst. En jeu : `/arc demo`.*
 
-- **Au centre** : le sort à lancer ensuite. Sa couleur, reprise par l'anneau, dit pourquoi : violet pour le cycle normal, rose pour un Barrage de projectiles, bleu clair pour des Idées claires, or pour les gros dégâts (Eureka, Présence spirituelle, Courroux instantané), bleu pour le mana (gemme, Évocation, sort moins cher, baguette), orange en multi-cibles. Pendant une incantation il ne change pas : un voile se retire à mesure que le sort part, puis il passe au suivant (une option permet au contraire d'anticiper).
-- **Au-dessus du cercle, les cristaux** : un par charge de Déflagration des Arcanes visée (deux par défaut). Ils s'éclaircissent quand la cible est atteinte ; un cristal de plus apparaît quand le jeu t'offre une charge.
-- **L'arc lumineux autour de l'anneau** : les 18 secondes de la fenêtre des charges, qui se vide.
-- **À gauche et à droite, sertis dans l'anneau** : tes gros temps de recharge, avec leur icône (Présence spirituelle, Eureka du gnome, Pouvoir des Arcanes, Berserker ou Fureur sanguinaire, selon ce que ton personnage connaît). Dix secondes avant la fin d'une recharge, la gemme reprend ses couleurs, prend un bord doré et compte les secondes : tu sais que tu peux garder tes charges pour elle (réglage « Recharge bientôt finie »).
-- **En bas de l'anneau** : un orbe de couleur par proc actif, rose pour le Barrage de projectiles, bleu clair pour les Idées claires, avec un voile qui grandit à mesure que le proc s'épuise.
-- **Sous le cercle, hors combat** : ce qu'il manque avant d'engager (Intelligence des Arcanes, armure, gemme de mana).
-- **L'icône rougit** quand la cible est hors de portée du sort conseillé.
-- En option : une barre de mana.
+- **À gauche : les Idées claires. À droite : le Barrage de projectiles.** Une grande icône (celle du sort que le proc améliore : Déflagration des Arcanes, Projectiles des Arcanes), cerclée de la couleur du proc, bleu clair ou rose, avec le temps restant en chiffres et un voile qui grandit à mesure que le proc s'épuise. Pas de proc : le côté reste vide.
+- **En haut : les charges de Déflagration des Arcanes.** Un cristal par charge visée (deux par défaut, réglable à 3 ou 4), qui s'éclaircit quand la cible est atteinte ; un cristal de plus apparaît quand le jeu t'offre une charge. Dessous, une barre se vide pendant les 18 secondes de la fenêtre des charges, avec les secondes restantes ; elle rougit quand la fenêtre va se fermer.
+- **Au-dessus des charges, seulement au bon moment : le burst.** Voir plus bas.
+- **En bas, hors combat : les rappels.** L'icône de ce qu'il manque avant d'engager : Intelligence des Arcanes, armure, eau, nourriture. L'eau et la nourriture sont rappelées quand tes sacs n'en ont plus (invoquées ou achetées). Rien ne manque : rien ne s'affiche. Au repos en ville, les rappels attendent que tu sortes ou que tu cibles un ennemi.
+
+Le HUD est centré sur l'écran, là où se tient ton personnage. Le réglage « Écartement » (ou `/arc ecart 150`) éloigne ou rapproche les quatre zones ; `/arc verrou` permet de déplacer l'ensemble.
+
+**Le moment du burst.** Pour ne pas oublier tes gros temps de recharge, Arcanum te dit quand les claquer : au bon moment (charges visées atteintes, Courroux prêt, aucun proc à dépenser d'abord), l'icône du sort à lancer apparaît au-dessus des charges, cerclée d'or, avec une onde dorée et un son. C'est le Pouvoir des Arcanes dès qu'il est prêt, puis le Courroux des Arcanes : la macro de burst (`/arc macro`) lance Eurêka et la Présence spirituelle avec lui. Sans la macro (réglage « Macro de burst » coupé), l'icône déroule Eurêka, puis la Présence spirituelle, puis le Courroux. Si le signal reste allumé 6 secondes sans que tu lances un de ces sorts, l'onde et le son sont redonnés une fois (réglage « Rappel du burst », de 2 à 12 secondes, ou « non »). Le réglage « Signaler le moment du burst » coupe le tout.
 
 **Les sons.** Un son à l'arrivée d'un proc, un autre quand c'est le moment du burst. Ce sont des sons du jeu : le ping de la mini-carte pour un Barrage de projectiles, la notification Battle.net pour des Idées claires, la Témérité du guerrier pour le burst. `/arc sons` les fait entendre.
 
@@ -23,27 +23,7 @@ Tu peux en choisir d'autres dans les réglages (`/arc`) : chaque signal a sa lig
 
 Pour un son hors liste : `/arc son 888` fait entendre le son de cet identifiant, `/arc son burst 888` le choisit pour le moment du burst (`clear` et `barrage` pour les procs), `/arc son burst` revient au son par défaut. Les identifiants se trouvent dans la base de sons de Wowhead (le nombre dans l'adresse de la page). Tu peux aussi déposer tes propres fichiers `.ogg` dans `Arcanum\Sounds` (voir le LISEZMOI du dossier).
 
-**Mode suivi seul.** Si tu préfères décider toi-même, le réglage « Prochain sort conseillé » (ou `/arc conseil`) retire le conseil. Le centre du cercle devient alors la scène des procs : chaque proc actif s'y affiche en grande icône (celle du sort qu'il améliore), cerclée de sa couleur, avec le temps restant. Les charges, leur fenêtre et les gros temps de recharge restent à leur place.
-
-Dans ce mode, Arcanum te dit quand même **quand claquer ton burst**, pour ne pas l'oublier : au bon moment (charges visées atteintes, Colère prête, aucun proc à dépenser d'abord), l'icône du sort à lancer s'affiche au centre du cercle, cerclée d'or (le Pouvoir des Arcanes, puis le Courroux : la macro de burst lance Eurêka et la Présence spirituelle avec lui ; sans la macro, réglage « Burst en une icône » coupé, Eurêka, puis la Présence spirituelle, puis le Courroux), les gemmes des temps de recharge prêts grossissent et battent en or, l'anneau passe à l'or, une onde dorée part du cercle et le son du burst retentit. Une gemme a donc quatre états : grisée (en recharge), cerclée d'or avec un chiffre (prête dans quelques secondes), nette (prête, mais ce n'est pas le moment), dorée, agrandie et battante (maintenant). Si le signal reste allumé 6 secondes sans que tu lances un de ces sorts, l'onde et le son sont redonnés une fois (réglage « Rappel du burst », de 2 à 12 secondes, ou « non »). Le réglage « Signaler le moment du burst » coupe le tout.
-
-L'ordre conseillé part du guide Method (patch 1.60.1), adapté à ce qui se mesure en jeu : chaque charge double le coût de la Déflagration suivante, et rien ne les consomme pendant leurs 18 secondes. Arcanum vise donc un nombre de charges (**2 par défaut**, réglable à 3 ou 4 dans `/arc`), puis en profite avec des sorts qui ne coûtent pas plus cher :
-
-1. Pouvoir des Arcanes dès qu'il est prêt.
-2. Projectiles des Arcanes sur un Barrage de projectiles : ils sont gratuits, et un nouveau proc serait perdu tant que celui-ci n'est pas dépensé.
-3. Déflagration sur des Idées claires : c'est le sort le plus cher, elle devient gratuite et la charge en plus aussi. (Le Courroux dépenserait le proc pour deux fois moins de mana économisé.) Si le proc arrive pendant l'incantation d'un Éclair de givre ou d'une Boule de feu, c'est ce sort qui le dépenserait : un bord blanc bat alors vite autour de l'icône pour te dire d'interrompre (réglable).
-4. Hors combat, sans charge : Courroux en ouverture. Le premier sort ne coûte pas de temps de combat, autant y mettre la plus longue incantation (réglable).
-5. Charges visées atteintes, Courroux prêt : Eureka, puis Présence spirituelle, puis Courroux des Arcanes. Avec la macro de burst (`/arc macro`), une seule touche fait les trois : Arcanum montre alors directement le Courroux, en or (réglable).
-6. Gemme de mana, puis Évocation, sous 15 % de mana.
-7. Sous les charges visées : Déflagration, sauf si la fenêtre des charges se ferme dans moins de 4 secondes (une charge de plus ne servirait à rien).
-8. Charges visées atteintes : Éclair de givre ou Boule de feu (le moins cher), qui profitent des charges et peuvent déclencher un Barrage. Au rang 1 par défaut, signalé par un « 1 » sur l'icône : deux fois plus de lancers, donc de chances de Barrage, pour moins de la moitié du mana et environ 17 % de dégâts en moins. Le réglage « max » conseille le dernier rang.
-9. Si le mana ne suit plus : Courroux, gemme de mana, Évocation, le sort le moins cher, la baguette.
-
-Un réglage retire les gros temps de recharge du conseil (Pouvoir des Arcanes, Eureka, Présence spirituelle), pour les garder sous la main.
-
-**Plusieurs ennemis.** Le mode multi-cibles s'active tout seul quand tu lances un sort de zone, et retombe quand tu relances un sort mono-cible, après 8 secondes sans sort de zone, ou à la fin du combat ; `/arc aoe` le force avant le pull. Le cercle passe à l'orange et conseille : Choc de flammes en ouverture, Eureka, Présence spirituelle pour un Choc de flammes instantané, puis Explosion des Arcanes en boucle. Pas de montée de charges : l'Explosion ne reçoit que 14 % des dégâts des sorts, les charges ne se remboursent pas.
-
-La variante Feu ajoute l'Explosion pyrotechnique sur 3 charges d'Échauffement et le Trait de feu, si tu as ces sorts.
+**Ce qu'Arcanum ne fait plus.** Jusqu'à la version 0.12, Arcanum était un cercle qui conseillait le prochain sort. Depuis la 1.0 il ne conseille plus le cycle : il montre tes procs, tes charges, le moment du burst et tes rappels, et te laisse jouer.
 
 ## Installation
 
@@ -57,17 +37,17 @@ Il ne se réveille que sur un mage. Après une mise à jour qui ajoute des textu
 
 | Commande | Effet |
 |---|---|
-| `/arc` | Réglages (taille, ce qui s'affiche, sons, charges visées, rang du remplissage, gros temps de recharge) |
-| `/arc demo` | Le HUD joue un cycle complet dans le mode choisi, sans combattre (marche sur toute classe) |
+| `/arc` | Réglages (ce qui s'affiche, taille, écartement, sons, burst, charges visées) |
+| `/arc demo` | Le HUD joue un cycle complet, sans combattre (marche sur toute classe) |
 | `/arc verrou` | Déplacer le HUD, puis le fixer |
-| `/arc conseil` | Affiche ou masque le prochain sort conseillé (sans lui : charges, procs et recharges seulement) |
-| `/arc aoe` | Mode multi-cibles, jusqu'à la fin du combat |
+| `/arc taille 120` | Taille du HUD, en pourcentage (de 60 à 180) |
+| `/arc ecart 150` | Distance entre le personnage et les zones (de 80 à 320) |
 | `/arc sons` | Fait entendre les trois sons (Idées claires, Barrage, moment du burst) |
 | `/arc son 3071` | Fait entendre un son du jeu ; `/arc son burst 3071` le choisit pour un signal (`clear`, `barrage` ou `burst`), `/arc son burst voix` le fait dire par la voix du jeu |
 | `/arc macro` | Crée la macro de burst (Eureka + Présence spirituelle + Courroux) avec les noms exacts que le jeu donne aux sorts |
-| `/arc diag` | Rapport à copier : sorts reconnus, signaux lus, derniers conseils et changements d'état |
+| `/arc diag` | Rapport à copier : sorts reconnus, signaux lus, derniers changements d'état |
 
-**Comment il voit les procs en combat.** Forever cache les auras aux addons pendant le combat. Arcanum s'appuie sur ce qui reste lisible : tes propres sorts lancés (chaque Déflagration ajoute une charge, pendant les 18 s que dure la fenêtre ouverte par la première), le coût en mana annoncé par le jeu (Projectiles gratuits = Barrage, tout gratuit = Idées claires, et le coût de la Déflagration, +100 % par charge, donne le nombre exact de charges), la surbrillance des boutons, et les icônes du Gestionnaire de temps de recharge de Blizzard si tu y suis ces buffs (Options > Améliorations de jeu). Hors combat il relit les vraies auras et apprend les durées et les coûts réels. Il conseille, il ne lance rien.
+**Comment il voit les procs en combat.** Forever cache les auras aux addons pendant le combat. Arcanum s'appuie sur ce qui reste lisible : tes propres sorts lancés (chaque Déflagration ajoute une charge, pendant les 18 s que dure la fenêtre ouverte par la première), le coût en mana annoncé par le jeu (Projectiles gratuits = Barrage, tout gratuit = Idées claires, et le coût de la Déflagration, +100 % par charge, donne le nombre exact de charges), la surbrillance des boutons, et les icônes du Gestionnaire de temps de recharge de Blizzard si tu y suis ces buffs (Options > Améliorations de jeu). Hors combat il relit les vraies auras et apprend les durées et les coûts réels. Il affiche, il ne lance rien.
 
 ## Développement
 

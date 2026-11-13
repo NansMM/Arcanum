@@ -9,7 +9,7 @@ ns.ADDON = ADDON
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "0.12.2"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "1.0.0"
 
 local pcall, type, pairs = pcall, type, pairs
 
@@ -118,27 +118,24 @@ ns.DEFAULTS = {
   enabled = true,
   locked = true,
   scale = 1.0,
-  point = { "CENTER", "CENTER", 0, -170 },   -- ancre, ancre de l'écran, x, y
+  point = { "CENTER", "CENTER", 0, 0 },      -- ancre, ancre de l'écran, x, y : le HUD est centré sur le personnage
+  spread = 150,           -- écartement : distance entre le personnage et les zones (procs, charges, rappels)
   showIdle = false,       -- afficher aussi hors combat, sans cible
   idleAlpha = 0.35,       -- opacité hors combat quand showIdle est actif
-  showMana = false,       -- barre de mana sous le HUD
-  showCooldowns = true,   -- gros temps de recharge de part et d'autre (Présence spirituelle, Eureka…)
-  showNext = true,        -- conseiller le prochain sort au centre ; sinon le HUD ne fait que suivre charges, procs et recharges
-  showCharges = true,     -- cristaux de charge au-dessus du prochain sort
-  showProcs = true,       -- pastilles de proc sous le prochain sort (Barrage de projectiles, Idées claires)
+  showCharges = true,     -- cristaux de charge au-dessus du personnage
+  showProcs = true,       -- icônes de proc : Idées claires à gauche, Barrage de projectiles à droite
   fillerRank = 1,         -- rang de l'Éclair de givre de remplissage : 1 (économe) ou "max" (plus de dégâts)
-  burstOne = true,        -- montrer directement le Courroux pendant Eureka + Présence spirituelle (macro de burst) : conseil, et icône de burst du mode suivi seul
-  showReminders = true,   -- hors combat, signaler une amélioration manquante ou l'absence de gemme de mana
+  burstOne = true,        -- macro de burst (Eureka + Présence spirituelle + Courroux) : l'icône de burst montre directement le Courroux
+  showReminders = true,   -- hors combat, signaler ce qui manque : Intelligence des Arcanes, armure, eau, nourriture
   cutForClear = true,     -- conseiller d'interrompre un sort bon marché quand des Idées claires arrivent
   openWrath = true,       -- hors combat, conseiller le Courroux pour engager
-  adviseBurst = true,     -- signaler le moment du burst (Pouvoir des Arcanes, Eureka, Présence spirituelle) : au centre en mode conseil, sur les gemmes en suivi seul
+  adviseBurst = true,     -- signaler le moment du burst (Pouvoir des Arcanes, Eureka, Présence spirituelle) : l'icône du sort à lancer, au-dessus des charges
   anticipate = false,     -- pendant une incantation, montrer déjà le sort d'après (sinon le conseil attend la fin)
   targetStacks = 2,       -- charges visées (2, 3 ou 4) : on monte jusque-là, puis Colère et sorts bon marché
   sound = true,
-  soonSeconds = 10,       -- une gemme passe à l'or, avec un chiffre, quand sa recharge finit dans moins de N secondes (0 : jamais)
   burstRemind = 6,        -- le signal de burst est redonné s'il reste allumé N secondes sans rien lancer (0 : jamais)
   soundKit = {},          -- sons du jeu choisis à la place de ceux d'origine : [clear|barrage|burst] = identifiant, ou "voix"
-  flash = true,           -- petite onde autour du cercle quand un proc arrive
+  flash = true,           -- petite onde autour de l'icône quand un proc ou le moment du burst arrive
 }
 
 -- Ce que l'addon apprend en jeu quand les données sont lisibles (hors combat) : durées et coûts réels.
@@ -170,7 +167,7 @@ function ns.InitDB()
   copyDefaults(db, ns.DEFAULTS)
   if type(db.learn) ~= "table" then db.learn = {} end
   copyDefaults(db.learn, LEARN_DEFAULTS)
-  if type(db.point) ~= "table" or #db.point < 4 then db.point = { "CENTER", "CENTER", 0, -170 } end
+  if type(db.point) ~= "table" or #db.point < 4 then db.point = { "CENTER", "CENTER", 0, 0 } end
   local saved = db.version or 1   -- version des réglages enregistrés, avant mise à niveau
   if saved < 3 then   -- 0.3 : « charges visées » remplace le seuil du Courroux et « garder le mana »
     if db.wrathStacks == 2 or db.wrathStacks == 3 then db.targetStacks = db.wrathStacks end
@@ -181,10 +178,12 @@ function ns.InitDB()
   if type(db.learn.dur) == "table" then db.learn.dur.blast = nil end   -- remplacé par abWindow (fenêtre de 18 s)
   db.spin = nil   -- 0.8 : plus de runes
   if type(db.soundKit) ~= "table" then db.soundKit = {} end
-  if saved < 2 then   -- 0.2 : HUD épuré, la barre de mana n'est plus affichée d'office
-    db.showMana = false
+  if saved < 5 then   -- 1.0 : HUD en quatre zones autour du personnage, recentré ; réglages de l'ancien cercle oubliés
+    db.point = { "CENTER", "CENTER", 0, 0 }
+    db.showNext, db.showMana, db.showCooldowns, db.soonSeconds = nil, nil, nil, nil
   end
-  db.version = 4
+  if type(db.spread) ~= "number" or db.spread < 80 or db.spread > 320 then db.spread = 150 end
+  db.version = 5
   ns.db = db
   return db
 end

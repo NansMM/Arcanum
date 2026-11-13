@@ -120,7 +120,6 @@ def main():
 
     print("En combat : auras cachées, charges suivies par les sorts lancés")
     g.run('Mock.setCooldown(12042, 180)')   # Pouvoir des Arcanes déjà utilisé
-    g.run('Mock.ns.Set("showMana", true)')                                  # barre de mana : en option
     g.run('Mock.ns.Set("targetStacks", 4)')                                  # ce combat vise 4 charges
     g.run('Mock.ns.Set("burstOne", false)')                                  # on suit la séquence sort par sort
     g.M.advance(0.3)
@@ -159,8 +158,6 @@ def main():
     g.M.expire()
     g.M.advance(0.3)
     check(g.S.stacks == 0, "fenêtre de 18 s non prolongée par les Déflagrations suivantes")
-    check((g.M.widgetCalls.DurationObject or 0) > 0, "SetCooldownFromDurationObject utilisé en combat")
-    check((g.M.widgetCalls.SecretValue or 0) > 0, "mana secret confié à la barre sans être lu")
 
     print("En combat : procs vus par le coût des sorts")
     g.cast(AB)
@@ -168,8 +165,9 @@ def main():
     g.M.advance(0.3)
     check(g.S.barrage.active and g.S.barrage.source == "coût", "Barrage de projectiles détecté (Projectiles gratuits)")
     check(g.next() == ("missiles", "barrage"), "conseil : Projectiles (Barrage)")
-    badge = g.run("for _, f in ipairs(Mock.ns.Hud.badges) do if f.def.key == 'barrage' then return f end end")
-    check(badge.on is True and badge._shown is True and badge.cd._cd[2] == 15, "gemme du Barrage affichée, avec ses 15 s")
+    badge = g.run("for _, f in ipairs(Mock.ns.Hud.procs) do if f.def.key == 'barrage' then return f end end")
+    check(badge.on is True and badge._shown is True and badge.cd._cd[2] == 15 and badge._points[1][4] > 0,
+          "icône du Barrage affichée à droite du personnage, avec ses 15 s")
     check(not g.S.clear.active, "pas de fausse alerte Idées claires")
     g.M.proc("Idées claires", 12536)
     g.M.advance(0.3)
@@ -188,7 +186,7 @@ def main():
     check(not g.S.barrage.active, "Barrage consommé par les Projectiles")
     g.M.advance(1.0)
     check(not g.S.barrage.active, "pas de retour fantôme du Barrage")
-    check(badge.on is False and badge._shown is False, "gemme du Barrage retirée")
+    check(badge.on is False and badge._shown is False, "icône du Barrage retirée")
     check(g.S.stacks == 2, "2 charges, comptées malgré les procs")
 
     print("En combat : canalisation des Projectiles, une salve après l'autre")
@@ -363,18 +361,12 @@ def main():
     check(t.next() == ("wrath", "burst"), "puis Courroux instantané")
     t.cast(WRATH)
     check(t.next() == ("frostbolt", "arcane"), "Courroux en recharge : Éclair de givre, pas de 3e Déflagration")
-    check(t.S.nextId == FROSTBOLT_1 and t.ns.Hud.main.label == "1", "remplissage au rang 1, signalé sur l'icône")
+    check(t.S.nextId == FROSTBOLT_1, "remplissage au rang 1")
     t.run('Mock.ns.Set("fillerRank", "max")')
     t.M.advance(0.2)
-    check(t.S.nextId == FROSTBOLT_5 and t.ns.Hud.main.label == "", "réglage « max » : dernier rang, sans mention")
+    check(t.S.nextId == FROSTBOLT_5, "réglage « max » : dernier rang")
     t.run('Mock.ns.Set("fillerRank", 1)')
     t.M.advance(0.2)
-    t.run("Mock.inRange = false")
-    t.M.advance(0.2)
-    check(t.ns.Hud.main.far is True, "cible hors de portée : l'icône rougit")
-    t.run("Mock.inRange = true")
-    t.M.advance(0.2)
-    check(t.ns.Hud.main.far is False, "cible à portée : l'icône retrouve sa couleur")
     t.M.startCast(116, 1.5)
     t.M.proc("Barrage de projectiles", 400588)
     t.M.advance(0.5)
@@ -431,9 +423,9 @@ def main():
     a.run('Mock.setCooldown(12042, 180)')
     a.M.target = True
     a.M.advance(0.3)
-    a.run('SlashCmdList.ARCANUM("aoe")')
+    a.run('Mock.ns.State.SetAoe(true)')
     a.M.advance(0.2)
-    check(a.S.aoe and a.next() == ("flamestrike", "aoe"), "/arc aoe avant le pull : Choc de flammes en ouverture")
+    check(a.S.aoe and a.next() == ("flamestrike", "aoe"), "mode multi-cibles forcé avant le pull : Choc de flammes en ouverture")
     a.cast(FLAMESTRIKE)
     a.M.setCombat(True)
     a.M.advance(0.3)
@@ -473,15 +465,25 @@ def main():
     r2.M.advance(1.2)
     check(list(r2.S.reminders.values()) == ["intellect", "magearmor"], "Intelligence des Arcanes et armure manquantes")
     shown = [f for f in r2.ns.Hud.reminders.values() if f.key]
-    check(len(shown) == 2 and all(f._shown for f in shown), "deux rappels affichés sous le cercle")
+    check(len(shown) == 2 and all(f._shown for f in shown) and all(f._points[1][5] < 0 for f in shown)
+          and r2.ns.Hud.prep._alpha > 0.9, "deux rappels affichés sous le personnage")
     r2.buffed()
-    r2.run("Mock.items[8008] = nil")
+    r2.run('Mock.items[8079] = nil; Mock.items[8076] = nil; Mock.fire("BAG_UPDATE_DELAYED")')
     r2.M.advance(1.2)
-    check(list(r2.S.reminders.values()) == ["gemspell"], "buffé mais sans gemme de mana : rappel de la gemme")
-    r2.run('Mock.items[8008] = 1; Mock.fire("BAG_UPDATE_DELAYED")')
+    check(list(r2.S.reminders.values()) == ["water", "food"], "buffé mais sans eau ni nourriture : deux rappels")
+    r2.run('Mock.items[1179] = 5; Mock.itemSpells[1179] = "Boisson"; Mock.fire("BAG_UPDATE_DELAYED")')
     r2.M.advance(1.2)
-    check(len(list(r2.S.reminders.values())) == 0, "tout est prêt : aucun rappel")
-    r2.run('Mock.auras["Armure du mage"] = nil')
+    check(list(r2.S.reminders.values()) == ["food"], "une eau achetée compte aussi (reconnue à son effet « Boisson »)")
+    r2.run('Mock.items[8076] = 20; Mock.fire("BAG_UPDATE_DELAYED")')
+    r2.M.advance(2.5)
+    check(len(list(r2.S.reminders.values())) == 0 and r2.ns.Hud.prep._alpha == 0, "tout est prêt : aucun rappel")
+    r2.run('Mock.resting = true; Mock.auras["Armure du mage"] = nil; Mock.fire("UNIT_AURA", "player", {})')
+    r2.M.advance(1.5)
+    check(list(r2.S.reminders.values()) == ["magearmor"] and r2.ns.Hud.prep._alpha == 0,
+          "au repos en ville : le rappel attend, sans s'afficher")
+    r2.run('Mock.resting = false')
+    r2.M.advance(0.8)
+    check(r2.ns.Hud.prep._alpha > 0.9, "sorti de la ville : le rappel s'affiche")
     r2.fight()
     r2.M.advance(1.2)
     check(len(list(r2.S.reminders.values())) == 0, "en combat : aucun rappel (les auras sont cachées)")
@@ -532,9 +534,8 @@ def main():
     i.M.advance(0.2)
     check(i.next() == ("blast", "clear") and i.S.interrupt is True,
           "Idées claires pendant un Éclair de givre : interrompre pour une Déflagration gratuite")
-    check(i.ns.Hud.main.alertOn is True, "le signal d'interruption bat sur l'icône")
     i.M.advance(0.8)                                         # il reste 0,3 s d'incantation
-    check(i.S.interrupt is False and i.ns.Hud.main.alertOn is False, "incantation presque finie : le signal s'arrête")
+    check(i.S.interrupt is False, "incantation presque finie : le signal s'arrête")
     i.M.stopCast()
     i.run('Mock.auras["Idées claires"] = nil; Mock.fire("UNIT_AURA", "player", {})')   # l'Éclair de givre l'a dépensé
     i.M.advance(0.3)
@@ -557,7 +558,7 @@ def main():
     i.M.startCast(FROSTBOLT_1, 1.5)
     i.M.proc("Idées claires", 12536)
     i.M.advance(0.3)
-    check(i.S.interrupt is True and i.next() == ("blast", "clear") and i.ns.Hud.main.alertOn is True,
+    check(i.S.interrupt is True and i.next() == ("blast", "clear"),
           "avec « Anticiper » aussi : le signal d'interruption s'affiche")
     i.M.advance(0.9)                                         # il reste 0,3 s d'incantation
     check(i.S.interrupt is False and i.next() != ("blast", "clear"),
@@ -598,78 +599,91 @@ def main():
     check(not pm.S.pom.active, "en combat, le sort lancé termine la Présence spirituelle (elle ne reste pas « active »)")
     no_errors(pm, "Présence spirituelle")
 
-    print("Mode suivi seul : pas de prochain sort")
+    print("Autour du personnage : procs, charges, burst")
     f = Game()
+    hud = f.ns.Hud
+    proc = lambda key: f.run("for _, b in ipairs(Mock.ns.Hud.procs) do if b.def.key == '%s' then return b end end" % key)
+    left, right = proc("clear"), proc("barrage")
+    check(left._points[1][4] == -150 and right._points[1][4] == 150 and left._points[1][5] == 0,
+          "Idées claires à gauche du personnage, Barrage de projectiles à droite")
     f.fight()
-    f.cast(AB)
-    check(f.S.next is not None and f.ns.Hud.main._shown is True, "d'origine : le prochain sort est conseillé au centre")
-    f.run('SlashCmdList.ARCANUM("conseil")')
     f.M.advance(0.3)
-    check(f.ns.db.showNext is False and f.S.next is None and f.ns.Hud.main._shown is False,
-          "/arc conseil : plus de conseil, l'icône centrale disparaît")
+    check(hud.fight._alpha > 0.9 and not left._shown and not right._shown, "en combat sans proc : les côtés restent vides")
     f.cast(AB)
-    check(f.S.stacks == 2 and len([c for c in f.ns.Hud.crystals.values() if c._shown]) == 2,
-          "les charges restent suivies et affichées")
+    shown = [c for c in hud.crystals.values() if c._shown]
+    check(f.S.stacks == 1 and len(shown) == 2 and all(c._points[1][5] > 100 for c in shown),
+          "les charges s'affichent au-dessus du personnage, un cristal par charge visée")
+    check(hud.bar._alpha == 1 and hud.barText._text in ("18 s", "17 s"), "sous les cristaux, la barre de leur fenêtre et ses secondes")
+    f.cast(AB)
     f.M.advance(0.4)
-    gems = {b.key: b for b in f.ns.Hud.cds.values()}
-    check(f.S.burst.on is True and gems["power"].cue is True and gems["pom"].cue is False,
-          "Pouvoir des Arcanes prêt : il se signale seul, tout de suite")
+    cue = hud.cueIcon
     played = lambda name: len([p for p in (f.M.soundFiles or {}).values() if p.endswith(name + ".ogg")])
+    check(f.S.burst.on is True and f.S.burst.power is True and f.S.burst.pom is False,
+          "Pouvoir des Arcanes prêt : il se signale seul, tout de suite")
+    check(cue.key == "power" and cue._alpha > 0.9 and cue._points[1][5] > shown[0]._points[1][5],
+          "son icône s'affiche en or, au-dessus des charges")
     check(played("burst") == 1, "et le son du burst est joué une fois")
+    f.M.advance(4)
+    check(played("burst") == 1, "4 s plus tard : pas encore de rappel")
     f.cast(AP, 0.4)   # il est lancé : au tour d'Eurêka et de la Présence spirituelle
-    check(f.S.burst.on is True and f.S.burst.eureka is True and f.S.burst.pom is True and gems["power"].cue is False,
+    f.M.advance(4)
+    check(f.S.burst.on is True and f.S.burst.eureka is True and f.S.burst.pom is True and f.S.burst.power is False,
           "charges visées atteintes, Colère prête : c'est le moment du burst")
-    check(gems["pom"].cue is True and gems["eureka"].cue is True and gems["pom"]._w > 33,
-          "les gemmes de Présence spirituelle et d'Eurêka grossissent et battent")
+    check(played("burst") == 1, "un gros temps de recharge lancé relance le délai du rappel")
+    check(cue.key == "wrath" and cue._alpha > 0.9,
+          "l'icône passe au Courroux : la macro de burst lance Eurêka et la Présence spirituelle avec lui")
+    f.run('Mock.ns.Set("burstOne", false)')
+    f.M.advance(0.3)
+    check(cue.key == "eureka", "sans la macro (réglage coupé) : l'icône montre Eurêka, le premier à lancer")
+    f.run('Mock.ns.Set("burstOne", true)')
+    f.M.advance(0.3)
+    check(cue.key == "wrath", "réglage rétabli : de nouveau le Courroux")
+    f.M.advance(2.5)
+    check(played("burst") == 2, "6 s sans rien lancer : l'onde et le son du burst sont redonnés")
+    f.M.advance(2)
+    check(played("burst") == 2, "une seule fois")
     f.run('Mock.ns.Set("adviseBurst", false)')
-    f.M.advance(0.4)
-    check(f.S.burst.on is False and gems["pom"].cue is False and gems["pom"]._w < 29,
-          "réglage coupé : plus de signal, les gemmes reprennent leur taille")
+    f.M.advance(0.6)
+    check(f.S.burst.on is False and cue._alpha == 0, "réglage coupé : plus de signal de burst")
     f.run('Mock.ns.Set("adviseBurst", true)')
     f.M.advance(0.3)
     check(f.S.burst.on is True, "réglage rétabli : le signal revient")
     f.M.proc("Barrage de projectiles", 400588)
-    f.M.advance(0.3)
-    check(f.S.burst.on is False and gems["pom"].cue is False, "un Barrage passe avant : le signal de burst attend")
-    check(played("barrage") == 1 and played("burst") == 1,
-          "le Barrage a son propre son ; le burst n'a pas été rejoué quand le signal est revenu aussitôt")
-    orb = f.run("for _, b in ipairs(Mock.ns.Hud.badges) do if b.def.key == 'barrage' then return b end end")
-    big = f.run("for _, b in ipairs(Mock.ns.Hud.stage) do if b.def.key == 'barrage' then return b end end")
-    check(f.S.barrage.active and big.on is True and big._shown is True and big._w == 56 and big.cd._cd[2] == 15,
-          "le Barrage s'affiche en grande icône au centre, avec ses 15 s")
-    check(orb.on is False, "l'orbe du bas laisse la place à l'icône centrale")
-    f.M.startCast(FROSTBOLT_1, 1.5)
+    f.M.advance(0.6)
+    check(f.S.burst.on is False and cue._alpha == 0, "un Barrage passe avant : le signal de burst attend")
+    check(played("barrage") == 1 and played("burst") == 2, "le Barrage a son propre son")
+    check(f.S.barrage.active and right.on is True and right._shown is True and right._w == 64 and right.cd._cd[2] == 15,
+          "le Barrage s'affiche à droite, en grande icône, avec ses 15 s")
+    check(left.on is False, "rien à gauche tant qu'il n'y a pas d'Idées claires")
     f.M.proc("Idées claires", 12536)
     f.M.advance(0.3)
-    check(f.S.interrupt is False and f.S.next is None, "aucun conseil, donc aucun signal d'interruption")
-    shown = [b for b in f.ns.Hud.stage.values() if b.on]
-    check(len(shown) == 2 and all(b._w == 40 for b in shown) and shown[0]._points[1][4] != shown[1]._points[1][4],
-          "deux procs : deux icônes côte à côte, plus petites")
-    f.M.stopCast()
-    f.run('SlashCmdList.ARCANUM("conseil")')
-    f.M.advance(0.3)
-    check(f.S.next is not None and f.ns.Hud.main._shown is True, "/arc conseil de nouveau : le conseil revient")
-    check(not any(b.on for b in f.ns.Hud.stage.values()) and orb.on is True,
-          "mode conseil : les procs retournent en orbes, en bas de l'anneau")
-    check(f.S.burst.on is False and not any(b.cue for b in f.ns.Hud.cds.values()),
-          "mode conseil : le burst est dit au centre, pas sur les gemmes")
+    check(left.on is True and left._shown is True and right.on is True, "les Idées claires s'affichent à gauche, en même temps")
+    f.run('Mock.ns.Set("spread", 200)')
+    check(left._points[1][4] == -200 and right._points[1][4] == 200, "écartement réglé : les zones s'éloignent du personnage")
+    f.run('SlashCmdList.ARCANUM("ecart 120")')
+    check(f.ns.db.spread == 120 and left._points[1][4] == -120, "/arc ecart 120 : les zones se rapprochent")
+    f.run('SlashCmdList.ARCANUM("ecart 20")')
+    check(f.ns.db.spread == 120, "/arc ecart 20 : hors limites, refusé")
+    f.run('Mock.ns.Set("showProcs", false)')
+    f.M.advance(0.6)
+    check(right.on is False and not right._shown, "réglage « procs » coupé : les icônes disparaissent")
+    f.run('Mock.ns.Set("showProcs", true)')
     f.M.setCombat(False)
     f.run('Mock.auras = {}; Mock.fire("UNIT_AURA", "player", {})')
-    f.run('Mock.ns.Set("showNext", false); SlashCmdList.ARCANUM("demo")')
-    most, advised, charges, cued = 0, False, set(), set()
+    f.run('SlashCmdList.ARCANUM("demo")')
+    sides, charges, cued = set(), set(), set()
     for _ in range(240):
         f.M.advance(0.05)
-        cued.update(b.key for b in f.ns.Hud.cds.values() if b.cue)
-        most = max(most, len([b for b in f.ns.Hud.stage.values() if b.on]))
-        advised = advised or f.S.next is not None or f.ns.Hud.main._shown is True
+        if f.S.burst.on:
+            cued.add(cue.key)
+        sides.update(k for k, b in (("clear", left), ("barrage", right)) if b.on)
         charges.add(f.S.stacks)
-    check(not advised, "démonstration en mode suivi seul : aucun conseil, pas d'icône de sort")
-    check(most == 2, "elle montre les procs au centre, jusqu'à deux côte à côte")
+    check(sides == {"clear", "barrage"}, "la démonstration montre les deux procs, chacun de son côté")
     check(charges == {0, 1, 2, 3, 4}, "et les charges qui montent")
-    check(cued == {"eureka", "pom"}, "puis le moment du burst, sur les gemmes d'Eurêka et de Présence spirituelle")
+    check(cued == {"eureka", "pom", "wrath"}, "puis le burst, sort par sort : Eurêka, Présence spirituelle, Courroux")
     f.run('SlashCmdList.ARCANUM("demo")')
     f.M.advance(0.5)
-    check(f.S.next is None and not any(b.on for b in f.ns.Hud.stage.values()), "fin de la démonstration : tout s'éteint")
+    check(not any(b.on for b in hud.procs.values()) and f.S.stacks == 0, "fin de la démonstration : tout s'éteint")
     before = len(list((f.M.soundFiles or {}).values()))
     f.run('Mock.ns.Set("sound", false); SlashCmdList.ARCANUM("sons")')
     heard = [p.split(chr(92))[-1] for p in list(f.M.soundFiles.values())[before:]]
@@ -686,63 +700,22 @@ def main():
     check(f.ns.db.soundKit.barrage is None, "identifiant inconnu du jeu : le choix n'est pas retenu")
     f.run('SlashCmdList.ARCANUM("son burst")')
     check(f.ns.db.soundKit.burst is None, "/arc son burst : retour au son d'origine")
-    no_errors(f, "suivi seul")
+    f.run('SlashCmdList.ARCANUM("verrou")')
+    check(f.ns.db.locked is False and hud.fight._alpha is not None, "/arc verrou : le HUD se déverrouille pour être déplacé")
+    f.run('SlashCmdList.ARCANUM("verrou")')
+    no_errors(f, "autour du personnage")
 
-    print("Recharge bientôt finie, rappel du burst, sons par leur nom")
-    s = Game()
-    s.run('Mock.setCooldown(12042, 180)')
-    s.M.advance(1.2)
-    gems = {b.key: b for b in s.ns.Hud.cds.values()}
-    check(gems["power"].soon is False and gems["power"].soonText._text in (None, ""),
-          "recharge longue : la gemme est grisée, sans chiffre à nous")
-    s.run('Mock.setCooldown(12042, 8)')
-    s.M.advance(1.2)
-    check(gems["power"].soon is True and gems["power"].soonText._text in ("7", "8"),
-          "recharge finie dans moins de 10 s : la gemme passe au doré et compte les secondes")
-    s.run('Mock.ns.Set("soonSeconds", 0)')
-    s.M.advance(1.2)
-    check(gems["power"].soon is False and gems["power"].soonText._text == "", "réglage à 0 : pas de signal « bientôt prêt »")
-    s.run('Mock.ns.Set("soonSeconds", 10)')
-    s.M.advance(7)
-    check(gems["power"].soon is False and gems["power"].soonText._text == "", "recharge finie : le chiffre s'efface")
-    s.run('Mock.ns.Set("showNext", false)')
-    s.fight()
-    s.cast(AB)
-    s.cast(AB)
-    s.M.advance(0.4)
-    played = lambda name: len([p for p in (s.M.soundFiles or {}).values() if p.endswith(name + ".ogg")])
-    check(s.S.burst.on is True and gems["power"].cue is True and played("burst") == 1,
-          "le moment du burst arrive : le son est joué une fois")
-    word = s.ns.Hud.cueIcon
-    check(word.key == "power" and word._alpha > 0.9, "et l'icône du Pouvoir des Arcanes s'affiche au centre du cercle")
-    s.M.advance(4)
-    check(played("burst") == 1, "4 s plus tard : pas encore de rappel")
-    s.cast(AP, 0.4)
-    s.M.advance(4)
-    check(s.S.burst.on is True and gems["pom"].cue is True and played("burst") == 1,
-          "un gros temps de recharge lancé relance le délai pour les suivants")
-    check(word.key == "wrath" and word._alpha > 0.9,
-          "au centre, l'icône passe au Courroux : la macro de burst lance Eurêka et la Présence spirituelle avec lui")
-    s.run('Mock.ns.Set("burstOne", false)')
-    s.M.advance(0.3)
-    check(word.key == "eureka", "sans la macro (réglage coupé) : l'icône montre Eurêka, le premier à lancer")
-    s.run('Mock.ns.Set("burstOne", true)')
-    s.M.advance(0.3)
-    check(word.key == "wrath", "réglage rétabli : de nouveau le Courroux")
-    s.M.advance(2.5)
-    check(played("burst") == 2, "6 s sans rien lancer : l'onde et le son du burst sont redonnés")
-    s.M.advance(3)
-    check(played("burst") == 2, "une seule fois")
-    s.M.proc("Barrage de projectiles", 400588)
-    s.M.advance(0.5)
-    check(word._alpha == 0, "un proc arrive : l'icône de burst laisse le centre à celle du proc")
-    s.run('SlashCmdList.ARCANUM("conseil")')
-    s.M.advance(0.5)
-    check(word._alpha == 0, "mode conseil : pas d'icône de burst en plus, le centre montre le sort conseillé")
-    no_errors(s, "bientôt prêt, rappel")
+    m = Game(pre='ArcanumDB = { version = 4, point = { "CENTER", "CENTER", 0, -170 }, showNext = false, '
+                 'showMana = true, scale = 1.2, targetStacks = 3 }')
+    check(m.ns.db.point[3] == 0 and m.ns.db.point[4] == 0 and m.ns.db.spread == 150,
+          "mise à jour depuis une 0.12 : le HUD est recentré sur le personnage")
+    check(m.ns.db.showNext is None and m.ns.db.showMana is None and m.ns.db.scale == 1.2 and m.ns.db.targetStacks == 3,
+          "les réglages de l'ancien cercle sont oubliés, les autres gardés")
+    no_errors(m, "mise à jour des réglages")
 
+    print("Sons par leur nom")
     q = Game()
-    q.run('Mock.ns.Set("showNext", false); Mock.ns.Set("burstRemind", 0)')
+    q.run('Mock.ns.Set("burstRemind", 0)')
     q.fight()
     q.cast(AB)
     q.cast(AB)
@@ -932,15 +905,16 @@ def main():
     d.run('SlashCmdList.ARCANUM("verrou")')
     check(d.ns.db.locked is False and hud._mouse is True, "/arc verrou déverrouille le HUD")
     d.M.advance(0.5)
-    check(hud._alpha > 0.9, "HUD déverrouillé : visible")
+    group = d.ns.Hud.fight
+    check(group._alpha > 0.9, "HUD déverrouillé : visible")
     d.run('SlashCmdList.ARCANUM("verrou")')
     d.M.advance(1.0)
-    check(hud._alpha < 0.05, "HUD verrouillé, hors combat, sans cible : masqué")
+    check(group._alpha < 0.05, "HUD verrouillé, hors combat, sans cible : masqué")
     d.M.target = True
     d.run('Mock.fire("PLAYER_TARGET_CHANGED")')
     d.M.advance(1.0)
-    check(hud._alpha > 0.9, "cible hostile : HUD visible")
-    for key in ("showCharges", "showProcs", "showCooldowns", "showMana", "enabled", "enabled"):
+    check(group._alpha > 0.9, "cible hostile : HUD visible")
+    for key in ("showCharges", "showProcs", "showReminders", "showReminders", "enabled", "enabled"):
         d.run('Mock.ns.Set("%s", not Mock.ns.db.%s)' % (key, key))
         d.M.advance(0.2)
     d.run('SlashCmdList.ARCANUM("diag")')

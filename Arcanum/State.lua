@@ -1016,8 +1016,8 @@ local function worthInterrupting(db, now)
   return Spells.Known("blast")
 end
 
--- Le moment du burst, pour le mode « suivi seul ». Sans conseil au centre, le HUD doit quand même dire
--- quand claquer les gros temps de recharge, sinon on les oublie : il fait briller leurs gemmes. Le moment
+-- Le moment du burst. Le HUD dit quand claquer les gros temps de recharge, sinon on les oublie : il
+-- montre l'icône du sort à lancer. Le moment
 -- est celui où le conseil dirait « burst » (charges visées atteintes, Colère prête, pas de Barrage ni
 -- d'Idées claires à dépenser d'abord) ; les gemmes désignées sont celles qui sont prêtes. Le Pouvoir des
 -- Arcanes, lui, se lance dès qu'il est prêt : il se signale seul, Eurêka et la Présence spirituelle
@@ -1040,20 +1040,25 @@ local function setBurst(on, advised)
   end
 end
 
+-- Hors combat les temps de recharge sont lisibles : on les lit à chaque passe, pour savoir en combat (où
+-- ils sont secrets) si un gros temps de recharge lancé avant le combat est encore en recharge.
+local function rememberCooldowns()
+  if State.restricted then return end
+  for i = 1, #BURST_CDS do
+    local key = BURST_CDS[i]
+    if Spells.Known(key) then State.Cooldown(key) end
+  end
+end
+
 local function updateNext()
   local db = ns.db or ns.DEFAULTS
-  -- Mode « suivi seul » : aucun conseil au centre. Le calcul ne sert qu'à repérer le moment du burst.
-  if db.showNext == false then
-    if State.next or State.interrupt then
-      local old = State.next
-      State.next, State.nextReason, State.nextId, State.interrupt = nil, nil, nil, false
-      ns:Fire("NEXT", nil, nil, old)
-    end
-    local advised, reason = computeNext()
-    setBurst(reason == "burst" and (State.demo or State.combat or State.hostile) and true or false, advised)
-    return
-  end
-  setBurst(false)
+  -- Le moment du burst, que le HUD signale : celui où le calcul du prochain sort dit « burst ». Il est
+  -- recalculé à chaque passe, incantation en cours comprise : le signal s'allume pendant la Déflagration
+  -- qui donne la dernière charge visée.
+  local advised, why = computeNext()
+  setBurst(why == "burst" and (State.demo or db.adviseBurst ~= false)
+    and (State.demo or State.combat or State.hostile) and true or false, advised)
+  -- Le prochain sort lui-même n'est plus affiché ; il reste calculé pour le rapport /arc diag.
   local key, reason, id
   local cut = worthInterrupting(db, GetTime())
   if cut then
@@ -1136,7 +1141,12 @@ local function updateReminders(now)
     end
   end
   if armor and not worn then list[#list + 1] = armor end
-  if Spells.GemSpell() and not Spells.Gem() then list[#list + 1] = "gemspell" end
+  -- eau et nourriture : à invoquer quand les sacs n'en ont plus
+  if Spells.Known("water") or Spells.Known("food") then
+    local water, food = Spells.Supplies()
+    if Spells.Known("water") and not water then list[#list + 1] = "water" end
+    if Spells.Known("food") and not food then list[#list + 1] = "food" end
+  end
 end
 
 -- ------------------------------------------------------------------ vérifications en jeu
@@ -1212,6 +1222,7 @@ function State.Update()
     updateAoe(now)
     buildLadder(now)
     updateReminders(now)
+    rememberCooldowns()
     updateChecks(now)
   end
   readCast(now)
@@ -1354,7 +1365,10 @@ ns:On("START", function()
   ns:RegisterEvent("SPELL_UPDATE_CHARGES", cooldowns)
   ns:RegisterEvent("SPELL_UPDATE_USABLE", function() costsStale = true; State.dirty = true end)
   ns:RegisterEvent("BAG_UPDATE_COOLDOWN", cooldowns)
-  ns:RegisterEvent("BAG_UPDATE_DELAYED", cooldowns)
+  ns:RegisterEvent("BAG_UPDATE_DELAYED", function()
+    Spells.BagsChanged()
+    cooldowns()
+  end)
 
   ns:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW", function(_, spellID)
     spellID = S.Num(spellID)

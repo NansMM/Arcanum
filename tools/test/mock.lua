@@ -71,8 +71,14 @@ M.spells = {
   [120] = { name = "Cône de froid", known = false },
   [118] = { name = "Métamorphose", cost = 60, cast = 1500, known = true },
   [10054] = { name = "Invocation d'un rubis de mana", known = true },
+  [5504] = { name = "Invocation d'eau", cost = 60, known = true },
+  [587] = { name = "Invocation de nourriture", cost = 60, known = true },
+  [430] = { name = "Boisson" },
+  [433] = { name = "Nourriture" },
 }
-M.items = { [8008] = 1 }   -- gemmes en sac
+M.items = { [8008] = 1, [8079] = 20, [8076] = 20 }   -- en sac : une gemme de mana, de l'eau et de la nourriture invoquées
+M.itemSpells = {}   -- [objet] = nom de son effet d'utilisation (« Boisson », « Nourriture »…)
+M.resting = false   -- au repos en ville
 
 local function auraOf(name) return M.auras[name] end
 
@@ -266,8 +272,23 @@ C_AddOns = { GetAddOnMetadata = function(addon, field) return M.meta and M.meta[
 C_Item = {
   GetItemCount = function(id) return M.items[id] or 0 end,
   GetItemIconByID = function(id) return 134000 + id % 100 end,
+  GetItemSpell = function(id) return M.itemSpells[id] end,
 }
-C_Container = { GetItemCooldown = function(id) return 0, 0, 1 end }
+-- (les sacs : tous les objets de M.items, rangés dans le sac à dos par identifiant croissant)
+local function bagSlots()
+  local ids = {}
+  for id, n in pairs(M.items) do
+    if n and n > 0 then ids[#ids + 1] = id end
+  end
+  table.sort(ids)
+  return ids
+end
+C_Container = {
+  GetItemCooldown = function(id) return 0, 0, 1 end,
+  GetContainerNumSlots = function(bag) return bag == 0 and #bagSlots() or 0 end,
+  GetContainerItemID = function(bag, slot) return bag == 0 and bagSlots()[slot] or nil end,
+}
+function IsResting() return M.resting == true end
 
 -- ------------------------------------------------------------------ widgets (stricts)
 local function num(v, what)

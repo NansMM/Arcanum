@@ -207,13 +207,11 @@ function Options.Build()
   y = sectionTitle(left, L["Affichage"], y)
   y = toggle(left, L["Activer le HUD"], "enabled", y)
   y = toggle(left, L["Visible aussi hors combat"], "showIdle", y)
-  y = toggle(left, L["Prochain sort conseillé"], "showNext", y)
-  y = toggle(left, L["Cristaux de charge"], "showCharges", y)
-  y = toggle(left, L["Procs"], "showProcs", y)
-  y = toggle(left, L["Gros temps de recharge"], "showCooldowns", y)
-  y = toggle(left, L["Barre de mana"], "showMana", y)
-  y = toggle(left, L["Rappels avant le combat"], "showReminders", y)
+  y = toggle(left, L["Charges de Déflagration (en haut)"], "showCharges", y)
+  y = toggle(left, L["Procs (à gauche et à droite)"], "showProcs", y)
+  y = toggle(left, L["Rappels avant le combat (en bas)"], "showReminders", y)
   y = stepper(left, L["Taille"], "scale", 0.6, 1.8, 0.05, function(v) return string.format("%d %%", v * 100 + 0.5) end, y - 4)
+  y = stepper(left, L["Écartement"], "spread", 80, 320, 10, function(v) return string.format("%d", v) end, y)
 
   local ry = -70
   ry = sectionTitle(right, L["Alertes"], ry)
@@ -222,17 +220,12 @@ function Options.Build()
   ry = soundRow(right, L["Barrage"], "barrage", ry)
   ry = soundRow(right, L["Burst"], "burst", ry)
   ry = toggle(right, L["Onde lumineuse"], "flash", ry)
-  ry = stepper(right, L["Recharge bientôt finie"], "soonSeconds", 0, 30, 5, seconds, ry - 4)
-  ry = stepper(right, L["Rappel du burst"], "burstRemind", 0, 12, 2, seconds, ry)
 
-  ry = sectionTitle(right, L["Cycle"], ry - 8)
-  ry = choice(right, L["Charges visées"], "targetStacks", { 2, 3, 4 }, ry)
-  ry = choice(right, L["Rang du remplissage (Éclair de givre)"], "fillerRank", { 1, "max" }, ry)
-  ry = toggle(right, L["Burst en une icône (macro ArcBurst)"], "burstOne", ry)
-  ry = toggle(right, L["Engager à la Colère"], "openWrath", ry)
-  ry = toggle(right, L["Interrompre pour des Idées claires"], "cutForClear", ry)
+  ry = sectionTitle(right, L["Burst"], ry - 8)
   ry = toggle(right, L["Signaler le moment du burst"], "adviseBurst", ry)
-  ry = toggle(right, L["Anticiper pendant l'incantation"], "anticipate", ry)
+  ry = stepper(right, L["Rappel du burst"], "burstRemind", 0, 12, 2, seconds, ry - 4)
+  ry = choice(right, L["Charges visées"], "targetStacks", { 2, 3, 4 }, ry)
+  ry = toggle(right, L["Macro de burst (une seule icône)"], "burstOne", ry)
 
   local bw = (W - 44 - 16) / 3
   local move = pillButton(left, "", bw, function()
@@ -380,11 +373,10 @@ end
 -- ------------------------------------------------------------------ commandes
 local HELP = {
   "/arc : ouvrir les réglages",
-  "/arc demo : voir le HUD jouer un cycle complet, dans le mode choisi",
-  "/arc conseil : afficher ou masquer le prochain sort (sans lui : charges, procs et recharges seulement)",
+  "/arc demo : voir le HUD jouer un cycle complet",
   "/arc verrou : déplacer ou fixer le HUD",
   "/arc taille 120 : taille du HUD en pourcentage",
-  "/arc aoe : mode multi-cibles (Choc de flammes, Explosion des Arcanes) ; il s'active aussi tout seul",
+  "/arc ecart 150 : distance entre le personnage et les zones (de 80 à 320)",
   "/arc sons : écouter les trois sons (Idées claires, Barrage, moment du burst)",
   "/arc son 3071 : écouter un son du jeu ; /arc son burst 3071 : le choisir (clear, barrage, burst)",
   "/arc son burst voix : faire dire « Burst » par la voix du jeu ; les sons se choisissent aussi dans les réglages",
@@ -424,15 +416,14 @@ SlashCmdList.ARCANUM = function(msg)
     else
       ns.Print(L["taille entre 60 et 180, par exemple /arc taille 120."])
     end
-  elseif cmd == "conseil" or cmd == "suivi" then
-    ns.Set("showNext", ns.db.showNext == false)
-    ns.Print(ns.db.showNext and L["prochain sort conseillé au centre du cercle."]
-      or L["mode suivi seul : charges, procs et temps de recharge, sans conseil."])
-    Options.Refresh()
-  elseif cmd == "aoe" or cmd == "zone" then
-    State.SetAoe(not State.aoe)
-    ns.Print(State.aoe and L["mode multi-cibles activé jusqu'à la fin du combat (/arc aoe pour l'arrêter)."]
-      or L["mode multi-cibles arrêté."])
+  elseif cmd == "ecart" or cmd == "écart" or cmd == "spread" then
+    local v = tonumber(arg)
+    if v and v >= 80 and v <= 320 then
+      ns.Set("spread", v)
+      Options.Refresh()
+    else
+      ns.Print(L["écartement entre 80 et 320, par exemple /arc ecart 150."])
+    end
   elseif cmd == "sons" or cmd == "son" or cmd == "sound" then
     soundCommand(arg)
     Options.Refresh()
