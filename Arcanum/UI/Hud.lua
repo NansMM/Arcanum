@@ -39,8 +39,8 @@ local PROCS = {
 -- pas le premier). Le joueur peut en choisir d'autres (réglages, ou /arc son barrage 888), ou déposer ses
 -- propres fichiers dans Sounds (« file »). « say » : le mot prononcé quand il a choisi la voix du jeu.
 local PROC_SOUND = {
-  barrage = { kit = 3175, file = "barrage", say = "Barrage" },      -- ping de la mini-carte
-  clear = { kit = 18019, file = "clear", say = "Idées claires" },   -- notification Battle.net
+  barrage = { kit = 3333, alt = 3175, file = "barrage", say = "Barrage" },      -- Projectiles des Arcanes, sinon le ping de la mini-carte
+  clear = { kit = 4874, alt = 18019, file = "clear", say = "Idées claires" },   -- Idées claires (le sort), sinon la notification Battle.net
 }
 local SOUND_DEF = PROC_SOUND
 -- Sons du jeu proposés par leur nom dans les réglages. Un identifiant que ce client ne joue pas est sauté.

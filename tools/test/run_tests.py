@@ -678,6 +678,9 @@ def main():
     f.run('Mock.ns.Set("sound", false); SlashCmdList.ARCANUM("sons")')
     heard = [p.split(chr(92))[-1] for p in list(f.M.soundFiles.values())[before:]]
     check(heard == ["clear.ogg", "barrage.ogg"], "/arc sons fait entendre les deux sons, même sons coupés")
+    check(f.M.lastKit == 3333, "sans fichier ni choix : le Barrage joue le son des Projectiles des Arcanes")
+    f.run('Mock.ns.Hud.PreviewSound("clear")')
+    check(f.M.lastKit == 4874, "et les Idées claires jouent le son du sort Idées claires")
     f.run('SlashCmdList.ARCANUM("son 4874")')
     check(f.M.lastKit == 4874 and f.ns.db.soundKit.barrage is None, "/arc son 4874 : écoute un son du jeu, sans rien changer")
     f.run('SlashCmdList.ARCANUM("son barrage 3071")')

@@ -7,6 +7,7 @@
 - Les charges ne s'affichent que quand tu en as : sans charge, plus de cristaux vides.
 - Les procs montrent leur propre icône (Idées claires, Barrage de projectiles) au lieu de celle du sort à lancer.
 - Le signal de burst est retiré (icône, son, rappel, réglages). À sa place, au-dessus des charges : l'icône de la Présence spirituelle, tant qu'elle est active.
+- Sons par défaut des procs : celui du sort Idées claires pour les Idées claires, celui des Projectiles des Arcanes pour le Barrage (à la place de la notification Battle.net et du ping de la mini-carte, qui restent dans la liste).
 - Les réglages tiennent de nouveau sur une colonne.
 
 ## 1.0.0 — 13 novembre 2026

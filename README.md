@@ -15,7 +15,7 @@ Arcanum place chaque information d'un côté de ton personnage, pour que tu la l
 
 Le HUD est centré sur l'écran, là où se tient ton personnage. Le réglage « Écartement » (ou `/arc ecart 150`) éloigne ou rapproche les quatre zones ; `/arc verrou` permet de déplacer l'ensemble.
 
-**Les sons.** Un son à l'arrivée d'un proc. Ce sont des sons du jeu : le ping de la mini-carte pour un Barrage de projectiles, la notification Battle.net pour des Idées claires. `/arc sons` les fait entendre.
+**Les sons.** Un son à l'arrivée d'un proc. Ce sont des sons du jeu : celui des Projectiles des Arcanes pour un Barrage de projectiles, celui du sort Idées claires pour des Idées claires. `/arc sons` les fait entendre.
 
 Tu peux en choisir d'autres dans les réglages (`/arc`) : chaque signal a sa ligne, avec le nom du son entre deux flèches. Une flèche passe au son suivant et le fait entendre ; un clic sur le nom le rejoue. La liste propose une quinzaine de sons du jeu (alerte de raid, appel de préparation, montée de niveau, quête terminée, réveil…) et la **voix du jeu**, qui dit « Barrage » ou « Idées claires » avec la synthèse vocale de WoW, si une voix est installée sur ton ordinateur. Un son que ton client ne joue pas est sauté.
 
