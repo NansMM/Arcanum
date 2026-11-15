@@ -452,8 +452,33 @@ def main():
 
     old = Game(pre='ArcanumDB = { version = 6, learn = { abBase = 500, abStep = 0.5, costTracks = true, abWindow = 18 } }')
     l = old.ns.db.learn
-    check(l.abBase is None and l.abStep is None and not l.costTracks and l.abWindow == 18 and old.ns.db.version == 7,
+    check(l.abBase is None and l.abStep is None and not l.costTracks and l.abWindow == 18 and old.ns.db.version == 8,
           "upgrade to 2.2: costs learned the old way are dropped (learned again), the window is kept")
+
+    c7 = Game()   # charges before the pull; in combat the window ends and opens again
+    c7.M.target = True
+    c7.cast(AB, 2.0)
+    c7.cast(AB, 1.0)
+    c7.M.setCombat(True)
+    c7.M.advance(17.5); c7.M.expire(); c7.M.advance(0.5)
+    for _ in range(3):
+        c7.cast(AB, 2.0)
+    c7.M.setCombat(False)
+    c7.M.advance(0.5)
+    check(c7.ns.db.learn.abRefresh is False,
+          "a window that ended and opened again during a fight is not taken for a window extended by each cast")
+    c7.M.advance(19); c7.M.expire(); c7.M.advance(1)
+    c7.M.setCombat(True)
+    c7.M.advance(0.2)
+    first = c7.M.now
+    c7.cast(AB, 2.0)
+    c7.cast(AB, 3.0)
+    check(abs(c7.S.stacksExpire - (first + 18)) < 0.1, "next fight: the window still ends 18 s after the first charge")
+    no_errors(c7, "window across a fight")
+
+    wrong = Game(pre='ArcanumDB = { version = 7, learn = { abRefresh = true, abWindow = 18 } }')
+    check(wrong.ns.db.learn.abRefresh is None and wrong.ns.db.version == 8,
+          "upgrade to 2.2.1: whether the window is extended is learned again (2.2.0 could learn it wrong)")
 
     print("Charge crystals: one per charge")
     t = Game()
@@ -706,7 +731,7 @@ def main():
           "the settings of the old ring and of the advice are forgotten, the others kept")
     old = Game(pre='ArcanumDB = { version = 2, wrathStacks = 3, thrifty = true }')
     check(old.ns.db.wrathStacks is None and old.ns.db.thrifty is None and old.ns.db.targetStacks is None
-          and old.ns.db.version == 7, "settings from a 0.x: the advice thresholds are dropped, nothing takes their place")
+          and old.ns.db.version == 8, "settings from a 0.x: the advice thresholds are dropped, nothing takes their place")
     m3 = Game(pre='ArcanumDB = { version = 5, soundKit = { barrage = "voix" }, targetStacks = 3, burstOne = true, '
                   'fillerRank = "max", cutForClear = true, openWrath = true, adviseBurst = false, anticipate = true, '
                   'learn = { cd = { power = 180 } } }')
@@ -717,7 +742,7 @@ def main():
                                           "adviseBurst", "anticipate")),
           "upgrade to 2.0: the settings of the advice engine are deleted")
     check(db.learn.cd is None, "upgrade to 2.0: the learned cooldowns are deleted")
-    check(db.version == 7, "upgrade to 2.0: the saved variables are at the current version (7)")
+    check(db.version == 8, "upgrade to 2.0: the saved variables are at the current version (8)")
     for game in (m, m2, old, m3):
         game.M.advance(1.0)
     no_errors(m, "settings upgrade from 0.12")

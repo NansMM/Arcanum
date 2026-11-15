@@ -8,7 +8,7 @@ local ADDON, ns = ...
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "2.2.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "2.2.1"
 
 local pcall, type, pairs, ipairs = pcall, type, pairs, ipairs
 
@@ -171,6 +171,11 @@ function ns.InitDB()
     if value == "voix" then db.soundKit[key] = "voice" end   -- 2.0: values saved in English
   end
   if saved < 5 then db.point = { "CENTER", "CENTER", 0, 0 } end   -- 1.0: the HUD is re-centered on the character
+  if saved < 8 then
+    -- 2.2.1: whether a later Arcane Blast extends the window could be learned wrong after a fight in 2.2.0
+    -- (the charge timer then ran too long): learned again.
+    db.learn.abRefresh = nil
+  end
   if saved < 7 then
     -- 2.2: the charges are read from Arcane Blast's cost relative to Frostbolt's, and only learned from a
     -- cost that had time to follow the aura. Values learned the old way are dropped (learned again at the
@@ -191,7 +196,7 @@ function ns.InitDB()
     db.decor = true
   end
   if type(db.spread) ~= "number" or db.spread < 80 or db.spread > 320 then db.spread = 150 end
-  db.version = 7
+  db.version = 8
   ns.db = db
   return db
 end

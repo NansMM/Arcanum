@@ -1,5 +1,9 @@
 # Arcanum changelog
 
+## 2.2.1 — 2026-11-15
+
+- The time left on the Arcane Blast charges could be too long. After a fight in which the charge window ended and opened again, Arcanum could wrongly conclude that each Arcane Blast extends the window, and then pushed back the end of the window at every cast. It now learns this only from two readings of the same window, and what 2.2.0 learned is learned again.
+
 ## 2.2.0 — 2026-11-15
 
 Arcane Blast charges are counted more reliably:

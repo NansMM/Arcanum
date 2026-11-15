@@ -549,14 +549,19 @@ local function updateBlast(now)
     -- announces the time that was left when the last charge arrived.
     if n == 1 and duration and duration > 0 then l.abWindow = duration end
     State.stacksDur = dur("blast")
-    -- Does a later Arcane Blast extend the window? Seen when the charges go up (or stay at the maximum
-    -- after a cast) and the end of the window moves, or does not.
+    -- Does a later Arcane Blast extend the window? Seen only between two readings that followed the same
+    -- window: one more charge and the end of the window moves, or does not (at the maximum, a cast that moves
+    -- it). Across a fight the aura is not followed (see below): the window may have ended and opened again.
     local prev = blastTruth
-    if prev.n and prev.n >= 1 and prev.expire and expire and n > 1 then
-      if n >= prev.n and expire > prev.expire + 1 then
+    if prev.n and prev.n >= 1 and prev.expire and expire then
+      if n == prev.n + 1 then
+        if expire > prev.expire + 1 then
+          l.abRefresh = true
+        elseif math.abs(expire - prev.expire) < 0.5 then
+          l.abRefresh = false
+        end
+      elseif n == MAX_STACKS and prev.n == MAX_STACKS and expire > prev.expire + 1 then
         l.abRefresh = true
-      elseif n > prev.n and math.abs(expire - prev.expire) < 0.5 then
-        l.abRefresh = false
       end
     end
     prev.n, prev.expire = n, expire
@@ -584,6 +589,7 @@ local function updateBlast(now)
     -- In combat: charges come from the Arcane Blasts cast (see onCast); here we check the end
     -- of the window and, when it is reliable, the announced cost, which gives the exact number of charges.
     State.stacksDur = dur("blast")
+    blastTruth.n, blastTruth.expire = nil, nil   -- the aura is no longer followed
     -- The Arcane Blast that started the fight was cast while auras were still readable: the aura was hidden
     -- before it could show the new charge. It is counted now.
     if pendingBlast then
