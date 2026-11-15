@@ -1,5 +1,15 @@
 # Arcanum changelog
 
+## 2.2.0 — 2026-11-15
+
+Arcane Blast charges are counted more reliably:
+
+- The Arcane Blast that starts a fight is no longer lost when you already had charges from the previous one (chain pulls).
+- The cost of Arcane Blast, used to correct the count in combat, is now compared with the cost of Frostbolt. A cost change that applies to every spell (Power Infusion, a trinket, an Arcane Power that lasts longer than expected) no longer makes the count wrong.
+- Arcanum no longer learns from a cost the game has not updated yet. Right after an Arcane Blast, or right after the charges end, the announced cost still shows the previous count; pulling at that moment could teach a wrong value and give wrong charges for the whole fight. What was learned the old way is dropped and learned again at your first Arcane Blast out of combat.
+- Arcanum checks out of combat whether a later Arcane Blast extends the charge window, and follows what your client does.
+- `/arc diag` shows the last count read from the cost, and the log says what each correction was based on.
+
 ## 2.1.0 — 2026-11-13
 
 - Arcane Power active: its icon, ringed in purple, shows above the charges with its time left, next to Presence of Mind and Eureka.

@@ -8,7 +8,7 @@ local ADDON, ns = ...
 ns.L = setmetatable({}, { __index = function(_, key) return key end })
 
 local GetMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
-ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "2.1.0"
+ns.VERSION = (GetMeta and GetMeta(ADDON, "Version")) or "2.2.0"
 
 local pcall, type, pairs, ipairs = pcall, type, pairs, ipairs
 
@@ -135,8 +135,8 @@ local RETIRED = { "wrathStacks", "thrifty", "spin", "showNext", "showMana", "sho
 -- What the addon learns in game when data is readable (out of combat): real durations and costs.
 local LEARN_DEFAULTS = {
   dur = {},        -- [aura key] = duration in seconds
-  abBase = nil,    -- cost of Arcane Blast with no charge
-  abStep = nil,    -- extra cost per charge (1.75 = +175%)
+  abRef = nil,     -- cost of Arcane Blast with no charge, relative to that of Frostbolt
+  abStep = nil,    -- extra cost per charge, relative to that base (1.75 = +175%)
   costTracks = false,  -- does the cost really follow the charges? (checked once out of combat)
 }
 
@@ -171,6 +171,12 @@ function ns.InitDB()
     if value == "voix" then db.soundKit[key] = "voice" end   -- 2.0: values saved in English
   end
   if saved < 5 then db.point = { "CENTER", "CENTER", 0, 0 } end   -- 1.0: the HUD is re-centered on the character
+  if saved < 7 then
+    -- 2.2: the charges are read from Arcane Blast's cost relative to Frostbolt's, and only learned from a
+    -- cost that had time to follow the aura. Values learned the old way are dropped (learned again at the
+    -- first Arcane Blast out of combat).
+    db.learn.abBase, db.learn.abStep, db.learn.costTracks, db.learn.abRefresh = nil, nil, false, nil
+  end
   if saved < 6 then
     -- 2.0: the position is saved in screen units (it was in the HUD's own scaled units)
     local scale, p = type(db.scale) == "number" and db.scale or 1, db.point
@@ -185,7 +191,7 @@ function ns.InitDB()
     db.decor = true
   end
   if type(db.spread) ~= "number" or db.spread < 80 or db.spread > 320 then db.spread = 150 end
-  db.version = 6
+  db.version = 7
   ns.db = db
   return db
 end

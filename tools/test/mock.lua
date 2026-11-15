@@ -81,10 +81,28 @@ M.resting = false   -- resting in a city
 local function auraOf(name) return M.auras[name] end
 
 -- The cost the game announces, charges and procs included (when costAware).
+-- M.costMod: a cost multiplier from a source the addon does not know (Power Infusion, a trinket…).
+-- M.costLag: the game updates the announced cost that many seconds after an Arcane Blast or the end of its
+-- window (the cost read in between is still the previous one).
+M.costMod = 1
+M.costLag = 0
+local liveCost
 local function currentCost(id)
+  local f = M.frozenCosts
+  if f and M.now < f.untilT then return f.costs[id] end
+  return liveCost(id)
+end
+local function freezeCosts()
+  if (M.costLag or 0) <= 0 then return end
+  local costs = {}
+  for id in pairs(M.spells) do costs[id] = liveCost(id) end
+  M.frozenCosts = { untilT = M.now + M.costLag, costs = costs }
+end
+M.freezeCosts = freezeCosts
+liveCost = function(id)
   local sp = M.spells[id]
   if not sp or not sp.cost then return nil end
-  local cost = sp.cost
+  local cost = sp.cost * (M.costMod or 1)
   if not M.costAware then return cost end
   if auraOf("Idées claires") then return 0 end
   if sp.name == "Projectiles des Arcanes" and auraOf("Barrage de projectiles") then return 0 end
@@ -502,13 +520,18 @@ end
 function M.cast(id)
   local sp = M.spells[id]
   local name = sp.name
+  freezeCosts()
   if name == "Déflagration des Arcanes" then
     -- measured in game: the first Arcane Blast opens an 18 s window, the next ones add a charge without
     -- extending it (the aura then announces the time left), and no other spell consumes the charges
     local a = M.auras[name]
     if a then
       a.applications = math.min(4, a.applications + 1)
-      a.duration = a.expirationTime - M.now
+      if M.blastRefresh then   -- (a client where each cast extends the window)
+        a.expirationTime, a.duration = M.now + 18, 18
+      else
+        a.duration = a.expirationTime - M.now
+      end
     else
       M.auras[name] = { spellId = 400574, applications = 1, duration = 18, expirationTime = M.now + 18 }
     end
@@ -545,6 +568,8 @@ end
 
 function M.expire()   -- the game removes the auras that have run out, and says so
   local gone = false
+  local blast = M.auras["Déflagration des Arcanes"]
+  if blast and blast.expirationTime <= M.now then freezeCosts() end
   for name, a in pairs(M.auras) do
     if a.expirationTime and a.expirationTime > 0 and a.expirationTime <= M.now then M.auras[name] = nil; gone = true end
   end

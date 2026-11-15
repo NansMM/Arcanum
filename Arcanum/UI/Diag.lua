@@ -21,7 +21,10 @@ local function record(text)
 end
 
 ns:On("STACKS", function(n, old)
-  if not State.demo then record(string.format("charges %d -> %d (%s)", old or 0, n, tostring(State.stacksSource))) end
+  if State.demo then return end
+  local why = tostring(State.stacksSource)
+  if State.stacksSource == "cost" and State.costCount then why = string.format("cost, %.2f", State.costCount) end
+  record(string.format("charges %d -> %d (%s)", old or 0, n, why))
 end)
 ns:On("PROC", function(key)
   if State.demo then return end
@@ -136,6 +139,7 @@ function Diag.Report()
   add(L["  reminders: %s"], #State.reminders > 0 and table.concat(State.reminders, ", ") or L["none"])
   add(L["  charges %d (source %s), window ends in %s s"], State.stacks, tostring(State.stacksSource),
     State.stacksExpire and show(State.stacksExpire - GetTime()) or "?")
+  add(L["  charges read from the cost, last reading: %s"], State.costCount and string.format("%.2f", State.costCount) or "-")
   for _, key in ipairs({ "barrage", "clear", "power", "pom", "eureka" }) do
     local p = State[key]
     add("  %-8s %s", key, p.active and string.format(L["active (source %s)"], tostring(p.source)) or "-")
@@ -155,8 +159,9 @@ function Diag.Report()
   local parts = {}
   for k, v in pairs(l.dur or {}) do parts[#parts + 1] = k .. "=" .. show(v) end
   add(L["  durations: %s"], #parts > 0 and table.concat(parts, ", ") or L["none (default values)"])
-  add(L["  Arcane Blast: charge window %s s, base cost %s, extra cost per charge %s, cost follows charges: %s"],
-    show(l.abWindow or State.Duration("blast")), show(l.abBase), show(l.abStep), yesno(l.costTracks))
+  add(L["  Arcane Blast: charge window %s s, base cost %s × Frostbolt, extra cost per charge %s, cost follows charges: %s"],
+    show(l.abWindow or State.Duration("blast")), show(l.abRef), show(l.abStep), yesno(l.costTracks))
+  add(L["  a later Arcane Blast extends the window: %s"], l.abRefresh == nil and L["not seen yet"] or yesno(l.abRefresh))
   add(L["  Barrage seen by glow: %s · by cost: %s · Clearcasting seen by cost: %s"],
     yesno(l.mbGlow), yesno(l.mbCost), yesno(l.ccCost))
 

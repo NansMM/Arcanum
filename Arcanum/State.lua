@@ -5,8 +5,8 @@
 -- remains readable:
 --   * your own spell casts (UNIT_SPELLCAST_SUCCEEDED): each Arcane Blast adds a charge;
 --   * the mana cost announced by the game: free Arcane Missiles = Missile Barrage,
---     everything free = Clearcasting, and the cost of Arcane Blast gives the exact number of charges
---     (the extra cost per charge is learned out of combat);
+--     everything free = Clearcasting, and the cost of Arcane Blast, compared with that of Frostbolt, gives
+--     the exact number of charges (the extra cost per charge is learned out of combat);
 --   * the action button glow (SPELL_ACTIVATION_OVERLAY_GLOW_SHOW).
 -- Arcanum only displays; it advises nothing and casts nothing.
 local ADDON, ns = ...
@@ -31,12 +31,13 @@ local State = {
 ns.State = State
 
 local MAX_STACKS = 4
-local GRACE = 0.7   -- delay before trusting a cost that contradicts a spell just cast
+local GRACE = 0.7   -- the game updates the announced cost that long after an Arcane Blast or a change in charges
 
 -- Default durations, replaced by those read in game as soon as an aura is readable.
 local DEFAULT_DUR = { barrage = 15, clear = 15, power = 15, eureka = 8 }
 -- Arcane Blast charges (measured in game, 1.60.1): the first Arcane Blast opens an 18 s window;
--- later ones add a charge without extending it, and no other spell consumes the charges.
+-- later ones add a charge without extending it, and no other spell consumes the charges. Whether later casts
+-- extend the window is checked again out of combat on each client (learn.abRefresh).
 local BLAST_WINDOW = 18
 -- Spells with a cast time: they consume Presence of Mind.
 local CAST_TIME = {
@@ -45,6 +46,8 @@ local CAST_TIME = {
 }
 -- Spells whose cost serves as the reference for Clearcasting (all free = proc).
 local COST_REFS = { "blast", "frostbolt", "fireball", "explosion" }
+-- Spells Arcane Blast's cost is compared with, to read the charges (see blastRatio).
+local RATIO_REFS = { "frostbolt", "fireball" }
 
 local lastCast = {}      -- [key] = GetTime() of the last successful cast
 local cost = {}          -- [key] = current cost (number) or nil
@@ -70,7 +73,9 @@ local function staleAll()
   State.dirty = true
 end
 ns:On("SPELLS", staleAll)
-local stacksEnded = 0     -- GetTime() of the last window end observed by the timer
+local stacksChangedAt = -100   -- GetTime() of the last change in the charge count
+local pendingBlast            -- { at, from }: an Arcane Blast cast while auras were readable, not counted yet
+local blastTruth = {}         -- { n, expire }: the charges last read from the aura
 
 State.overlay = overlay
 
@@ -492,13 +497,48 @@ local function setStacks(n, expire, source)
   State.stacks = n
   State.stacksExpire = n > 0 and expire or nil
   State.stacksSource = source
-  if n ~= old then ns:Fire("STACKS", n, old) end
+  if n ~= old then
+    -- (a correction read from the cost changes nothing in the game: the cost has nothing new to follow)
+    if source ~= "cost" then stacksChangedAt = GetTime() end
+    ns:Fire("STACKS", n, old)
+  end
+end
+
+-- One more Arcane Blast landed at `at`: one more charge. The first one opens the window; the next ones add a
+-- charge without extending it.
+local function countBlast(at)
+  if State.stacks > 0 and (not State.stacksExpire or State.stacksExpire > at) then
+    local expire = State.stacksExpire
+    if learn().abRefresh then expire = at + dur("blast") end   -- this client extends the window on each cast
+    setStacks(math.min(MAX_STACKS, State.stacks + 1), expire, "casts")
+  else
+    setStacks(1, at + dur("blast"), "casts")
+  end
+end
+
+-- The cost of Arcane Blast relative to that of a reference spell (Frostbolt, else Fireball), or nil. A cost
+-- modifier that applies to every spell (Arcane Power, Eureka, Power Infusion, a trinket…) cancels out:
+-- only the charges, which make Arcane Blast alone more expensive, change this ratio.
+local function blastRatio()
+  local c = cost.blast
+  if not (c and c > 0) then return nil end   -- (free: Clearcasting, says nothing)
+  for _, key in ipairs(RATIO_REFS) do
+    local r = cost[key]
+    if r and r > 0 then return c / r end
+  end
+  return nil
+end
+
+-- Does the cost we hold describe the current charges? The game updates the announced cost a moment after
+-- the aura: a cost read too soon after an Arcane Blast or a change in charges still shows the previous count,
+-- and would teach (or tell) a wrong number.
+local function costSettled()
+  return costsAt - math.max(lastCast.blast or -100, stacksChangedAt) >= GRACE
 end
 
 local function updateBlast(now)
   local l = learn()
   local st, a = readAura("blast")
-  local c = cost.blast
   if st == "up" then
     local n = S.Num(a.applications) or 1
     if n < 1 then n = 1 end
@@ -509,39 +549,57 @@ local function updateBlast(now)
     -- announces the time that was left when the last charge arrived.
     if n == 1 and duration and duration > 0 then l.abWindow = duration end
     State.stacksDur = dur("blast")
+    -- Does a later Arcane Blast extend the window? Seen when the charges go up (or stay at the maximum
+    -- after a cast) and the end of the window moves, or does not.
+    local prev = blastTruth
+    if prev.n and prev.n >= 1 and prev.expire and expire and n > 1 then
+      if n >= prev.n and expire > prev.expire + 1 then
+        l.abRefresh = true
+      elseif n > prev.n and math.abs(expire - prev.expire) < 0.5 then
+        l.abRefresh = false
+      end
+    end
+    prev.n, prev.expire = n, expire
+    -- an Arcane Blast cast while the aura was readable: counted here, once the aura shows it
+    if pendingBlast and (n > pendingBlast.from or pendingBlast.from >= MAX_STACKS or now - pendingBlast.at > 1.5) then
+      pendingBlast = nil
+    end
     setStacks(n, expire, "aura")
     -- Does the cost follow the charges? We learn it here, when the truth is known.
-    if l.abBase and c and c > 0 and not State.power.active and not State.eureka.active then
-      local ratio = c / l.abBase
-      if ratio >= 1.35 then
+    local ratio = blastRatio()
+    if ratio and l.abRef and costSettled() then
+      local k = ratio / l.abRef
+      if k >= 1.35 then
         l.costTracks = true
-        l.abStep = (ratio - 1) / n
+        l.abStep = (k - 1) / n
       end
     end
   elseif st == "down" then
+    if pendingBlast and now - pendingBlast.at > 1.5 then pendingBlast = nil end   -- (the aura never came)
+    blastTruth.n, blastTruth.expire = 0, nil
     setStacks(0, nil, "aura")
-    if c and c > 0 and not State.power.active and not State.clear.active and not State.eureka.active then
-      l.abBase = c
-    end
+    local ratio = blastRatio()
+    if ratio and costSettled() then l.abRef = ratio end
   else
     -- In combat: charges come from the Arcane Blasts cast (see onCast); here we check the end
     -- of the window and, when it is reliable, the announced cost, which gives the exact number of charges.
     State.stacksDur = dur("blast")
-    local cast = lastCast.blast
-    if State.stacksSource == "aura" and State.stacks == 0 and cast and now - cast < 1.5 then
-      setStacks(1, cast + State.stacksDur, "casts")   -- Arcane Blast finished at the very moment combat starts
+    -- The Arcane Blast that started the fight was cast while auras were still readable: the aura was hidden
+    -- before it could show the new charge. It is counted now.
+    if pendingBlast then
+      if now - pendingBlast.at <= 1.5 then countBlast(pendingBlast.at) end
+      pendingBlast = nil
     end
     if State.stacks > 0 and State.stacksExpire and now >= State.stacksExpire then
       setStacks(0, nil, "timer")
-      stacksEnded = now
     end
-    -- Not during Arcane Power or Eureka (they change the cost), nor right after an
-    -- Arcane Blast (the cost takes a moment to follow). A zero cost (Clearcasting) says nothing.
-    if l.costTracks and l.abBase and l.abStep and l.abStep > 0 and c and c > 0
-      and not State.power.active and not State.eureka.active and now - (cast or 0) > GRACE
-      and now - stacksEnded > GRACE then
-      local x = (c / l.abBase - 1) / l.abStep
+    -- Not right after an Arcane Blast or a change in charges (the cost takes a moment to follow). A zero
+    -- cost (Clearcasting) says nothing.
+    local ratio = blastRatio()
+    if l.costTracks and l.abRef and l.abStep and l.abStep > 0 and ratio and costSettled() then
+      local x = (ratio / l.abRef - 1) / l.abStep
       local n = math.floor(x + 0.5)
+      State.costCount = x
       if math.abs(x - n) < 0.2 and n >= 0 and n <= MAX_STACKS and n ~= State.stacks then
         setStacks(n, State.stacksExpire, "cost")   -- window end kept if we know it
       end
@@ -566,14 +624,14 @@ local function onCast(spellID)
   if lastCast[key] and now - lastCast[key] < 0.25 then return end   -- same cast seen by two events
   lastCast[key] = now
 
-  if key == "blast" and State.restricted then
-    if State.stacks > 0 and (not State.stacksExpire or State.stacksExpire > now) then
-      -- one more charge; the window opened by the first Arcane Blast is not extended
-      local n = State.stacks + 1
-      if n > MAX_STACKS then n = MAX_STACKS end
-      setStacks(n, State.stacksExpire, "casts")
+  if key == "blast" then
+    -- (asked live: the state pass that refreshes State.restricted may not have run since combat started)
+    if aurasRestricted() then
+      countBlast(now)
     else
-      setStacks(1, now + dur("blast"), "casts")   -- first charge: the window opens
+      -- auras are readable: the aura will show this charge, unless combat hides it first (the pulling cast)
+      local open = State.stacks > 0 and (not State.stacksExpire or State.stacksExpire > now)
+      pendingBlast = { at = now, from = open and State.stacks or 0 }
     end
   end
 
@@ -702,6 +760,7 @@ end
 
 function State.Reset()
   State.stacks, State.stacksExpire, State.stacksSource = 0, nil, "aura"
+  pendingBlast, State.costCount = nil, nil
   for _, p in ipairs({ State.barrage, State.clear, State.power, State.pom, State.eureka }) do
     p.active, p.since, p.expire, p.source = false, nil, nil, nil
   end

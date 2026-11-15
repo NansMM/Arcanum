@@ -240,10 +240,14 @@ def main():
     g.cast(AB)
     check(g.S.stacks == 3, "3 charges read from the aura")
     learn = g.ns.db.learn
-    check(learn.abBase == 100, "Arcane Blast base cost learned (100)")
-    check(learn.costTracks is True and abs(learn.abStep - 1.0) < 0.01, "extra cost per charge learned (+100 %)")
+    check(learn.abRef == 1.0, "Arcane Blast base cost learned, relative to Frostbolt's (100 / 100)")
+    check(not learn.costTracks, "the extra cost per charge is not learned from a cost read right after a cast")
+    g.M.advance(1.0)
+    check(learn.costTracks is True and abs(learn.abStep - 1.0) < 0.01,
+          "a moment later, once the cost has followed: extra cost per charge learned (+100 %)")
     check(learn.abWindow == 18, "charge window learned at the first charge (18 s)")
-    g.M.advance(17.0)
+    check(learn.abRefresh is False, "seen out of combat: a later Arcane Blast does not extend the window")
+    g.M.advance(16.0)
     g.M.expire()
     g.M.advance(0.3)
     check(g.S.stacks == 3, "17 s after the first Arcane Blast: the charges are still there")
@@ -340,13 +344,13 @@ def main():
     g.cast(AB)
     check(g.S.stacks == 3, "3 charges")
     g.run(BLAST_AURA % 2)                                    # the game has 2, the addon counts 3
-    g.M.advance(1.0)
+    g.M.advance(1.5)
     check(g.S.stacks == 2 and g.S.stacksSource == "cost", "gap corrected: 2 charges read from the cost")
     g.run('Mock.auras["Déflagration des Arcanes"] = nil')   # the game removes them without the addon seeing a spell
-    g.M.advance(1.0)
+    g.M.advance(1.5)
     check(g.S.stacks == 0, "charges removed by the game: seen when the cost is back to its base")
     g.run(BLAST_AURA % 3)
-    g.M.advance(1.0)
+    g.M.advance(1.5)
     check(g.S.stacks == 3, "charges there without any spell seen (reload in combat): read from the cost")
     g.M.advance(8.5)
     g.M.expire()
@@ -366,6 +370,90 @@ def main():
     g.M.advance(0.3)
     check(not g.S.power.active, "Arcane Power over after 15 s")
     no_errors(g, "combat")
+
+    print("Charges: the cases that used to go wrong")
+    blast = 'Mock.auras["Déflagration des Arcanes"] = { spellId = 400574, applications = %d, duration = 8, expirationTime = Mock.now + 8 }'
+    c1 = Game(pre="Mock.costAware = false")
+    c1.M.target = True
+    c1.cast(AB, 1.0)
+    c1.cast(AB, 1.0)
+    c1.run('Mock.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-0", 400574)')   # the cast that pulls…
+    c1.M.setCombat(True)                                                            # …combat hides the aura
+    c1.run(blast % 3)
+    c1.M.advance(2.0)
+    check(c1.S.stacks == 3, "chain pull: charges left from the last fight, plus the Arcane Blast that pulls")
+    no_errors(c1, "chain pull")
+
+    c2 = Game(pre="Mock.costLag = 0.4")   # the game updates the cost a moment after the aura
+    c2.M.target = True
+    c2.cast(AB, 1.5)
+    c2.M.cast(AB)
+    c2.M.advance(0.05)
+    c2.M.setCombat(True)
+    c2.M.advance(3.0)
+    check(c2.S.stacks == 2 and abs((c2.ns.db.learn.abStep or 1) - 1.0) < 0.01,
+          "pull right after an Arcane Blast: nothing is learned from the cost the game has not updated yet")
+
+    c3 = Game(pre="Mock.costLag = 0.4")
+    c3.M.target = True
+    for _ in range(4):
+        c3.cast(AB, 0.5)
+    c3.M.advance(c3.S.stacksExpire - c3.M.now + 0.06)
+    c3.M.expire()
+    c3.M.advance(0.1)
+    c3.M.setCombat(True)
+    for _ in range(4):
+        c3.cast(AB, 0.3)
+    c3.M.advance(2.0)
+    check(c3.S.stacks == 4 and c3.ns.db.learn.abRef == 1.0,
+          "pull right after the window ended: the base cost is not learned from the cost of four charges")
+
+    c4 = Game()
+    c4.M.target = True
+    c4.cast(AB, 1.0)
+    c4.M.advance(19); c4.M.expire(); c4.M.advance(1)
+    c4.M.setCombat(True)
+    for _ in range(4):
+        c4.cast(AB, 0.3)
+    c4.run('Mock.costMod = 0.8; Mock.fire("SPELL_UPDATE_USABLE")')   # Power Infusion: every spell 20 % cheaper
+    c4.M.advance(2.0)
+    check(c4.S.stacks == 4, "a cost modifier the addon does not know (Power Infusion) does not change the count")
+    c4.run("Mock.costMod = 1")
+    no_errors(c4, "unknown cost modifier")
+
+    c5 = Game()
+    c5.M.target = True
+    c5.cast(AB, 1.0)
+    c5.M.advance(19); c5.M.expire(); c5.M.advance(1)
+    c5.ns.db.learn.dur.power = 10      # Arcane Power lasts longer than the addon believes
+    c5.M.setCombat(True)
+    c5.cast(AP, 0.3)
+    c5.cast(AB, 0.3)
+    c5.cast(AB, 0.3)
+    c5.M.advance(11)
+    check(c5.S.stacks == 2, "Arcane Power still up after the duration the addon learned: the count holds")
+    c5.slash("diag")
+    report = c5.M.named["ArcanumDiag"].text
+    check("charges lues sur le coût, dernière lecture : 2.00" in report, "the diagnostics show the last count read from the cost")
+
+    c6 = Game(pre="Mock.costAware = false; Mock.blastRefresh = true")   # a client where each cast extends the window
+    c6.M.target = True
+    c6.cast(AB, 3.0)
+    c6.cast(AB, 1.0)
+    check(c6.ns.db.learn.abRefresh is True, "seen out of combat: on this client a later Arcane Blast extends the window")
+    c6.M.advance(19); c6.M.expire(); c6.M.advance(1)
+    c6.M.setCombat(True)
+    c6.cast(AB, 10)
+    c6.cast(AB, 10)
+    c6.M.expire()
+    c6.M.advance(0.3)
+    check(c6.S.stacks == 2, "in combat, 20 s after the first charge: still 2, as in the game")
+    no_errors(c6, "extended window")
+
+    old = Game(pre='ArcanumDB = { version = 6, learn = { abBase = 500, abStep = 0.5, costTracks = true, abWindow = 18 } }')
+    l = old.ns.db.learn
+    check(l.abBase is None and l.abStep is None and not l.costTracks and l.abWindow == 18 and old.ns.db.version == 7,
+          "upgrade to 2.2: costs learned the old way are dropped (learned again), the window is kept")
 
     print("Charge crystals: one per charge")
     t = Game()
@@ -618,7 +706,7 @@ def main():
           "the settings of the old ring and of the advice are forgotten, the others kept")
     old = Game(pre='ArcanumDB = { version = 2, wrathStacks = 3, thrifty = true }')
     check(old.ns.db.wrathStacks is None and old.ns.db.thrifty is None and old.ns.db.targetStacks is None
-          and old.ns.db.version == 6, "settings from a 0.x: the advice thresholds are dropped, nothing takes their place")
+          and old.ns.db.version == 7, "settings from a 0.x: the advice thresholds are dropped, nothing takes their place")
     m3 = Game(pre='ArcanumDB = { version = 5, soundKit = { barrage = "voix" }, targetStacks = 3, burstOne = true, '
                   'fillerRank = "max", cutForClear = true, openWrath = true, adviseBurst = false, anticipate = true, '
                   'learn = { cd = { power = 180 } } }')
@@ -629,7 +717,7 @@ def main():
                                           "adviseBurst", "anticipate")),
           "upgrade to 2.0: the settings of the advice engine are deleted")
     check(db.learn.cd is None, "upgrade to 2.0: the learned cooldowns are deleted")
-    check(db.version == 6, "upgrade to 2.0: the saved variables are at version 6")
+    check(db.version == 7, "upgrade to 2.0: the saved variables are at the current version (7)")
     for game in (m, m2, old, m3):
         game.M.advance(1.0)
     no_errors(m, "settings upgrade from 0.12")
