@@ -1,5 +1,9 @@
 # Arcanum changelog
 
+## 2.3.0 — 2026-11-17
+
+- Times left are written as the game's buff frame writes them: whole seconds rounded down (12.7 s left shows 12). They used to be rounded up, one second more than the buff frame. This applies to the charge window, the procs, Eureka and Arcane Power.
+
 ## 2.2.2 — 2026-11-17
 
 - Presence of Mind no longer stays shown after the spell that spends it. When that spell started the fight, combat hid the auras before Arcanum could see Presence of Mind go away, and the icon stayed until the next spell with a cast time.

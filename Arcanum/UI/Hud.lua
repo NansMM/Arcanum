@@ -20,7 +20,7 @@ local L = ns.L
 local Hud = {}
 ns.Hud = Hud
 
-local sin, min, max, ceil = math.sin, math.min, math.max, math.ceil
+local sin, min, max, ceil, floor = math.sin, math.min, math.max, math.ceil, math.floor
 
 local MAX_CHARGES = 4                 -- maximum Arcane Blast charges
 local PROC = 64                       -- proc icons, left and right
@@ -227,6 +227,26 @@ local function makeBar(parent)
   return b
 end
 
+-- Time left as the game's buff frame writes it, so that both agree: whole seconds rounded down (12.7 s
+-- left: 12), minutes rounded up from one minute on.
+local function gameTime(left)
+  if left >= 60 then return ceil(left / 60), "m" end
+  return max(0, floor(left)), "s"
+end
+
+local function drawBarText(now)
+  local expire = State.stacksExpire
+  local text = ""
+  if expire then
+    local v, unit = gameTime(expire - now)
+    text = string.format("%d %s", v, unit)
+  end
+  if text ~= barSeconds then
+    barSeconds = text
+    barText:SetText(text)
+  end
+end
+
 local function refreshBar(now)
   local on = ns.db.showCharges and State.stacks > 0
   if on ~= barOn then
@@ -238,17 +258,12 @@ local function refreshBar(now)
     end
   end
   if not on then return end
-  local expire = State.stacksExpire
-  local left = expire and ceil(expire - now) or nil
-  if left and left < 0 then left = 0 end
-  if left ~= barSeconds then
-    barSeconds = left
-    barText:SetText(left and string.format("%d s", left) or "")
-  end
+  drawBarText(now)
 end
 
 local function animateBar(now)
   if not barOn then return end
+  drawBarText(now)
   local r, g, b = UI.Mix(C.arcane, C.hot, hotBlend)
   local frac = 1   -- end unknown: full bar
   local expire, total = State.stacksExpire, State.stacksDur or State.Duration("blast")
@@ -291,16 +306,17 @@ local function makeRound(parent, size, numbers, reverse)
   if cd.SetSwipeColor then pcall(cd.SetSwipeColor, cd, 0.02, 0.01, 0.06, 0.76) end
   if cd.SetDrawEdge then pcall(cd.SetDrawEdge, cd, false) end
   if cd.SetDrawBling then pcall(cd.SetDrawBling, cd, false) end
-  if cd.SetHideCountdownNumbers then pcall(cd.SetHideCountdownNumbers, cd, not numbers) end
+  -- (the swipe's own numbers round differently from the buff frame: the time left is written by drawTime)
+  if cd.SetHideCountdownNumbers then pcall(cd.SetHideCountdownNumbers, cd, true) end
   if reverse and cd.SetReverse then pcall(cd.SetReverse, cd, true) end
-  if numbers and cd.GetCountdownFontString then
-    local okF, fs = pcall(cd.GetCountdownFontString, cd)
-    if okF and fs and fs.SetFont then pcall(fs.SetFont, fs, UI.FONT.body, 18, "OUTLINE") end
-  end
   b.cd = cd
   b.over = CreateFrame("Frame", nil, b)
   b.over:SetAllPoints()
   b.over:SetFrameLevel(cd:GetFrameLevel() + 2)
+  if numbers then
+    b.time = UI.Text(b.over, max(12, floor(size * 0.28 + 0.5)), { 1, 1, 1 }, UI.FONT.body, "OUTLINE")
+    b.time:SetPoint("CENTER")
+  end
   b.ring = UI.Tex(b.over, "OVERLAY", "circle-edge", C.edge, 0.9)
   b.ring:SetPoint("TOPLEFT", -2, 2)
   b.ring:SetPoint("BOTTOMRIGHT", 2, -2)
@@ -310,7 +326,22 @@ end
 local function setCooldown(b, start, duration)
   if b._s == start and b._d == duration then return end
   b._s, b._d = start, duration
+  b._end = duration > 0 and start + duration or nil
   pcall(b.cd.SetCooldown, b.cd, start, duration, 1)
+end
+
+-- The time left on a round icon, in digits (see gameTime); nothing when the duration is unknown.
+local function drawTime(b, now)
+  if not b.time then return end
+  local text = ""
+  if b.on and b._end and b._end > now then
+    local v, unit = gameTime(b._end - now)
+    text = unit == "m" and (v .. "m") or tostring(v)
+  end
+  if text ~= b._text then
+    b._text = text
+    b.time:SetText(text)
+  end
 end
 
 -- ------------------------------------------------------------------ procs, left and right
@@ -351,6 +382,7 @@ local function animateProcs(dt, now)
       if f.vis <= 0 and not f.on then
         f:Hide()
       else
+        drawTime(f, now)
         local c = f.def.color
         local pulse = 0.5 + 0.5 * sin(now * 4.4)
         f.glow:SetVertexColor(c[1], c[2], c[3], min(1, 0.30 + 0.16 * pulse + f.pop * 0.5))
@@ -442,6 +474,7 @@ local function animateBuffs(dt, now)
         f:SetAlpha(f.vis)
       end
       if f.vis > 0 then
+        drawTime(f, now)
         local c = f.def.color
         f.glow:SetVertexColor(c[1], c[2], c[3], min(1, 0.32 + 0.18 * pulse + f.pop * 0.4))
         if f.pop ~= f.popDrawn then

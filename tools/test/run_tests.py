@@ -505,6 +505,22 @@ def main():
     check(pq.S.pom.active, "an aura still there a second after the spell is the truth: shown again")
     no_errors(pq, "Presence of Mind spent")
 
+    print("Times left written as the game's buff frame writes them")
+    tg = Game()
+    tg.buffed()
+    tg.M.target = True
+    tg.cast(AB, 5.3)                                    # 12.7 s left on the charge window
+    check(tg.ns.Hud.barText._text == "12 s", "charges: 12.7 s left is written 12 s, as in the buff frame")
+    tg.M.proc("Barrage de projectiles", 44401, 15)
+    tg.M.advance(2.3)                                   # 12.7 s left on the proc
+    mb = [f for f in tg.ns.Hud.procs.values() if f["def"].key == "barrage"][0]
+    check(mb.time._text == "12", "proc: 12.7 s left is written 12")
+    tg.cast(EUREKA, 0.4)                                 # 7.6 s left on Eureka
+    check(tg.ns.Hud.eurekaIcon.time._text == "7", "Eureka: 7.6 s left is written 7")
+    tg.cast(POM, 0.3)
+    check(tg.ns.Hud.pomIcon.time is None, "Presence of Mind has no time left to write")
+    no_errors(tg, "times left")
+
     print("Charge crystals: one per charge")
     t = Game()
     crystals = lambda: len([f for f in t.ns.Hud.crystals.values() if f._shown])
