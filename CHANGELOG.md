@@ -1,5 +1,9 @@
 # Arcanum changelog
 
+## 2.2.2 — 2026-11-17
+
+- Presence of Mind no longer stays shown after the spell that spends it. When that spell started the fight, combat hid the auras before Arcanum could see Presence of Mind go away, and the icon stayed until the next spell with a cast time.
+
 ## 2.2.1 — 2026-11-15
 
 - The time left on the Arcane Blast charges could be too long. After a fight in which the charge window ended and opened again, Arcanum could wrongly conclude that each Arcane Blast extends the window, and then pushed back the end of the window at every cast. It now learns this only from two readings of the same window, and what 2.2.0 learned is learned again.

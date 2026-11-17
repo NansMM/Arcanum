@@ -50,6 +50,7 @@ local COST_REFS = { "blast", "frostbolt", "fireball", "explosion" }
 local RATIO_REFS = { "frostbolt", "fireball" }
 
 local lastCast = {}      -- [key] = GetTime() of the last successful cast
+local pomSpentAt = -100  -- GetTime() of the spell that last spent Presence of Mind
 local cost = {}          -- [key] = current cost (number) or nil
 local seenCost = {}      -- [key] = true if a cost > 0 has already been read
 local overlay = {}       -- [spell ID] = true if the button is glowing
@@ -478,7 +479,9 @@ local function updatePom(now)
   local p = State.pom
   if not p.active and not Spells.Known("pom") then return end
   local st = readAura("pom")
-  if st == "up" then
+  if st == "up" and now - pomSpentAt < 1 then
+    -- just spent: the game takes a moment to remove the aura, a reading this soon may still show it
+  elseif st == "up" then
     setProc(p, "pom", true, "aura", nil, nil, now)
     p.expire = nil
   elseif st == "down" then
@@ -650,9 +653,13 @@ local function onCast(spellID)
   if key == "power" then
     setProc(State.power, "power", true, "casts", now + dur("power"), dur("power"), now)
   elseif key == "pom" then
+    pomSpentAt = -100
     setProc(State.pom, "pom", true, "casts", nil, nil, now)
     State.pom.expire = nil
-  elseif CAST_TIME[key] and State.pom.active and inferred(State.pom) then
+  elseif CAST_TIME[key] and State.pom.active and State.pom.source ~= "manager" then
+    -- The spell spends Presence of Mind, even while its aura can still be read: the spell that starts a fight
+    -- is cast before combat hides the auras, and the aura would not be read again before the end of combat.
+    pomSpentAt = now
     setProc(State.pom, "pom", false)
   end
   State.dirty = true

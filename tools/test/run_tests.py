@@ -480,6 +480,31 @@ def main():
     check(wrong.ns.db.learn.abRefresh is None and wrong.ns.db.version == 8,
           "upgrade to 2.2.1: whether the window is extended is learned again (2.2.0 could learn it wrong)")
 
+    print("Presence of Mind spent by the spell that starts the fight")
+    pp = Game()
+    pp.buffed()
+    pp.M.target = True
+    pp.cast(POM, 1.0)
+    check(pp.S.pom.active and pp.S.pom.source == "aura", "Presence of Mind read from its aura before the pull")
+    pp.M.cast(AB)               # the instant Arcane Blast that pulls…
+    pp.M.setCombat(True)        # …and combat hides the auras before Arcanum reads them again
+    pp.M.advance(0.5)
+    check(not pp.S.pom.active and not pp.ns.Hud.pomIcon._shown,
+          "the pulling spell spends Presence of Mind: its icon goes away at once")
+    pp.M.setCombat(False)
+    pp.M.advance(1.5)
+    check(not pp.S.pom.active, "after the fight the aura confirms it: Presence of Mind stays off")
+    pq = Game()
+    pq.buffed()
+    pq.M.target = True
+    pq.cast(POM, 1.0)
+    pq.run('Mock.fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-0", %d)' % AB)   # the game removes the aura late
+    pq.M.advance(0.5)
+    check(not pq.S.pom.active, "out of combat, an aura the game has not removed yet does not light it again")
+    pq.M.advance(1.0)
+    check(pq.S.pom.active, "an aura still there a second after the spell is the truth: shown again")
+    no_errors(pq, "Presence of Mind spent")
+
     print("Charge crystals: one per charge")
     t = Game()
     crystals = lambda: len([f for f in t.ns.Hud.crystals.values() if f._shown])
